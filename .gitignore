@@ -1,0 +1,25 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+data.json
+data.db
+data.db-shm
+data.db-wal
+.tokens.json
+.tokens.json.tmp
+uploads/*
+!uploads/.gitkeep
+logs/
+*.log
+.DS_Store
+
+# Scratch / temp files used during development
+_tmp_check/
+_dev_inline.js
+_dev_served.html
+
+# Editor/IDE/dev-tool local config
+.claude/
+.vscode/
+.idea/

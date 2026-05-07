@@ -1,0 +1,39 @@
+.git
+.gitignore
+.gitattributes
+.github
+.claude
+node_modules
+npm-debug.log*
+
+# Local env / runtime state — never bake into image
+.env
+.env.*
+.tokens.json
+.tokens.json.tmp
+
+# Old SQLite files (no longer used) + uploads (mounted as host volume)
+data.db
+data.db-shm
+data.db-wal
+data.json
+uploads
+logs
+*.log
+
+# Editor / OS junk
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Dev-only / unused-in-prod files
+test_api.js
+seed.js
+mock_files.js
+docker-compose.yml
+pgadmin
+README.md
+Dockerfile
+.dockerignore
+ecosystem.config.js

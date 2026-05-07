@@ -1,0 +1,11 @@
+flask==3.0.3
+pythaiasr==1.1.1
+# Pin transformers to a version that:
+#   - works with torch 2.2 (so we don't need to download torch 2.4+ wheels)
+#   - is recent enough to load wav2vec2-large-xlsr-53-th cleanly
+# transformers 4.41 was the last major before they started requiring torch>=2.4.
+transformers==4.41.2
+torch==2.2.2
+torchaudio==2.2.2
+soundfile==0.12.1
+numpy==1.26.4

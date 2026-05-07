@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Smart City Lab",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "smartcitylab",
+      "Username": "smluser",
+      "PassFile": "/pgpass",
+      "SSLMode": "prefer"
+    }
+  }
+}

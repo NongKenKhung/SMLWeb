@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#4f46e5">
+  <title>SML</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" crossorigin="anonymous"></script>
+</head>
+<body class="bg-slate-100">
+
+  <!-- ============== LOGIN SCREEN ============== -->
+  <div id="login-screen" class="fixed inset-0 z-40 hidden items-center justify-center bg-gradient-to-br from-indigo-500 via-blue-500 to-cyan-400 p-6">
+    <div class="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-7 ios-card">
+      <div class="text-center mb-6">
+        <div class="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-400 flex items-center justify-center text-3xl shadow-lg">🏙️</div>
+        <h1 class="text-xl font-semibold mt-3">SML</h1>
+        <p class="text-sm text-slate-500">เข้าสู่ระบบเพื่อเริ่มทำงาน</p>
+      </div>
+      <form id="login-form" class="space-y-3">
+        <div>
+          <label class="ios-label">ชื่อผู้ใช้</label>
+          <input id="login-name" class="ios-input" autocomplete="username" placeholder="เช่น ดร. สมชาย ใจดี" required>
+        </div>
+        <div>
+          <label class="ios-label">รหัสผ่าน (PIN)</label>
+          <input id="login-password" type="password" inputmode="numeric" autocomplete="current-password" class="ios-input" placeholder="••••" required>
+        </div>
+        <div id="login-error" class="text-sm text-rose-600 hidden"></div>
+        <button type="submit" class="ios-btn-primary w-full">เข้าสู่ระบบ</button>
+      </form>
+      <div class="mt-5 pt-4 border-t border-slate-100 text-xs text-slate-500 leading-relaxed">
+        <div class="font-semibold text-slate-600 mb-1">บัญชีตัวอย่าง (PIN: 1234)</div>
+        <button type="button" class="text-indigo-600 underline" data-quicklogin="ดร. สมชาย ใจดี">ดร. สมชาย ใจดี (Admin)</button> ·
+        <button type="button" class="text-indigo-600 underline" data-quicklogin="ภาคิน ก้องเกียรติ">ภาคิน ก้องเกียรติ (Member)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== APP SHELL ============== -->
+  <div id="app-shell" class="hidden">
+
+    <!-- Top Bar (mobile) / Top Nav (desktop) -->
+    <header id="topbar" class="ios-topbar">
+      <div class="topbar-inner">
+        <div class="flex items-center gap-2">
+          <span id="topbar-icon" class="text-lg">🏠</span>
+          <h1 id="topbar-title" class="font-semibold">Dashboard</h1>
+        </div>
+
+        <!-- Desktop tab nav — appears at lg (1024+) so iPad portrait still uses
+             the bottom tabbar (6 tabs don't fit alongside title+actions at 768-1023). -->
+        <nav id="desktop-nav" class="hidden lg:flex items-center gap-1">
+          <button data-tab="home"       class="dt-tab active">🏠 Home</button>
+          <button data-tab="tasks"      class="dt-tab">📋 Todo</button>
+          <button data-tab="calendar"   class="dt-tab">📅 Calendar</button>
+          <button data-tab="people"     class="dt-tab">👥 People</button>
+          <button data-tab="summary"    class="dt-tab">📊 Summary</button>
+          <button data-tab="profile"    class="dt-tab">👤 Profile</button>
+          <button data-tab="whiteboard" class="dt-tab">🎨 Board</button>
+        </nav>
+
+        <div class="flex items-center gap-2">
+          <button id="bell-btn" class="ios-btn-icon relative" title="การแจ้งเตือน">
+            🔔<span id="bell-badge" class="bell-badge hidden">0</span>
+            <span id="rt-dot" class="rt-dot" title="real-time status"></span>
+          </button>
+          <button id="topbar-action" class="ios-btn-icon hidden" title="Add">＋</button>
+          <button id="me-btn" class="ios-avatar-btn">
+            <span id="me-initials">?</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main id="pages" class="page-container">
+
+      <!-- ============== HOME ============== -->
+      <section id="page-home" class="page">
+        <div class="space-y-4" id="home-widgets-root" data-widget-section="home">
+          <!-- 1. User info + points -->
+          <div class="bg-gradient-to-br from-indigo-500 to-cyan-400 text-white rounded-2xl p-5 ios-card shadow-md" data-widget="home-greeting">
+            <div class="text-sm opacity-80">สวัสดี</div>
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <div id="home-greeting" class="text-2xl font-semibold truncate">—</div>
+                <div class="flex items-center gap-2 mt-1">
+                  <span id="home-role-badge" class="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-white/20"></span>
+                  <span class="text-xs opacity-80">เสร็จ <b id="home-done">0</b> · กำลังทำ <b id="home-todo">0</b></span>
+                </div>
+              </div>
+              <div class="text-right shrink-0">
+                <div class="text-3xl font-bold" id="home-points">0</div>
+                <div class="text-xs opacity-80">points</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3" data-widget="home-stats">
+            <div class="ios-stat-card"><div class="ios-stat-icon bg-indigo-100 text-indigo-600">👥</div><div><div class="ios-stat-label">Members</div><div class="ios-stat-value" id="stat-members">0</div></div></div>
+            <div class="ios-stat-card"><div class="ios-stat-icon bg-blue-100 text-blue-600">📋</div><div><div class="ios-stat-label">Groups</div><div class="ios-stat-value" id="stat-groups">0</div></div></div>
+            <div class="ios-stat-card"><div class="ios-stat-icon bg-emerald-100 text-emerald-600">✅</div><div><div class="ios-stat-label">Done</div><div class="ios-stat-value" id="stat-completed">0</div></div></div>
+            <div class="ios-stat-card"><div class="ios-stat-icon bg-rose-100 text-rose-600">⚠️</div><div><div class="ios-stat-label">Overdue</div><div class="ios-stat-value" id="stat-overdue">0</div></div></div>
+          </div>
+
+          <!-- 2. Upcoming deadline -->
+          <div class="bg-white rounded-2xl ios-card overflow-hidden" data-widget="home-upcoming">
+            <div class="px-4 pt-3 pb-2 flex items-center justify-between">
+              <h2 class="font-semibold">📅 ใกล้ถึง Deadline</h2>
+              <button class="text-xs text-indigo-600" data-goto="calendar">ดู Calendar</button>
+            </div>
+            <div id="home-upcoming" class="divide-y divide-slate-100"></div>
+          </div>
+
+          <!-- 2b. Upcoming meetings (≤ 2 days) -->
+          <div class="bg-white rounded-2xl ios-card overflow-hidden" data-widget="home-meetings">
+            <div class="px-4 pt-3 pb-2 flex items-center justify-between">
+              <h2 class="font-semibold">📅 การประชุมที่ใกล้จะถึง</h2>
+              <button class="text-xs text-indigo-600" data-goto="calendar">ดู Calendar</button>
+            </div>
+            <div id="home-meetings" class="divide-y divide-slate-100"></div>
+          </div>
+
+          <!-- 3. Open groups (haven't joined yet) -->
+          <div class="bg-white rounded-2xl ios-card overflow-hidden" data-widget="home-open">
+            <div class="px-4 pt-3 pb-2 flex items-center justify-between">
+              <h2 class="font-semibold">🪪 กลุ่มงานที่ยังไม่ได้เข้าร่วม</h2>
+              <button class="text-xs text-indigo-600" data-goto="summary">ดูทั้งหมด</button>
+            </div>
+            <div id="home-open" class="divide-y divide-slate-100"></div>
+          </div>
+
+          <!-- 4. Scoreboard (pie chart) -->
+          <div class="bg-white rounded-2xl ios-card overflow-hidden" data-widget="home-scoreboard">
+            <div class="px-4 pt-3 pb-2 flex items-center justify-between">
+              <h2 class="font-semibold">📊 Scoreboard</h2>
+              <span class="text-xs text-slate-500">จากงานที่เสร็จ</span>
+            </div>
+            <div class="p-4">
+              <div id="scoreboard-chart" class="flex items-center justify-center"></div>
+              <div id="scoreboard-legend" class="mt-3 space-y-1"></div>
+            </div>
+          </div>
+
+          <!-- Pending deadline requests (admin only) -->
+          <div id="home-pending-extensions" class="bg-white rounded-2xl ios-card overflow-hidden hidden" data-widget="home-extensions">
+            <div class="px-4 pt-3 pb-2 flex items-center justify-between">
+              <h2 class="font-semibold">⏰ คำขอเลื่อน Deadline (Admin)</h2>
+            </div>
+            <div id="home-extensions-list" class="divide-y divide-slate-100"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============== TASKS ============== -->
+      <section id="page-tasks" class="page hidden">
+        <div data-widget-section="tasks">
+          <div data-widget="tasks-search" class="flex gap-2">
+            <div class="relative flex-1">
+              <input id="task-search" class="ios-input pl-9" placeholder="🔎 ค้นหางาน…">
+              <button id="task-search-clear" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hidden">✕</button>
+            </div>
+            <button id="task-filter-btn" class="ios-btn-ghost relative" title="ตัวกรอง">🎚<span id="task-filter-badge" class="filter-badge hidden">0</span></button>
+          </div>
+          <div data-widget="tasks-segmented" class="ios-segmented" id="task-segmented">
+            <button data-seg="mine"  class="active">งานของฉัน</button>
+            <button data-seg="lead"  class="hidden">งานที่ฉันเป็นหัวหน้า</button>
+            <button data-seg="admin" class="hidden">งานของ Admin</button>
+          </div>
+          <div data-widget="tasks-list" id="tasks-list" class="space-y-3"></div>
+        </div>
+      </section>
+
+      <!-- Filter sheet (slides up from bottom) -->
+      <div id="filter-sheet" class="fixed inset-0 bg-black/40 hidden items-end sm:items-center justify-center z-50">
+        <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl shadow-xl max-h-[85vh] overflow-auto safe-bottom">
+          <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-10">
+            <button id="filter-clear" class="text-rose-600 text-sm">ล้างตัวกรอง</button>
+            <h3 class="font-semibold">🎚 ตัวกรอง</h3>
+            <button id="filter-close" class="text-indigo-600 font-semibold">เสร็จ</button>
+          </div>
+          <div class="p-4 space-y-4">
+            <div>
+              <label class="ios-label">สถานะ</label>
+              <div class="flex flex-wrap gap-2">
+                <button class="ios-chip active" data-fs-status="">ทั้งหมด</button>
+                <button class="ios-chip" data-fs-status="on_hold">พักไว้</button>
+                <button class="ios-chip" data-fs-status="in_progress">กำลังดำเนินการ</button>
+                <button class="ios-chip" data-fs-status="completed">เสร็จแล้ว</button>
+                <button class="ios-chip" data-fs-status="cancelled">ยกเลิก</button>
+              </div>
+            </div>
+            <div>
+              <label class="ios-label">เรียงตาม</label>
+              <select id="fs-sort" class="ios-select">
+                <option value="created">วันสร้าง (เก่า → ใหม่)</option>
+                <option value="deadline">⏰ Deadline (ใกล้ → ไกล)</option>
+                <option value="deadline_desc">⏰ Deadline (ไกล → ใกล้)</option>
+                <option value="start">📅 วันเริ่มงาน (เก่า → ใหม่)</option>
+                <option value="start_desc">📅 วันเริ่มงาน (ใหม่ → เก่า)</option>
+                <option value="points">⭐ Points (มาก → น้อย)</option>
+              </select>
+            </div>
+            <div>
+              <label class="ios-label">โครงการ</label>
+              <select id="fs-group" class="ios-select">
+                <option value="">ทั้งหมด</option>
+              </select>
+            </div>
+            <div>
+              <label class="ios-label">ส่งให้ (Target)</label>
+              <select id="fs-target" class="ios-select">
+                <option value="">ทั้งหมด</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============== CALENDAR ============== -->
+      <section id="page-calendar" class="page hidden">
+        <div data-widget-section="calendar" class="cal-fullbleed">
+          <!-- Big calendar grid (left) -->
+          <div data-widget="calendar-grid" class="bg-white rounded-2xl ios-card p-4 cal-card-big cal-sticky-left">
+            <div class="flex items-center justify-between mb-3">
+              <button id="cal-prev" class="ios-btn-icon">‹</button>
+              <div id="cal-title" class="font-semibold text-lg">—</div>
+              <button id="cal-next" class="ios-btn-icon">›</button>
+            </div>
+            <div class="grid grid-cols-7 text-center text-xs text-slate-500 font-medium mb-1">
+              <div>อาทิตย์</div><div>จันทร์</div><div>อังคาร</div><div>พุธ</div><div>พฤหัสบดี</div><div>ศุกร์</div><div>เสาร์</div>
+            </div>
+            <div id="cal-grid" class="grid grid-cols-7 gap-1.5"></div>
+          </div>
+
+          <!-- Quick-create bar -->
+          <div data-widget="calendar-create" id="cal-create-bar" class="bg-white rounded-xl ios-card p-3">
+            <div id="cal-create-hint" class="text-[11px] text-slate-500 mb-2">เลือกวันที่บนปฏิทินเพื่อตั้ง deadline ให้งานใหม่</div>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" class="ios-btn-secondary text-xs flex-1" data-cal-create="task">📋 + งาน</button>
+              <button type="button" class="ios-btn-secondary text-xs flex-1" data-cal-create="meeting">📅 + ประชุม</button>
+            </div>
+          </div>
+
+          <!-- Meetings list -->
+          <div data-widget="calendar-meetings" class="bg-white rounded-2xl ios-card p-4">
+            <h3 class="font-semibold text-sm mb-2"><span id="cal-meetings-label">📅 การประชุม</span></h3>
+            <div id="cal-meetings-list" class="space-y-3"></div>
+          </div>
+
+          <!-- Tasks list -->
+          <div data-widget="calendar-tasks" class="bg-white rounded-2xl ios-card p-4">
+            <h3 class="font-semibold text-sm mb-2"><span id="cal-day-label">📋 งานในเดือนนี้</span></h3>
+            <div id="cal-day-list" class="space-y-3"></div>
+          </div>
+
+          <!-- Leaves list -->
+          <div data-widget="calendar-leaves" class="bg-white rounded-2xl ios-card p-4">
+            <h3 class="font-semibold text-sm mb-2"><span id="cal-leaves-label">🏖️ วันลาในเดือนนี้</span></h3>
+            <div id="cal-leaves-list" class="space-y-2"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============== PEOPLE (members + connections) ============== -->
+      <section id="page-people" class="page hidden">
+        <div data-widget-section="people">
+          <div data-widget="people-segmented" class="ios-segmented" id="people-segmented" style="grid-template-columns: 1fr 1fr">
+            <button data-pseg="members" class="active">สมาชิก</button>
+            <button data-pseg="connections">Connections</button>
+          </div>
+          <div data-widget="people-members" id="people-members" class="space-y-3"></div>
+          <div data-widget="people-connections" id="people-connections" class="hidden space-y-3">
+            <div class="relative">
+              <input id="conn-search" class="ios-input pl-9" placeholder="🔎 ค้นหา Connection — ชื่อ / หน่วยงาน / หัวข้อ / เบอร์ ...">
+              <button id="conn-search-clear" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hidden">✕</button>
+            </div>
+            <div id="conn-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============== SUMMARY ============== -->
+      <section id="page-summary" class="page hidden">
+        <div data-widget-section="summary">
+          <div data-widget="summary-content" id="summary-content"></div>
+        </div>
+      </section>
+
+      <!-- ============== PROFILE ============== -->
+      <section id="page-profile" class="page hidden">
+        <div class="space-y-4 max-w-md mx-auto" id="profile-widgets-root" data-widget-section="profile">
+          <div class="bg-white rounded-2xl ios-card p-5 text-center" data-widget="profile-avatar">
+            <!-- Avatar with hover-overlay button to change picture -->
+            <div class="relative inline-block">
+              <div id="me-avatar-big" class="ios-avatar mx-auto" style="width:96px; height:96px; font-size:1.8rem; overflow:hidden"></div>
+              <button id="me-avatar-edit" class="me-avatar-edit-btn" title="เปลี่ยนรูปโปรไฟล์">📷</button>
+              <input type="file" id="me-avatar-input" accept="image/*" class="hidden">
+            </div>
+            <div id="me-name" class="text-xl font-semibold mt-3">—</div>
+            <div id="me-role-badge" class="inline-block mt-1 text-xs px-2 py-0.5 rounded-full"></div>
+            <div id="me-email" class="text-sm text-slate-500 mt-1"></div>
+            <button id="me-avatar-remove" class="text-xs text-rose-600 mt-2 hidden">ลบรูปโปรไฟล์</button>
+          </div>
+          <div class="bg-white rounded-2xl ios-card overflow-hidden" data-widget="profile-stats">
+            <div class="ios-list-row"><span>⭐ คะแนนสะสม</span><span class="text-slate-500" id="me-pts">0 pts</span></div>
+            <div class="ios-list-row"><span>✅ งานที่ทำเสร็จ</span><span class="text-slate-500" id="me-done">0</span></div>
+            <div class="ios-list-row"><span>⏳ งานกำลังทำ</span><span class="text-slate-500" id="me-doing">0</span></div>
+            <div class="ios-list-row"><span>📋 งานทั้งหมด</span><span class="text-slate-500" id="me-all">0</span></div>
+          </div>
+          <div class="bg-white rounded-2xl ios-card overflow-hidden" data-widget="profile-actions">
+            <button class="ios-list-row w-full text-left" id="btn-change-pw"><span>🔑 เปลี่ยน PIN</span><span class="text-slate-400">›</span></button>
+            <button class="ios-list-row w-full text-left" id="btn-manage-leaves"><span>🏖️ จัดการวันลาของฉัน</span><span class="text-slate-400">›</span></button>
+            <button class="ios-list-row w-full text-left" id="btn-manage-groups"><span>📁 จัดการ Task Groups</span><span class="text-slate-400">›</span></button>
+            <button class="ios-list-row w-full text-left" id="btn-extensions"><span>⏰ คำขอเลื่อน Deadline</span><span class="text-slate-400">›</span></button>
+            <button class="ios-list-row w-full text-left hidden" id="btn-system-settings"><span>⚙️ ตั้งค่าระบบ (Admin)</span><span class="text-slate-400">›</span></button>
+            <button class="ios-list-row w-full text-left hidden" id="btn-dev-tools"><span>🛠️ Dev & Test Tools <span class="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full ml-1">ADMIN</span></span><span class="text-slate-400">›</span></button>
+            <button class="ios-list-row w-full text-left text-rose-600" id="btn-logout"><span>🚪 ออกจากระบบ</span><span class="text-rose-300">›</span></button>
+          </div>
+          <div class="text-center text-xs text-slate-400 pt-2">SML · v2.0</div>
+        </div>
+      </section>
+
+      <!-- ============== WHITEBOARD ============== -->
+      <section id="page-whiteboard" class="page hidden">
+        <div data-widget-section="whiteboard">
+          <div data-widget="whiteboard-list" id="wb-list-view">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="font-bold text-lg">Whiteboards</h2>
+              <button id="wb-new-btn" class="ios-btn-primary text-sm px-4 py-2">+ สร้างใหม่</button>
+            </div>
+            <div id="wb-list" class="space-y-2"></div>
+          </div>
+          <div data-widget="whiteboard-canvas" id="wb-canvas-view" class="hidden flex flex-col h-full">
+          <div id="wb-toolbar" class="wb-toolbar">
+            <button id="wb-back" class="wb-tool" title="กลับ">←</button>
+            <span id="wb-board-name" class="font-semibold text-sm px-1 truncate"></span>
+
+            <div class="wb-tool-group">
+              <button class="wb-tool wb-tool-active" data-tool="select" title="เลือก (V)">👆</button>
+              <button class="wb-tool" data-tool="pan" title="เลื่อนหน้า (H)">✋</button>
+            </div>
+
+            <div class="wb-tool-group">
+              <button class="wb-tool" data-tool="draw" title="วาดอิสระ (P)">✏️</button>
+              <button class="wb-tool" data-tool="highlight" title="ไฮไลต์">🖍️</button>
+              <button class="wb-tool" data-tool="eraser" title="ยางลบ (E)">🧹</button>
+            </div>
+
+            <div class="wb-tool-group">
+              <button class="wb-tool" data-tool="line" title="เส้นตรง (L)">📏</button>
+              <button class="wb-tool" data-tool="arrow" title="ลูกศร (A)">➡️</button>
+              <button class="wb-tool" data-tool="rect" title="สี่เหลี่ยม (R)">⬛</button>
+              <button class="wb-tool" data-tool="circle" title="วงรี (O)">⭕</button>
+              <button class="wb-tool" data-tool="triangle" title="สามเหลี่ยม">🔺</button>
+              <button class="wb-tool" data-tool="diamond" title="ข้าวหลามตัด">💎</button>
+            </div>
+
+            <div class="wb-tool-group">
+              <button class="wb-tool" data-tool="text" title="ข้อความ (T)">📝</button>
+              <button class="wb-tool" data-tool="sticky" title="Sticky Note (S)">🟡</button>
+              <button id="wb-image-btn" class="wb-tool" title="เพิ่มรูปภาพ">🖼️</button>
+            </div>
+
+            <div class="wb-tool-group wb-tool-group-props">
+              <input id="wb-color-pick" type="color" value="#1e293b" class="wb-color-input" title="สีเส้น/เติม">
+              <input id="wb-stroke-size" type="range" min="1" max="30" value="3" class="wb-range" title="ขนาดเส้น">
+              <button id="wb-fill-toggle" class="wb-tool" title="โปร่งใส / เติมสี">⬜</button>
+            </div>
+
+            <div class="wb-tool-group ml-auto">
+              <button id="wb-undo-btn"  class="wb-tool" title="Undo (Ctrl+Z)">↶</button>
+              <button id="wb-redo-btn"  class="wb-tool" title="Redo (Ctrl+Y)">↷</button>
+            </div>
+
+            <div class="wb-tool-group">
+              <button id="wb-zoom-out-btn" class="wb-tool" title="ย่อ">🔍−</button>
+              <span id="wb-zoom-label" class="wb-zoom-label">100%</span>
+              <button id="wb-zoom-in-btn"  class="wb-tool" title="ขยาย">🔍+</button>
+              <button id="wb-zoom-fit-btn" class="wb-tool" title="พอดีหน้าจอ">⊡</button>
+            </div>
+
+            <div class="wb-tool-group">
+              <button id="wb-grid-btn"       class="wb-tool" title="แสดง/ซ่อน Grid">▦</button>
+              <button id="wb-fullscreen-btn" class="wb-tool" title="Fullscreen (F)">⛶</button>
+              <button id="wb-inject-btn"     class="wb-tool" title="นำข้อมูลเข้า">📥</button>
+              <button id="wb-export-btn"     class="wb-tool" title="ดาวน์โหลด PNG">💾</button>
+              <button id="wb-delete-btn"     class="wb-tool text-red-500" title="ลบที่เลือก (Del)">🗑️</button>
+              <button id="wb-clear-btn"      class="wb-tool text-red-500" title="ล้างทั้งหมด" style="display:none">🔄</button>
+            </div>
+
+            <button id="wb-confirm-btn" class="wb-confirm-btn" title="บันทึกทันที (ปกติบันทึกอัตโนมัติทุก 1.5 วิ)">💾 บันทึกทันที</button>
+          </div>
+          <div id="wb-users" class="wb-users-bar"></div>
+          <div id="wb-canvas-wrap" class="wb-canvas-wrap">
+            <canvas id="wb-canvas"></canvas>
+          </div>
+          <!-- Inject modal -->
+          <div id="wb-inject-modal" class="wb-inject-modal hidden">
+            <div class="wb-inject-panel">
+              <div class="flex items-center justify-between mb-3">
+                <span class="font-semibold text-sm">นำข้อมูลเข้า Whiteboard</span>
+                <button id="wb-inject-close" class="text-slate-400">✕</button>
+              </div>
+              <div class="space-y-2" id="wb-inject-list"></div>
+            </div>
+          </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Tab Bar — used on phone AND iPad portrait (anything below lg) -->
+    <nav id="tabbar" class="ios-tabbar lg:hidden">
+      <button data-tab="home"     class="active"><span class="ico">🏠</span><span>Home</span></button>
+      <button data-tab="tasks"            ><span class="ico">📋</span><span>Todo</span></button>
+      <button data-tab="calendar"         ><span class="ico">📅</span><span>Calendar</span></button>
+      <button data-tab="people"           ><span class="ico">👥</span><span>People</span></button>
+      <button data-tab="summary"          ><span class="ico">📊</span><span>Summary</span></button>
+      <button data-tab="profile"          ><span class="ico">👤</span><span>Profile</span></button>
+      <button data-tab="whiteboard"       ><span class="ico">🎨</span><span>Board</span></button>
+    </nav>
+  </div>
+
+  <!-- Sheet (task detail) — declared FIRST so modal can layer on top -->
+  <div id="sheet" class="fixed inset-0 bg-black/40 hidden items-end sm:items-center justify-center z-40">
+    <div class="bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-3xl shadow-xl max-h-[92vh] overflow-auto safe-bottom">
+      <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-10">
+        <button id="sheet-close" class="text-indigo-600">ปิด</button>
+        <h3 class="font-semibold">รายละเอียดงาน</h3>
+        <span class="w-12"></span>
+      </div>
+      <div id="sheet-body" class="p-4"></div>
+    </div>
+  </div>
+
+  <!-- Submission sheet (separated from task detail for cleaner UX) -->
+  <div id="submit-sheet" class="fixed inset-0 bg-black/40 hidden items-end sm:items-center justify-center" style="z-index: 45">
+    <div class="bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-3xl shadow-xl max-h-[92vh] overflow-auto safe-bottom">
+      <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-10">
+        <button id="submit-close" class="text-indigo-600">‹ กลับ</button>
+        <h3 class="font-semibold">📎 ส่งงาน</h3>
+        <span class="w-12"></span>
+      </div>
+      <div id="submit-body" class="p-4"></div>
+    </div>
+  </div>
+
+  <!-- Notifications sheet -->
+  <div id="notif-sheet" class="fixed inset-0 bg-black/40 hidden items-end sm:items-center justify-center z-50">
+    <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl shadow-xl max-h-[80vh] overflow-auto safe-bottom">
+      <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-10">
+        <button id="notif-close" class="text-indigo-600">ปิด</button>
+        <h3 class="font-semibold">🔔 การแจ้งเตือน</h3>
+        <span class="w-12"></span>
+      </div>
+      <div id="notif-body" class="p-3"></div>
+    </div>
+  </div>
+
+  <!-- Preview sheet (in-app file viewer) -->
+  <div id="preview-sheet" class="fixed inset-0 bg-black/70 hidden items-center justify-center p-0 sm:p-4" style="z-index: 55">
+    <div class="bg-white w-full sm:max-w-3xl sm:rounded-2xl rounded-t-3xl shadow-2xl flex flex-col" style="height: 95vh; max-height: 95vh">
+      <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-white safe-bottom-0">
+        <button id="preview-close" class="text-indigo-600 px-2">ปิด</button>
+        <h3 id="preview-title" class="font-semibold flex-1 text-center mx-2 truncate text-sm">—</h3>
+        <button id="preview-download" class="text-indigo-600 font-semibold px-2" title="ดาวน์โหลด">⬇</button>
+      </div>
+      <div id="preview-body" class="flex-1 overflow-auto bg-slate-50"></div>
+    </div>
+  </div>
+
+  <!-- Modal — declared LAST so it always layers on top of sheets -->
+  <div id="modal" class="fixed inset-0 bg-black/50 hidden items-end sm:items-center justify-center p-0 sm:p-4" style="z-index: 60">
+    <div class="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-3xl shadow-2xl max-h-[92vh] overflow-auto safe-bottom">
+      <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-10">
+        <button id="modal-close" class="text-indigo-600">ยกเลิก</button>
+        <h3 id="modal-title" class="font-semibold">Title</h3>
+        <button id="modal-submit-top" class="text-indigo-600 font-semibold">บันทึก</button>
+      </div>
+      <form id="modal-form" class="p-4 space-y-3"></form>
+    </div>
+  </div>
+
+  <!-- Trash bin (only on Todo tab) — drag a task here to cancel it -->
+  <div id="trash-bin" title="ลากการ์ดงานมาวางที่นี่เพื่อยกเลิก">🗑</div>
+
+  <div id="toast" class="fixed bottom-24 md:bottom-6 left-0 right-0 flex flex-col items-center gap-2 pointer-events-none px-4" style="z-index: 70"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,1661 @@
+* { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+html, body { font-family: 'Prompt', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif; }
+body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-y: contain; }
+
+.safe-bottom { padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem); }
+.ios-card { box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.04); }
+
+/* ===== Top bar ===== */
+.ios-topbar {
+  position: sticky; top: 0; z-index: 30;
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid rgba(15,23,42,0.06);
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.topbar-inner {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 1rem; height: 3.5rem;
+  max-width: 1200px; margin: 0 auto;
+}
+
+/* Desktop top tabs */
+.dt-tab {
+  padding: 0.5rem 0.95rem;
+  border-radius: 0.625rem;
+  font-size: 0.875rem; font-weight: 500;
+  color: #64748b;
+  transition: background .15s, color .15s;
+}
+.dt-tab:hover { background: #f1f5f9; color: #0f172a; }
+.dt-tab.active { background: #4f46e5; color: #fff; }
+.dt-tab.active:hover { background: #4338ca; color: #fff; }
+
+/* ===== Page container (responsive) ===== */
+/* Bottom tabbar is shown up to lg (1024) — page needs bottom padding for it. */
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+  padding-bottom: 6rem;
+}
+@media (min-width: 768px) {
+  .page-container { padding-left: 1.5rem; padding-right: 1.5rem; padding-top: 1.25rem; }
+}
+@media (min-width: 1024px) {
+  /* Top desktop-nav active here → drop the mobile-tabbar bottom padding */
+  .page-container { padding-bottom: 2rem; }
+}
+
+/* ===== Bottom tab bar (mobile only — hidden by md:hidden in HTML) ===== */
+.ios-tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-top: 1px solid rgba(15,23,42,0.08);
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.ios-tabbar button {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 0.5rem 0.15rem 0.4rem;
+  font-size: 0.6rem; font-weight: 500;
+  color: #94a3b8;
+}
+.ios-tabbar button .ico { font-size: 1.25rem; line-height: 1; }
+.ios-tabbar button.active { color: #4f46e5; }
+.ios-tabbar button:active { transform: scale(0.97); }
+
+/* Bell button + badge */
+.bell-badge {
+  position: absolute; top: -3px; right: -3px;
+  min-width: 16px; height: 16px;
+  background: #ef4444; color: #fff;
+  border-radius: 9999px;
+  font-size: 9px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0 4px; border: 2px solid #fff;
+}
+.notif-row {
+  display: flex; align-items: flex-start; gap: 0.6rem;
+  padding: 0.7rem 0.5rem;
+  border-radius: 0.6rem;
+  font-size: 0.85rem;
+}
+.notif-row:hover { background: #f8fafc; }
+.notif-row .ico {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-size: 0.95rem;
+}
+.notif-overdue { background: #fee2e2; color: #b91c1c; }
+.notif-soon    { background: #fef3c7; color: #92400e; }
+.notif-info    { background: #dbeafe; color: #1d4ed8; }
+.notif-success { background: #dcfce7; color: #15803d; }
+
+/* ===== Buttons ===== */
+.ios-btn-primary {
+  background: linear-gradient(135deg, #6366f1, #2563eb);
+  color: #fff;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 1rem; font-weight: 600;
+  box-shadow: 0 4px 12px rgba(79,70,229,0.25);
+  min-height: 44px;
+}
+.ios-btn-primary:active { transform: scale(0.98); }
+.ios-btn-secondary {
+  background: #eef2ff; color: #4338ca;
+  padding: 0.55rem 0.95rem; border-radius: 0.65rem;
+  font-size: 0.875rem; font-weight: 600;
+  min-height: 38px;
+}
+.ios-btn-ghost {
+  background: #f1f5f9; color: #475569;
+  padding: 0.5rem 0.85rem; border-radius: 0.55rem;
+  font-size: 0.85rem; font-weight: 500;
+}
+.ios-btn-danger {
+  background: #fee2e2; color: #b91c1c;
+  padding: 0.5rem 0.85rem; border-radius: 0.55rem;
+  font-size: 0.85rem; font-weight: 500;
+}
+.ios-btn-icon {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: #f1f5f9; color: #475569;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.15rem; font-weight: 600;
+}
+.ios-btn-icon:active { background: #e2e8f0; }
+
+.ios-avatar-btn {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #06b6d4);
+  color: #fff; font-weight: 600; font-size: 0.85rem;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* ===== Inputs ===== */
+.ios-input, .ios-select, .ios-textarea {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 0.7rem 0.875rem;
+  font-size: 0.95rem;
+  background: #f8fafc;
+  min-height: 42px;
+}
+.ios-input:focus, .ios-select:focus, .ios-textarea:focus {
+  outline: none; border-color: #6366f1; background: #fff;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+}
+.ios-textarea { resize: vertical; min-height: 70px; }
+.ios-label {
+  display: block; font-size: 0.75rem; font-weight: 600;
+  color: #475569; margin-bottom: 0.4rem;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+
+/* search input icon position */
+#task-search { padding-left: 2.5rem; }
+
+/* ===== Stat cards ===== */
+.ios-stat-card {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.04);
+}
+.ios-stat-icon {
+  width: 2.5rem; height: 2.5rem;
+  border-radius: 0.75rem;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.15rem;
+}
+.ios-stat-label { font-size: 0.7rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 500; }
+.ios-stat-value { font-size: 1.4rem; font-weight: 700; line-height: 1.1; }
+
+/* ===== List rows ===== */
+.ios-list-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid rgba(15,23,42,0.06);
+  font-size: 0.95rem;
+  min-height: 48px;
+  text-align: left;
+}
+.ios-list-row:last-child { border-bottom: none; }
+.ios-list-row:active { background: #f1f5f9; }
+
+/* Home: upcoming-deadline rows get a left stripe matching the task's group color
+   (consistent with Kanban cards on the Todo page so users can see at a glance which group it's in).
+   Using ::before pseudo so the stripe always extends the full row height — `border-left` on
+   <button> can be clipped by browser button defaults / divide-y interactions on some setups. */
+.home-task-row {
+  position: relative;
+  padding-left: 1rem;
+  transition: background .12s ease;
+}
+.home-task-row::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: var(--group-color, #cbd5e1);
+  border-radius: 0 2px 2px 0;
+  /* Keep the stripe visible even when divide-y borders sit on top */
+  z-index: 1;
+}
+.home-task-row:hover {
+  background: color-mix(in srgb, var(--group-color, #cbd5e1) 8%, transparent);
+}
+
+/* ===== Avatars ===== */
+.ios-avatar {
+  width: 2.25rem; height: 2.25rem;
+  border-radius: 9999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 600; font-size: 0.8rem;
+  flex-shrink: 0;
+  border: 2px solid #fff;
+  /* When used with a background-image (uploaded photo), make sure it covers nicely */
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+}
+/* When the avatar element is an <img> (uploaded profile picture) */
+.ios-avatar-img {
+  object-fit: cover;
+  background: #f1f5f9;  /* fallback while loading */
+}
+.avatar-stack { display: inline-flex; }
+.avatar-stack > * + * { margin-left: -0.55rem; }
+
+/* Profile page — small camera button overlaying the big avatar */
+.me-avatar-edit-btn {
+  position: absolute;
+  right: -2px; bottom: -2px;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .1s ease, border-color .12s ease;
+}
+.me-avatar-edit-btn:hover { transform: scale(1.08); border-color: #94a3b8; }
+
+/* ===== Status badges ===== */
+.status-badge {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.65rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.status-pending     { background:#f1f5f9; color:#475569; }
+.status-in_progress { background:#dbeafe; color:#1d4ed8; }
+.status-completed   { background:#dcfce7; color:#15803d; }
+.status-on_hold     { background:#fef3c7; color:#a16207; }
+.status-cancelled   { background:#fee2e2; color:#b91c1c; }
+/* Meeting status — single badge replacing regular status for kind='meeting'.
+   Picks up the meeting's group color via --m-color (set inline by JS). Fallback purple. */
+.status-meeting {
+  background: color-mix(in srgb, var(--m-color, #a855f7) 18%, white);
+  color:      color-mix(in srgb, var(--m-color, #6d28d9) 80%, #1e293b);
+  border: 1px solid color-mix(in srgb, var(--m-color, #d8b4fe) 50%, white);
+}
+
+.role-badge.admin  { background:#ede9fe; color:#6d28d9; }
+.role-badge.member { background:#e0f2fe; color:#0369a1; }
+
+/* leader/supreme badges */
+.task-role-badge {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 0.05rem 0.4rem;
+  border-radius: 9999px;
+  font-size: 0.6rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.task-role-leader  { background: #fef3c7; color: #92400e; }
+.task-role-supreme { background: linear-gradient(135deg,#fbbf24,#f59e0b); color: #fff; }
+.task-role-member  { background: #f1f5f9; color: #64748b; }
+
+/* points pill */
+.points-pill {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  background: #fef3c7; color: #92400e;
+  padding: 0.1rem 0.55rem; border-radius: 9999px;
+  font-size: 0.7rem; font-weight: 700;
+  white-space: nowrap;
+}
+.target-chip {
+  display: inline-flex; align-items: center; gap: 0.2rem;
+  background: #ecfeff; color: #0e7490;
+  padding: 0.1rem 0.55rem; border-radius: 9999px;
+  font-size: 0.7rem; font-weight: 600;
+  white-space: nowrap;
+}
+/* Points workflow phase badge */
+.phase-badge {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.1rem 0.55rem; border-radius: 9999px;
+  font-size: 0.65rem; font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ===== Cards ===== */
+.task-card, .group-card, .member-card {
+  background: #fff;
+  border-radius: 1rem;
+  padding: 0.95rem 1rem;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.04);
+  transition: transform .08s ease;
+  display: flex;
+  flex-direction: column;
+}
+.conn-section-header {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+  padding: 0.35rem 0 0.1rem;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 0.25rem;
+}
+/* People page: members grid — 1 col on phone/tablet, 2 cols on lg+ */
+#people-members:not(.hidden) {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.6rem;
+}
+@media (min-width: 1024px) {
+  #people-members:not(.hidden) { grid-template-columns: 1fr 1fr; }
+}
+.member-card-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid #f1f5f9;
+}
+.member-card-actions .ios-btn-ghost,
+.member-card-actions .ios-btn-danger {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  padding: 0.4rem 0.75rem;
+}
+.member-card-actions .ios-btn-ghost { flex: 1 1 auto; }
+
+.conn-card {
+  background: #fff;
+  border-radius: 1rem;
+  padding: 0.95rem 1rem;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.04);
+  transition: transform .08s ease;
+}
+.task-card:active, .group-card:active, .member-card:active, .conn-card:active { transform: scale(0.99); }
+
+/* Clickable header inside member-card — opens the per-person detail sheet.
+   Negative left/right/top extends hit area to the card edges; bottom kept at 0
+   so admin action row beneath isn't pulled upward. */
+.member-card-main {
+  cursor: pointer;
+  margin: -0.95rem -1rem 0;
+  padding: 0.95rem 1rem;
+  border-radius: 1rem;
+  transition: background .12s ease;
+}
+.member-card-main:hover { background: #f8fafc; }
+
+/* Group color stripe — primary visual cue for group identity (set inline by JS) */
+.task-card {
+  border-left-width: 6px;
+  border-left-style: solid;
+  border-left-color: #cbd5e1;
+}
+/* Color picker — palette swatches for choosing a group's color (admin/leader form) */
+.color-picker {
+  display: flex; flex-wrap: wrap; gap: 0.55rem;
+  padding: 0.4rem 0; margin-top: 0.15rem;
+}
+.color-swatch {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  outline: 1px solid rgba(15,23,42,0.1);
+  cursor: pointer;
+  transition: transform .1s ease, outline-color .12s ease, box-shadow .12s ease;
+  position: relative;
+  padding: 0;
+  flex-shrink: 0;
+}
+.color-swatch:not(:disabled):hover { transform: scale(1.12); }
+.color-swatch.selected {
+  outline: 2px solid #1e293b;
+  box-shadow: 0 0 0 2px #fff inset, 0 2px 6px rgba(0,0,0,0.15);
+  transform: scale(1.08);
+}
+.color-swatch.used:not(.selected) {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.color-swatch.used:not(.selected)::after {
+  content: '✕';
+  position: absolute;
+  inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  font-size: 14px; font-weight: 800;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+}
+
+/* Group cards on the Summary page — left stripe + faint colored top accent so each
+   group is visually distinct at a glance (matches Kanban + Home + Confirmed dropdowns). */
+.group-card {
+  border-left: 6px solid var(--group-color, #cbd5e1);
+  position: relative;
+  overflow: hidden;
+}
+.group-card::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 3px;
+  background: var(--group-color, #cbd5e1);
+  opacity: 0.55;
+}
+/* "Mine" indicator: thicker stripe + subtle inset shadow on the colored edge */
+.task-card.is-mine {
+  border-left-width: 8px;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.04), inset 4px 0 0 rgba(255,255,255,0.6);
+}
+
+/* line clamp */
+.line-clamp-2 {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ===== Deadline coloring ===== */
+.deadline-soon  { color: #b45309; }
+.deadline-today { color: #b91c1c; font-weight: 600; }
+.deadline-over  { color: #b91c1c; font-weight: 700; }
+
+/* ===== Segmented control ===== */
+.ios-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: #e2e8f0;
+  padding: 3px;
+  border-radius: 0.7rem;
+  gap: 2px;
+}
+.ios-segmented button {
+  background: transparent;
+  padding: 0.45rem 0.5rem;
+  border-radius: 0.55rem;
+  font-size: 0.85rem; font-weight: 500;
+  color: #475569;
+}
+.ios-segmented button.active {
+  background: #fff; color: #0f172a;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.1);
+}
+
+/* ===== Chip row ===== */
+.ios-chip-row { scrollbar-width: none; -ms-overflow-style: none; }
+.ios-chip-row::-webkit-scrollbar { display: none; }
+.ios-chip {
+  flex-shrink: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  color: #475569; font-weight: 500;
+}
+.ios-chip.active {
+  background: #4f46e5; border-color: #4f46e5; color: #fff;
+}
+
+/* ===== Calendar ===== */
+/* On phone / iPad portrait the calendar uses the normal page-container width.
+   Only at lg+ does it break out to ~80vw — that's where there's room for the
+   wider 70:30 split layout. */
+.cal-fullbleed { box-sizing: border-box; }
+@media (min-width: 1024px) {
+  .cal-fullbleed {
+    width: 80vw;
+    margin-left: calc(-40vw + 50%);
+  }
+}
+/* On desktop the right column is a flex stack: create-bar (fixed) + scroll zone
+   (takes remaining height). Cards scroll inside the zone — they never visually
+   overlap the create-bar because the zone's overflow:hidden clips them above its top. */
+@media (min-width: 1024px) {
+  /* Calendar self-aligns to start (don't stretch to match the tall right column) */
+  .cal-sticky-left { align-self: start; }
+
+  .cal-right-col {
+    display: flex;
+    flex-direction: column;
+    /* Lock the column's total height so the inner scroll has bounded space.
+       100vh − (topbar 4rem + page top padding 1.25rem + bottom padding 2rem) */
+    max-height: calc(100vh - 7.25rem);
+  }
+  .cal-right-zone {
+    flex: 1;             /* take leftover space below the create-bar */
+    min-height: 0;       /* allow flex child to shrink so overflow works */
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 0.5rem;
+    scrollbar-width: thin;
+  }
+  .cal-right-zone::-webkit-scrollbar { width: 6px; }
+  .cal-right-zone::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+}
+/* Big calendar grid — month view fills the whole content width with tall cells
+   that can show a few mini event pills (meeting + task titles) per day. */
+.cal-card-big { padding: 1rem; }
+.cal-cell {
+  min-height: 92px;
+  border-radius: 0.6rem;
+  background: #fff;
+  border: 1px solid #f1f5f9;
+  display: flex; flex-direction: column; align-items: stretch;
+  font-size: 0.85rem;
+  color: #0f172a;
+  position: relative;
+  padding: 0.3rem 0.35rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background .1s ease, border-color .1s ease;
+}
+@media (min-width: 1024px) {
+  .cal-cell { min-height: 110px; padding: 0.4rem 0.45rem; }
+}
+.cal-cell:hover  { background: #f8fafc; border-color: #e2e8f0; }
+.cal-cell:active { background: #f1f5f9; }
+.cal-cell.muted  { background: transparent; border-color: transparent; color: #cbd5e1; cursor: default; }
+.cal-cell.muted:hover { background: transparent; }
+.cal-cell.today  { background: #eef2ff; border-color: #c7d2fe; color: #4338ca; }
+.cal-cell.selected { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+.cal-cell.selected .cal-cell-num { color: #fff; }
+
+.cal-cell-num {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #475569;
+  line-height: 1;
+  margin-bottom: 0.25rem;
+  flex-shrink: 0;
+}
+.cal-cell.today .cal-cell-num { color: #4338ca; }
+
+/* Event pills inside calendar cells */
+.cal-cell-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+.cal-pill {
+  display: block;
+  font-size: 0.62rem;
+  line-height: 1.25;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--pill-color, #94a3b8) 18%, white);
+  color: color-mix(in srgb, var(--pill-color, #94a3b8) 75%, #1e293b);
+  border-left: 3px solid var(--pill-color, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+.cal-pill.is-overdue {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-left-color: #ef4444;
+}
+/* Meeting pill — white background with the group color showing as the left stripe
+   + faint outline (so it stays visible on the white calendar cell). The group's
+   color is used for text so the meeting still reads as belonging to that group. */
+.cal-pill.cal-pill-meeting {
+  background: #fff;
+  color: color-mix(in srgb, var(--pill-color, #94a3b8) 70%, #1e293b);
+  border: 1px solid color-mix(in srgb, var(--pill-color, #94a3b8) 25%, #e2e8f0);
+  border-left: 3px solid var(--pill-color, #94a3b8);
+}
+.cal-pill-more {
+  background: #f1f5f9;
+  color: #64748b;
+  border-left-color: #cbd5e1;
+  font-weight: 700;
+  text-align: center;
+}
+/* Leave pill — clean white pill with dark red text. The bold red left stripe
+   + subtle outer red border keep it identifiable as a "leave" without overwhelming
+   the calendar visually. Member avatar in the leading slot adds at-a-glance identity. */
+.cal-pill-leave {
+  background: #fff;
+  color: #7f1d1d;               /* red-900 — dark red leaning to black */
+  border: 1px solid #fecaca;    /* red-200 — faint outline (so pill doesn't blend into white cell) */
+  border-left: 3px solid #dc2626; /* red-600 — bold left stripe identifies "leave" */
+  font-weight: 700;
+}
+/* Tiny circular avatar inside leave pill (replaces the 🏖️ emoji prefix) */
+.cal-pill-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 0.5rem;
+  font-weight: 800;
+  margin-right: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  flex-shrink: 0;
+  vertical-align: middle;
+  letter-spacing: 0;
+}
+/* Image variant — uploaded profile picture in leave pill */
+.cal-pill-avatar-img {
+  object-fit: cover;
+  background: #f1f5f9;
+}
+
+/* (Multi-day leave bar styles removed — leaves now render as one pill per day,
+   sharing the .cal-pill style with red coloring via .cal-pill-leave above.) */
+
+/* ===== Markdown content (task / meeting descriptions) =====
+   Compact spacing + tight typography so a multi-line description doesn't push
+   the rest of the detail sheet too far down. Headings get a subtle scale step. */
+.md-content { line-height: 1.5; }
+.md-content > *:first-child { margin-top: 0; }
+.md-content > *:last-child  { margin-bottom: 0; }
+.md-content p { margin: 0.5rem 0; }
+.md-content .md-h1 { font-size: 1.05rem; font-weight: 700; margin: 0.65rem 0 0.4rem; color: #0f172a; }
+.md-content .md-h2 { font-size: 0.95rem; font-weight: 700; margin: 0.55rem 0 0.35rem; color: #1e293b; }
+.md-content .md-h3 { font-size: 0.88rem; font-weight: 600; margin: 0.5rem 0 0.3rem; color: #334155; }
+.md-content strong { font-weight: 700; color: #0f172a; }
+.md-content em     { font-style: italic; }
+.md-content del    { color: #94a3b8; }
+.md-content .md-list {
+  margin: 0.45rem 0;
+  padding-left: 1.25rem;
+  list-style: disc;
+}
+.md-content .md-list li { margin: 0.15rem 0; }
+.md-content .md-quote {
+  margin: 0.5rem 0;
+  padding: 0.4rem 0.7rem;
+  background: #fff;
+  border-left: 3px solid #94a3b8;
+  border-radius: 0 0.4rem 0.4rem 0;
+  color: #475569;
+  font-style: italic;
+}
+.md-content .md-hr {
+  margin: 0.6rem 0;
+  border: none;
+  border-top: 1px solid #e2e8f0;
+}
+.md-content .md-link {
+  color: #4f46e5;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md-content .md-link:hover { color: #3730a3; }
+.md-content .md-inline-code {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.3rem;
+  padding: 0.05rem 0.3rem;
+  font-family: 'Menlo', 'Consolas', 'Monaco', monospace;
+  font-size: 0.78em;
+  color: #be185d;
+}
+.md-content .md-code {
+  margin: 0.6rem 0;
+  padding: 0.65rem 0.8rem;
+  background: #0f172a;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  font-family: 'Menlo', 'Consolas', 'Monaco', monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+.md-content .md-code code { color: #e2e8f0; white-space: pre; }
+/* Inverted styles when the cell is selected */
+.cal-cell.selected .cal-pill {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  border-left-color: rgba(255,255,255,0.6);
+}
+.cal-cell.selected .cal-pill.is-overdue {
+  background: rgba(239,68,68,0.4);
+  color: #fff;
+  border-left-color: #fff;
+}
+
+/* ===== Pie chart legend ===== */
+.legend-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.25rem 0;
+}
+.legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+.legend-bar {
+  flex: 1; height: 6px; background: #f1f5f9;
+  border-radius: 9999px; overflow: hidden;
+}
+.legend-bar > span { display: block; height: 100%; }
+
+/* ===== File row ===== */
+.file-row {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.65rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 0.85rem;
+}
+.file-icon {
+  width: 32px; height: 32px;
+  border-radius: 0.5rem;
+  background: #e0e7ff; color: #4f46e5;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ===== Pages animation ===== */
+.page { animation: page-in .2s ease; }
+@keyframes page-in {
+  from { opacity: 0.5; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== Toast ===== */
+.toast {
+  pointer-events: auto;
+  background: #0f172a;
+  color: #fff;
+  padding: 0.7rem 1.1rem;
+  border-radius: 0.75rem;
+  font-size: 0.9rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  animation: toast-in .25s ease;
+  max-width: 100%;
+}
+.toast.error   { background: #b91c1c; }
+.toast.success { background: #15803d; }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+#modal.flex, #login-screen.flex, #sheet.flex, #notif-sheet.flex, #preview-sheet.flex, #submit-sheet.flex { display: flex; }
+
+/* Preview viewer */
+#preview-body img { display: block; margin: 0 auto; }
+#preview-body pre { font-family: 'Menlo','Consolas','Monaco',monospace; }
+/* Kanban board (Todo page) — full-bleed across viewport, columns auto-fit
+   Number of columns varies by user role (4–7), so use auto-fit + flexible width. */
+.kanban-board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(240px, 1fr);
+  justify-content: start;
+  gap: 0.55rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  /* Break out of parent's max-width constraint */
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  padding: 0.25rem 1rem 0.75rem;
+  box-sizing: border-box;
+}
+@media (min-width: 1024px) {
+  .kanban-board {
+    padding: 0.5rem 1.5rem 1rem;
+    /* Center columns when there's room (≤6 cols); scroll horizontally otherwise */
+    justify-content: center;
+    grid-auto-columns: minmax(220px, 280px);
+  }
+}
+.kanban-board::-webkit-scrollbar { height: 8px; }
+.kanban-board::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.kanban-col {
+  background: #f1f5f9;
+  border-radius: 0.85rem;
+  padding: 0.55rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+.kanban-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.25rem 0.4rem 0.55rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.kanban-count {
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 9999px;
+  padding: 1px 8px;
+}
+.kanban-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 60px;
+}
+.kanban-cards .task-card { padding: 0.7rem 0.8rem; cursor: grab; }
+.kanban-cards .task-card:active { cursor: grabbing; }
+/* Admin approval cards aren't draggable — show default cursor + softer bg */
+.kanban-cards .admin-card { cursor: default; background: #fafafa; }
+.kanban-cards .admin-card:active { cursor: default; }
+
+/* Confirmed column: tasks bucketed by group with collapsible <details> headers */
+.confirmed-group {
+  background: #fff;
+  border-radius: 0.65rem;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid var(--group-color, #94a3b8);
+}
+.confirmed-group + .confirmed-group { margin-top: 0.4rem; }
+.confirmed-group-summary {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  font-size: 0.82rem;
+}
+.confirmed-group-summary::-webkit-details-marker { display: none; }
+.confirmed-group-summary::before {
+  content: '▶';
+  font-size: 0.65rem;
+  color: #94a3b8;
+  transition: transform .15s ease;
+  flex-shrink: 0;
+}
+.confirmed-group[open] > .confirmed-group-summary::before { transform: rotate(90deg); }
+.confirmed-group-summary:hover { background: #f8fafc; }
+.confirmed-group-name {
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 600;
+  color: var(--group-color, #334155);
+}
+.confirmed-group-meta {
+  font-size: 0.7rem;
+  color: #64748b;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.confirmed-group-cards {
+  display: flex; flex-direction: column; gap: 0.4rem;
+  padding: 0.4rem 0.45rem 0.5rem;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+/* Slightly slimmer task cards inside the grouped view to fit nicely */
+.confirmed-group-cards .task-card { padding: 0.55rem 0.7rem; }
+
+/* Urgency markers for groups containing overdue / soon-due tasks (lead-segment in_progress).
+   The auto-opened group also gets a subtle red glow on its summary so it stands out. */
+.confirmed-group.is-urgent > .confirmed-group-summary {
+  background: linear-gradient(90deg, rgba(239,68,68,0.06), transparent 60%);
+}
+.urgency-tag {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.urgency-over  { background: #fee2e2; color: #b91c1c; }
+.urgency-today { background: #ffedd5; color: #c2410c; }
+.urgency-soon  { background: #fef9c3; color: #a16207; }
+
+/* ===== Meeting (kind='meeting') visual treatment =====
+   Meetings use the GROUP COLOR everywhere — only the 📅 icon differentiates
+   them from regular tasks in the same group. Lab-wide meetings (no group)
+   fall back to purple as their default identity color. */
+.task-card.is-meeting .meeting-icon {
+  display: inline-block;
+  margin-right: 0.15rem;
+}
+/* Meeting location chip — group-colored tint */
+.meeting-location-chip {
+  display: inline-flex; align-items: center; gap: 0.2rem;
+  background: color-mix(in srgb, var(--loc-color, #a855f7) 12%, white);
+  color:      color-mix(in srgb, var(--loc-color, #7c3aed) 80%, #1e293b);
+  border: 1px solid color-mix(in srgb, var(--loc-color, #d8b4fe) 40%, white);
+  padding: 0.1rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.7rem; font-weight: 600;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Meeting location card on the task detail sheet — group-colored callout box */
+.meeting-location-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--loc-color, #a855f7) 10%, white);
+  border: 1px solid color-mix(in srgb, var(--loc-color, #d8b4fe) 50%, white);
+}
+.meeting-location-card-label {
+  color: color-mix(in srgb, var(--loc-color, #7c3aed) 75%, #1e293b);
+}
+.meeting-location-card-title {
+  color: color-mix(in srgb, var(--loc-color, #6d28d9) 85%, #0f172a);
+}
+.meeting-location-card-detail {
+  color: color-mix(in srgb, var(--loc-color, #6d28d9) 70%, #1e293b);
+}
+
+/* Task-type toggle on the create/edit form */
+.kind-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.kind-option {
+  display: flex; flex-direction: column; align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.75rem;
+  border: 2px solid #e2e8f0;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .12s ease, background .12s ease, transform .08s ease;
+}
+.kind-option:hover { border-color: #cbd5e1; }
+.kind-option.selected {
+  border-color: #7c3aed;
+  background: #faf5ff;
+  box-shadow: 0 1px 3px rgba(124,58,237,0.18);
+}
+.kind-option .kind-icon { font-size: 1.4rem; line-height: 1; }
+.kind-option .kind-label { font-size: 0.95rem; font-weight: 600; color: #1e293b; }
+.kind-option .kind-desc { font-size: 0.7rem; color: #64748b; }
+
+/* Location radio group on the meeting form */
+.meeting-section {
+  background: #faf5ff;
+  border: 1px dashed #d8b4fe;
+  border-radius: 0.85rem;
+  padding: 0.85rem;
+}
+.meeting-section[hidden] { display: none; }
+.location-radio-group {
+  display: flex; flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.7rem;
+}
+.location-option {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.7rem;
+  background: #fff;
+  border: 2px solid #e9d5ff;
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.location-option input { display: none; }
+.location-option:hover { border-color: #c4b5fd; }
+.location-option.selected {
+  border-color: #7c3aed;
+  background: #f3e8ff;
+}
+.location-option-icon { font-size: 1.2rem; }
+.location-option-label { font-size: 0.9rem; font-weight: 500; color: #1e293b; }
+
+/* Calendar list — divider between active and completed sections */
+.cal-section-divider {
+  display: flex; align-items: center;
+  gap: 0.6rem;
+  margin: 1rem 0 0.5rem;
+  position: relative;
+}
+.cal-section-divider::before,
+.cal-section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e2e8f0;
+}
+.cal-section-divider-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.7rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+/* Section variants for Calendar */
+.cal-divider-meeting { color: #6d28d9; background: #ede9fe; }
+.cal-divider-task    { color: #1d4ed8; background: #dbeafe; }
+.cal-divider-done    { color: #15803d; background: #dcfce7; }
+
+.kanban-col {
+  transition: background .15s ease, outline-color .15s ease;
+  outline: 2px dashed transparent;
+  outline-offset: -3px;
+}
+.kanban-col.drop-target {
+  background: #dbeafe;
+  outline-color: #3b82f6;
+}
+/* Phase-managed columns reject drops with a soft "blocked" cue */
+.kanban-col.drop-blocked {
+  background: #fee2e2;
+  outline-color: #ef4444;
+  cursor: not-allowed;
+}
+.kanban-cards .task-description { display: none; }
+.task-card.dragging { opacity: 0.4; transform: scale(0.97); }
+
+/* Floating trash bin (visible only on Todo tab) */
+#trash-bin {
+  position: fixed;
+  right: 1.5rem;
+  bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  width: 60px; height: 60px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px dashed #cbd5e1;
+  display: none;
+  align-items: center; justify-content: center;
+  font-size: 26px;
+  z-index: 35;
+  box-shadow: 0 6px 18px rgba(15,23,42,0.12);
+  user-select: none;
+  transition: transform .18s ease, background .15s ease, border-color .15s ease;
+}
+#trash-bin.show { display: flex; }
+#trash-bin.hint {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  border-style: solid;
+  animation: trash-bounce 1.5s ease-in-out infinite;
+}
+#trash-bin.drag-active {
+  background: #fee2e2;
+  border-color: #ef4444;
+  border-style: solid;
+  transform: scale(1.18);
+  animation: none;
+  box-shadow: 0 8px 22px rgba(239,68,68,0.4);
+}
+@keyframes trash-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@media (min-width: 1024px) {
+  /* No bottom tabbar at lg+, so the trash bin can sit lower. */
+  #trash-bin { bottom: 1.5rem; right: 1.5rem; width: 68px; height: 68px; font-size: 30px; }
+}
+.kanban-empty {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  text-align: center;
+  font-style: italic;
+  padding: 0.6rem;
+}
+
+/* Modal form — section-based layout */
+.form-section {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.85rem;
+  padding: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.form-section-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin: 0;
+}
+.form-title-input {
+  font-size: 1.05rem;
+  font-weight: 600;
+  background: #fff !important;
+  border-color: #e2e8f0;
+}
+.form-actions-grid { display: grid; gap: 0.5rem; }
+.form-actions-grid .ios-btn-ghost {
+  text-align: left;
+  padding: 0.7rem 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+.form-actions-grid .ios-btn-ghost:hover { background: #f1f5f9; }
+
+/* Multi-task add modal — row design + member chips */
+.multi-row {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.9rem;
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  position: relative;
+}
+.multi-row-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 0.15rem;
+}
+.multi-row-num {
+  font-size: 0.7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: #64748b;
+  background: #fff;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid #e2e8f0;
+}
+.multi-remove {
+  font-size: 0.75rem; font-weight: 600;
+  color: #ef4444;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.5rem;
+}
+.multi-remove:hover { background: #fee2e2; }
+.multi-title { font-size: 1rem; font-weight: 600; }
+
+/* Member chips — vertical card layout: big circular avatar on top, name below.
+   Chips wrap to multiple lines if there are too many for one row. */
+.member-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+.member-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.5rem 0.4rem 0.45rem;
+  width: 72px;
+  background: #fff;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 0.85rem;
+  font-size: 0.72rem;
+  color: #475569;
+  cursor: pointer;
+  transition: transform 0.1s ease, border-color 0.1s ease, background 0.1s ease;
+  user-select: none;
+  text-align: center;
+}
+.member-chip:hover { border-color: #94a3b8; background: #f8fafc; transform: translateY(-1px); }
+.member-chip.selected {
+  border-style: solid;
+  border-color: var(--m-color, #6366f1);
+  background: color-mix(in srgb, var(--m-color, #6366f1) 8%, white);
+  box-shadow: 0 2px 8px rgba(15,23,42,0.1);
+  color: color-mix(in srgb, var(--m-color, #6366f1) 60%, #1e293b);
+  font-weight: 600;
+}
+.member-chip.selected .member-chip-avatar {
+  outline: 2px solid var(--m-color, #6366f1);
+  outline-offset: 1px;
+}
+.member-chip-avatar {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: var(--m-color, #6366f1);
+  color: #fff;
+  font-weight: 700; font-size: 1rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.1);
+}
+/* When avatar is an <img> (uploaded photo), make sure it covers the circle */
+.member-chip-avatar-img {
+  object-fit: cover;
+  background: #f1f5f9;
+}
+/* Hide chips when filtering by group (member not in selected group) */
+.member-chip.hidden-by-group { display: none !important; }
+
+/* Crown badge — marks the first-selected chip as the would-be group leader */
+.member-chip.is-leader {
+  position: relative;
+}
+.member-chip.is-leader::after {
+  content: '👑';
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  font-size: 1.1rem;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.25));
+  pointer-events: none;
+  z-index: 2;
+}
+.member-chip-name {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+.chip-prefix {
+  font-size: 0.72em;
+  font-weight: 400;
+  color: #94a3b8;
+  margin-right: 0.18em;
+  letter-spacing: 0;
+}
+/* On-leave indicator — chip is dimmed + amber border so user knows they shouldn't assign */
+.member-chip.on-leave:not(.selected) {
+  border-color: #fbbf24;
+  background: #fffbeb;
+  color: #92400e;
+  opacity: 0.85;
+}
+.member-chip.on-leave.selected {
+  /* Even when selected, keep an amber accent so the warning is visible */
+  box-shadow: 0 0 0 2px #fbbf24, 0 2px 8px rgba(15,23,42,0.1);
+}
+
+/* Leave row — used in the "My Leaves" management modal + Calendar leaves list */
+.leave-row {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #94a3b8;
+  border-radius: 0.65rem;
+}
+.member-count-pill {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 9999px;
+  background: #f1f5f9;
+  color: #64748b;
+}
+.member-count-pill.has { background: #dbeafe; color: #1d4ed8; }
+
+/* ===== Category chips — multi-select pills used in task & meeting forms ===== */
+.cat-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.cat-chip {
+  display: inline-flex; align-items: center;
+  padding: 0.35rem 0.7rem;
+  background: #fff;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: transform 0.1s ease, border-color 0.1s ease, background 0.1s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+.cat-chip:hover { border-color: #94a3b8; background: #f8fafc; transform: translateY(-1px); }
+.cat-chip.selected {
+  border-style: solid;
+  border-color: #6366f1;
+  background: #eef2ff;
+  color: #4338ca;
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(99,102,241,0.18);
+}
+.cat-chip.selected::before { content: '✓ '; margin-right: 0.15rem; }
+
+/* Category tags — small read-only pills shown on Kanban cards / detail sheets */
+.cat-tag {
+  display: inline-flex; align-items: center;
+  padding: 0.1rem 0.5rem;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #4338ca;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.cat-tag-row {
+  display: flex; flex-wrap: wrap; gap: 0.25rem;
+}
+
+/* Filter button badge */
+.filter-badge {
+  position: absolute; top: -3px; right: -3px;
+  min-width: 16px; height: 16px;
+  background: #4f46e5; color: #fff;
+  border-radius: 9999px;
+  font-size: 9px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0 4px; border: 2px solid #fff;
+}
+#filter-sheet.flex { display: flex; }
+
+/* Drop zone for file submissions */
+.drop-zone {
+  border: 2px dashed #cbd5e1;
+  border-radius: 0.9rem;
+  padding: 1.2rem 0.8rem;
+  text-align: center;
+  background: #f8fafc;
+  transition: background .12s ease, border-color .12s ease, transform .08s ease;
+}
+.drop-zone.drag-active {
+  border-color: #4f46e5;
+  background: #eef2ff;
+  transform: scale(1.01);
+}
+
+.empty-folder {
+  font-size: 0.75rem; color: #94a3b8; font-style: italic;
+  padding: 0.6rem 0.9rem;
+  background: rgba(148,163,184,0.06);
+  border: 1px dashed #cbd5e1;
+  border-radius: 0.65rem;
+}
+/* Connection indicator */
+.rt-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #cbd5e1;
+  display: inline-block;
+  margin-left: 6px;
+}
+.rt-dot.live { background: #22c55e; box-shadow: 0 0 0 0 rgba(34,197,94,0.7); animation: rt-pulse 2s infinite; }
+@keyframes rt-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); }
+  70%  { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+  100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+}
+
+/* ===== Desktop adjustments (lg = 1024+, where the top desktop-nav appears) ===== */
+@media (min-width: 1024px) {
+  .topbar-inner { height: 4rem; }
+  .ios-input, .ios-select { background: #fff; }
+}
+
+/* ===== Whiteboard ===== */
+#page-whiteboard:not(.hidden) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+#wb-list-view { padding: 1rem; overflow-y: auto; flex: 1; }
+
+#wb-canvas-view:not(.hidden) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  background: #fff;
+}
+
+.wb-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.4rem 0.6rem;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  min-height: 3rem;
+}
+
+.wb-tool-group {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0 0.35rem;
+  border-left: 1px solid #e2e8f0;
+}
+.wb-tool-group:first-of-type { border-left: 0; padding-left: 0; }
+
+.wb-tool {
+  display: flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem;
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+  flex-shrink: 0;
+  user-select: none;
+}
+.wb-tool:hover { background: #f1f5f9; }
+.wb-tool-active {
+  background: #eef2ff !important;
+  border-color: #6366f1 !important;
+  color: #4f46e5;
+}
+.wb-tool:disabled, .wb-tool.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.wb-confirm-btn {
+  background: #6366f1;
+  color: #fff;
+  border-radius: 0.5rem;
+  padding: 0.3rem 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+  flex-shrink: 0;
+  margin-left: 0.4rem;
+}
+.wb-confirm-btn:hover { background: #4f46e5; }
+
+.wb-color-input {
+  width: 2rem; height: 2rem;
+  border-radius: 0.4rem;
+  border: 1px solid #e2e8f0;
+  padding: 0; cursor: pointer;
+  flex-shrink: 0;
+  background: transparent;
+}
+
+.wb-range { width: 5rem; accent-color: #6366f1; flex-shrink: 0; }
+
+.wb-zoom-label {
+  display: inline-block;
+  min-width: 3rem;
+  text-align: center;
+  font-size: 0.72rem;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-users-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.75rem;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  min-height: 2rem;
+  flex-shrink: 0;
+}
+.wb-user-dot {
+  width: 1.5rem; height: 1.5rem;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; font-weight: 700; color: #fff;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  cursor: default;
+}
+
+.wb-canvas-wrap {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: #f8fafc;
+  min-height: 901px;        /* user-requested baseline */
+}
+@media (max-width: 1023px) {
+  .wb-canvas-wrap { min-height: calc(100vh - 180px); }
+}
+.wb-canvas-wrap canvas { display: block; }
+
+/* Grid background — applied as a CSS pattern when toggled on */
+.wb-canvas-wrap.wb-grid-on::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(148,163,184,0.18) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148,163,184,0.18) 1px, transparent 1px);
+  background-size: 20px 20px;
+  pointer-events: none;
+  z-index: 0;
+}
+.wb-canvas-wrap > .canvas-container { position: relative; z-index: 1; }
+
+.wb-inject-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 50;
+}
+.wb-inject-modal.hidden { display: none; }
+.wb-inject-panel {
+  background: #fff;
+  width: 100%;
+  max-width: 480px;
+  border-radius: 1.25rem 1.25rem 0 0;
+  padding: 1rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+/* ===== Fullscreen mode ===== */
+body.wb-fullscreen-mode #topbar,
+body.wb-fullscreen-mode #tabbar,
+body.wb-fullscreen-mode #desktop-nav,
+body.wb-fullscreen-mode #topbar-actions { display: none !important; }
+body.wb-fullscreen-mode #page-whiteboard:not(.hidden) {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+  background: #fff !important;
+  height: 100vh !important;
+  width: 100vw !important;
+}
+body.wb-fullscreen-mode .page-container { padding: 0 !important; max-width: none !important; }
+
+/* Cursor hints per tool */
+.wb-canvas-wrap[data-tool="pan"]   canvas { cursor: grab; }
+.wb-canvas-wrap[data-tool="pan"].wb-panning canvas { cursor: grabbing; }
+.wb-canvas-wrap[data-tool="eraser"] canvas { cursor: crosshair; }
+.wb-canvas-wrap[data-tool="text"]   canvas { cursor: text; }
+
+/* ============== UI Config (admin layout) ==============
+   Force-hide tabs / widgets that admin disabled in /dev. !important wins
+   over Tailwind utilities and inline display values from JS. */
+.ui-tab-hidden { display: none !important; }
+.widget-hidden { display: none !important; }
+
+/* In-place layout editor (active when ?edit=1 in iframe). Each widget gets
+   an overlay with: drag grip · width/height resize handles · hide button. */
+body.ui-edit-mode [data-widget] {
+  position: relative;
+  outline: 1px dashed rgba(99, 102, 241, .4);
+  outline-offset: -1px;
+  transition: outline-color .15s;
+}
+body.ui-edit-mode [data-widget]:hover { outline-color: #6366f1; }
+body.ui-edit-mode [data-widget].widget-hidden {
+  display: block !important;
+  opacity: .35;
+  outline-color: #94a3b8 !important;
+}
+body.ui-edit-mode [data-widget].ui-edit-dragging { opacity: .35; }
+body.ui-edit-mode [data-widget].ui-edit-drop-before { box-shadow: inset 4px 0 0 0 #f59e0b; }
+body.ui-edit-mode [data-widget].ui-edit-drop-after  { box-shadow: inset -4px 0 0 0 #f59e0b; }
+
+.ui-edit-handles { position: absolute; inset: 0; pointer-events: none; z-index: 30; }
+.ui-edit-handles > * { pointer-events: auto; }
+.ui-edit-grip {
+  position: absolute; top: 4px; left: 4px;
+  background: rgba(99,102,241,.92); color: #fff;
+  width: 26px; height: 26px; border-radius: 4px;
+  cursor: grab; font-size: 14px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  user-select: none;
+}
+.ui-edit-grip:active { cursor: grabbing; }
+.ui-edit-info {
+  position: absolute; top: 4px; left: 36px;
+  background: rgba(15,23,42,.85); color: #fbbf24;
+  padding: 3px 7px; border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  white-space: nowrap; pointer-events: none;
+}
+.ui-edit-hide {
+  position: absolute; top: 4px; right: 4px;
+  background: rgba(220,38,38,.92); color: #fff;
+  width: 22px; height: 22px; border-radius: 50%;
+  cursor: pointer; font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  user-select: none;
+}
+.ui-edit-hide:hover { background: rgb(220,38,38); }
+.ui-edit-resize-x {
+  position: absolute; top: 0; bottom: 0; right: -3px; width: 8px;
+  cursor: ew-resize;
+  background: linear-gradient(to right, transparent 0%, rgba(99,102,241,.6) 100%);
+  opacity: 0; transition: opacity .15s;
+}
+.ui-edit-resize-y {
+  position: absolute; left: 0; right: 0; bottom: -3px; height: 8px;
+  cursor: ns-resize;
+  background: linear-gradient(to bottom, transparent 0%, rgba(99,102,241,.6) 100%);
+  opacity: 0; transition: opacity .15s;
+}
+[data-widget]:hover .ui-edit-resize-x,
+[data-widget]:hover .ui-edit-resize-y { opacity: 1; }
+
+/* 12-col grid for the home/profile widget root. Each widget gets its
+   `grid-column: span N` (and optionally `grid-row: span M`) set inline by
+   applyUiConfig() in app.js. `auto-rows: 4px` + `auto-flow: row dense` lets
+   widgets with explicit pixel heights reserve vertical space, so smaller
+   neighbours pack alongside them (calendar grid tall on the left, 4 sidebar
+   widgets stacked beside it on the right). On phones (<768px) we collapse
+   to a single column. */
+.widget-grid {
+  display: grid !important;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: 4px;
+  grid-auto-flow: row dense;
+  gap: 1rem;
+  align-items: stretch;
+}
+@media (max-width: 767px) {
+  .widget-grid {
+    grid-auto-rows: auto;          /* let content drive height on mobile */
+    grid-auto-flow: row;
+  }
+  .widget-grid > [data-widget] {
+    grid-column: span 12 / span 12 !important;
+    grid-row: auto !important;
+    min-height: 0 !important;
+  }
+}
