@@ -113,19 +113,33 @@ app.use('/avatars', express.static(AVATARS_DIR, {
   immutable: isProd,
 }));
 
+// Per-request scratchpad: destination() runs first per file and stashes the
+// resolved subfolder so filename() / the route handler can reuse it.
 const upload = multer({
   storage: multer.diskStorage({
+    // destination — promote the task to a subfolder when ≥ 2 files arrive.
+    // Side-effect: existing flat file is moved into the subfolder atomically.
     destination: async (req, file, cb) => {
       try {
         const t = await db.getTask(req.params.id);
         if (!t) return cb(new Error('task not found'));
-        cb(null, db.uploadDir(t.group_id));
+        const { dir, subfolder } = await db.destForTaskUpload(t);
+        // Stash for the route handler — multer doesn't pass return values.
+        // doc_type comes from the URL query (multer parses fields after files,
+        // so a body-field would be undefined inside this callback).
+        const docType = db.sanitiseDocType(req.query.doc_type);
+        req._uploadCtx = { task: t, subfolder, docType };
+        cb(null, dir);
       } catch (e) { cb(e); }
     },
+    // filename — YYYYMMDD_<docType>_<sanitised original name>.<ext>;
+    // append a random hex suffix if the same name already exists locally.
     filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname || '').slice(0, 16);
-      const safe = file.originalname?.replace(/[^\w฀-๿.\-]+/g, '_').slice(-80) || 'file';
-      cb(null, crypto.randomBytes(8).toString('hex') + '_' + safe + (ext && !safe.endsWith(ext) ? ext : ''));
+      const ctx = req._uploadCtx || {};
+      const dir = ctx.subfolder
+        ? path.join(db.uploadDir(ctx.task.group_id), ctx.subfolder)
+        : db.uploadDir(ctx.task?.group_id);
+      cb(null, db.buildFilename(file.originalname, ctx.docType, dir));
     },
   }),
   limits: { fileSize: 25 * 1024 * 1024, files: 10 },
@@ -235,169 +249,6 @@ function requireAdmin(req, res) {
   if (req.user.role !== 'admin') { res.status(403).json({ error: 'admin only' }); return false; }
   return true;
 }
-
-// ── UI Config — admin-controlled layout for the main SPA ──────────────────────
-// Stored as JSON file (not in DB). Lives next to TOKEN_FILE so it shares the
-// /data volume in production. GET is public; PUT/RESET require admin.
-const UI_CONFIG_FILE = process.env.UI_CONFIG_FILE || (
-  process.env.TOKEN_FILE
-    ? path.join(path.dirname(process.env.TOKEN_FILE), 'ui-config.json')
-    : path.join(__dirname, '.ui-config.json')
-);
-
-// Layout uses a 12-column grid. Each widget has a `width` (1..12) controlling
-// how many columns it spans on desktop. Mobile collapses everything to 1 col.
-const DEFAULT_UI_CONFIG = {
-  version: 2,
-  tabs: [
-    { id: 'home',       label: '🏠 Home',       visible: true },
-    { id: 'tasks',      label: '📋 Todo',       visible: true },
-    { id: 'calendar',   label: '📅 Calendar',   visible: true },
-    { id: 'people',     label: '👥 People',     visible: true },
-    { id: 'summary',    label: '📊 Summary',    visible: true },
-    { id: 'profile',    label: '👤 Profile',    visible: true },
-    // Whiteboard moved to /dev (Lab) for incubation. Tab kept here so admin
-    // can flip `visible: true` when it's ready to ship in the main app.
-    { id: 'whiteboard', label: '🎨 Board',      visible: false },
-  ],
-  // `height` field: 'auto' (content-driven) or px (number). When set to a px
-  // value the widget reserves that vertical space, letting smaller widgets
-  // pack alongside it via `grid-auto-flow: dense`. Tall widgets like the
-  // calendar grid get explicit heights so neighbors fit beside them.
-  widgets: {
-    home: [
-      { id: 'home-greeting',   label: '👋 แถบทักทาย + คะแนน',    visible: true, width: 12, height: 'auto' },
-      { id: 'home-stats',      label: '📊 สถิติ 4 ใบ',            visible: true, width: 12, height: 'auto' },
-      // Lists are bounded — they scroll inside their card so a busy week doesn't push the rest of the page off-screen.
-      { id: 'home-upcoming',   label: '📅 Deadline ใกล้ถึง',      visible: true, width: 8,  height: 360    },
-      { id: 'home-scoreboard', label: '🥧 Scoreboard',            visible: true, width: 4,  height: 360    },
-      { id: 'home-meetings',   label: '📅 การประชุมที่ใกล้ถึง',   visible: true, width: 6,  height: 320    },
-      { id: 'home-open',       label: '🪪 กลุ่มที่ยังไม่ได้เข้า',  visible: true, width: 6,  height: 320    },
-      { id: 'home-polls',      label: '🗳️ โพล / โหวต',            visible: true, width: 12, height: 'auto' },
-      { id: 'home-extensions', label: '⏰ คำขอเลื่อน Deadline',    visible: true, width: 12, height: 'auto' },
-    ],
-    tasks: [
-      { id: 'tasks-search',    label: '🔎 ช่องค้นหา + ปุ่มกรอง',   visible: true, width: 12, height: 'auto' },
-      { id: 'tasks-segmented', label: '🗂️ แท็บ (ของฉัน / หัวหน้า / Admin)', visible: true, width: 12, height: 'auto' },
-      { id: 'tasks-list',      label: '📋 รายการงาน',             visible: true, width: 12, height: 'auto' },
-    ],
-    calendar: [
-      // Calendar grid + 4 sidebar widgets (create / meetings / tasks / leaves)
-      // sized so the right column adds up to ~600px and stacks beside the grid.
-      // Lists scroll inside their box instead of growing forever.
-      { id: 'calendar-grid',     label: '📅 ตารางปฏิทินใหญ่',       visible: true, width: 8, height: 600  },
-      { id: 'calendar-create',   label: '➕ ปุ่มสร้างงาน/ประชุม',    visible: true, width: 4, height: 'auto' },
-      { id: 'calendar-meetings', label: '📅 รายการประชุม',          visible: true, width: 4, height: 240   },
-      { id: 'calendar-tasks',    label: '📋 งานในเดือน',            visible: true, width: 4, height: 240   },
-      { id: 'calendar-leaves',   label: '🏖️ วันลาในเดือน',          visible: true, width: 4, height: 'auto' },
-    ],
-    people: [
-      { id: 'people-segmented',   label: '🗂️ แท็บ (สมาชิก / Connections)', visible: true, width: 12, height: 'auto' },
-      { id: 'people-members',     label: '👥 รายการสมาชิก',         visible: true, width: 12, height: 'auto' },
-      { id: 'people-connections', label: '🔗 รายการ Connections',  visible: true, width: 12, height: 'auto' },
-    ],
-    summary: [
-      { id: 'summary-content',    label: '📊 เนื้อหา Summary',     visible: true, width: 12, height: 'auto' },
-    ],
-    whiteboard: [
-      { id: 'whiteboard-list',    label: '🖼️ รายการ Boards',       visible: true, width: 12, height: 'auto' },
-      { id: 'whiteboard-canvas',  label: '🎨 Canvas',             visible: true, width: 12, height: 'auto' },
-    ],
-    profile: [
-      { id: 'profile-avatar',  label: '👤 การ์ด Avatar',          visible: true, width: 12, height: 'auto' },
-      { id: 'profile-stats',   label: '📊 การ์ดสถิติ',             visible: true, width: 12, height: 'auto' },
-      { id: 'profile-actions', label: '⚙️ การ์ดเมนู',              visible: true, width: 12, height: 'auto' },
-    ],
-  },
-};
-
-function _clampWidth(w) {
-  const n = Math.round(Number(w));
-  if (!Number.isFinite(n)) return 12;
-  return Math.max(1, Math.min(12, n));
-}
-// Height: 'auto' or a positive integer (px). Anything else falls back to 'auto'.
-function _clampHeight(h) {
-  if (h === 'auto' || h == null || h === '') return 'auto';
-  const n = Math.round(Number(h));
-  if (!Number.isFinite(n) || n < 40) return 'auto';
-  return Math.min(2000, n);
-}
-
-function _cloneCfg(c) { return JSON.parse(JSON.stringify(c)); }
-
-// Merge override on top of defaults so:
-//  - new tabs/widgets added in code automatically appear (at the end)
-//  - removed tabs/widgets in code disappear
-//  - admin-controlled `visible` + ordering survive across upgrades
-function mergeUiConfig(base, override) {
-  const merged = _cloneCfg(base);
-  if (override && Array.isArray(override.tabs)) {
-    const ovIdx = new Map(override.tabs.map((t, i) => [t.id, { entry: t, order: i }]));
-    merged.tabs = merged.tabs.map(def => {
-      const o = ovIdx.get(def.id);
-      return o ? { ...def, visible: o.entry.visible !== false, _order: o.order } : { ...def, _order: 1e9 };
-    }).sort((a, b) => (a._order ?? 1e9) - (b._order ?? 1e9))
-      .map(({ _order, ...rest }) => rest);
-  }
-  if (override && override.widgets && typeof override.widgets === 'object') {
-    for (const sec of Object.keys(merged.widgets)) {
-      const ov = override.widgets[sec];
-      if (!Array.isArray(ov)) continue;
-      const ovIdx = new Map(ov.map((w, i) => [w.id, { entry: w, order: i }]));
-      merged.widgets[sec] = merged.widgets[sec].map(def => {
-        const o = ovIdx.get(def.id);
-        if (!o) return { ...def, _order: 1e9 };
-        return {
-          ...def,
-          visible: o.entry.visible !== false,
-          width:  _clampWidth(o.entry.width  ?? def.width),
-          height: _clampHeight(o.entry.height ?? def.height),
-          _order: o.order,
-        };
-      }).sort((a, b) => (a._order ?? 1e9) - (b._order ?? 1e9))
-        .map(({ _order, ...rest }) => rest);
-    }
-  }
-  return merged;
-}
-
-let _uiConfigCache = null;
-function loadUiConfig() {
-  if (_uiConfigCache) return _uiConfigCache;
-  try {
-    const raw = fs.readFileSync(UI_CONFIG_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
-    _uiConfigCache = mergeUiConfig(DEFAULT_UI_CONFIG, parsed);
-  } catch {
-    _uiConfigCache = _cloneCfg(DEFAULT_UI_CONFIG);
-  }
-  return _uiConfigCache;
-}
-function saveUiConfig(cfg) {
-  const tmp = UI_CONFIG_FILE + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2));
-  fs.renameSync(tmp, UI_CONFIG_FILE);
-  _uiConfigCache = cfg;
-}
-
-app.get('/api/ui-config', wrap(async (req, res) => {
-  res.json(loadUiConfig());
-}));
-app.put('/api/ui-config', wrap(async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const merged = mergeUiConfig(DEFAULT_UI_CONFIG, req.body || {});
-  saveUiConfig(merged);
-  broadcast('ui-config', { by: req.user?.id || null });
-  res.json({ ok: true, config: merged });
-}));
-app.post('/api/ui-config/reset', wrap(async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const fresh = _cloneCfg(DEFAULT_UI_CONFIG);
-  saveUiConfig(fresh);
-  broadcast('ui-config', { by: req.user?.id || null });
-  res.json({ ok: true, config: fresh });
-}));
 
 // ===== Auth =====
 // Login rate limit: failed attempts per IP. Successful logins don't count
@@ -545,6 +396,85 @@ app.delete('/api/groups/:id', wrap(async (req, res) => {
 app.get('/api/groups/:id/files', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   res.json(await db.listFilesForGroup(req.params.id));
+}));
+
+// ── Group summary (markdown) ──
+// GET → returns the persisted summary; if `?regenerate=1` the server rebuilds
+// it from current tasks/files. POST always rebuilds + writes to disk too.
+app.get('/api/groups/:id/summary', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const g = await db.getGroup(req.params.id);
+  if (!g) return res.status(404).json({ error: 'group not found' });
+  if (req.query.regenerate === '1' || !g.summary_md) {
+    const md = await db.generateGroupSummary(g.id);
+    const saved = await db.setGroupSummary(g.id, md);
+    return res.json({ markdown: saved.summary_md, generated_at: saved.summary_at, regenerated: true });
+  }
+  res.json({ markdown: g.summary_md, generated_at: g.summary_at, regenerated: false });
+}));
+app.post('/api/groups/:id/summary/regenerate', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const g = await db.getGroup(req.params.id);
+  if (!g) return res.status(404).json({ error: 'group not found' });
+  // Anyone in the group OR admin OR the leader can regenerate
+  const isAdmin = req.user.role === 'admin';
+  const isLeader = g.leader_id === req.user.id;
+  const isMember = await db.isGroupMember(g.id, req.user.id);
+  if (!isAdmin && !isLeader && !isMember) return res.status(403).json({ error: 'group member required' });
+  const md = await db.generateGroupSummary(g.id);
+  const saved = await db.setGroupSummary(g.id, md);
+  res.json({ markdown: saved.summary_md, generated_at: saved.summary_at });
+}));
+
+// ── Files browser (admin only) — read-only inventory of UPLOAD_DIR ──
+// `?path=` is resolved relative to UPLOAD_DIR; we reject any traversal that
+// escapes it (resolved path must be inside UPLOAD_DIR).
+app.get('/api/files/browse', wrap(async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const rel = String(req.query.path || '').replace(/^\/+/, '');
+  const abs = path.resolve(db.UPLOAD_DIR, rel);
+  if (!abs.startsWith(path.resolve(db.UPLOAD_DIR))) return res.status(400).json({ error: 'path traversal blocked' });
+  if (!fs.existsSync(abs)) return res.status(404).json({ error: 'not found' });
+  const stat = fs.statSync(abs);
+  if (!stat.isDirectory()) return res.status(400).json({ error: 'not a directory' });
+  const entries = fs.readdirSync(abs).map(name => {
+    const full = path.join(abs, name);
+    let s; try { s = fs.statSync(full); } catch { return null; }
+    return {
+      name,
+      path: path.relative(db.UPLOAD_DIR, full).replace(/\\/g, '/'),
+      type: s.isDirectory() ? 'dir' : 'file',
+      size: s.size,
+      modified: s.mtime.toISOString(),
+    };
+  }).filter(Boolean);
+  // Folders first, then by name
+  entries.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1));
+  res.json({
+    path: rel,
+    parent: rel ? path.dirname(rel).replace(/\\/g, '/') : null,
+    entries,
+  });
+}));
+app.get('/api/files/raw', wrap(async (req, res) => {
+  // Browsers can't attach Authorization to <a href> requests, so accept the
+  // admin's token via query string here (same trick used by /api/events).
+  let user = req.user;
+  if (!user && req.query.token) {
+    const memberId = auth.lookupToken(req.query.token);
+    if (memberId) user = await db.getMember(memberId);
+  }
+  if (!user) return res.status(401).json({ error: 'login required' });
+  if (user.role !== 'admin') return res.status(403).json({ error: 'admin only' });
+
+  const rel = String(req.query.path || '').replace(/^\/+/, '');
+  const abs = path.resolve(db.UPLOAD_DIR, rel);
+  if (!abs.startsWith(path.resolve(db.UPLOAD_DIR))) return res.status(400).json({ error: 'path traversal blocked' });
+  if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) return res.status(404).json({ error: 'file not found' });
+  // ?download=1 forces save-as instead of inline preview
+  const filename = path.basename(abs);
+  if (req.query.download === '1') res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+  res.sendFile(abs);
 }));
 
 // ===== Tasks =====
@@ -1013,6 +943,14 @@ async function buildCsv(tasks, group) {
 app.get('/api/files', wrap(async (req, res) => { if (!requireAuth(req, res)) return; res.json(await db.listAllFiles()); }));
 app.get('/api/tasks/:id/files', wrap(async (req, res) => { if (!requireAuth(req, res)) return; res.json(await db.listFilesForTask(req.params.id)); }));
 
+// Document categories that the upload UI offers in its dropdown. Centralised
+// here so the client doesn't have to know the list — change DOC_TYPES in
+// db.js and every upload form picks up the new options.
+app.get('/api/doc-types', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  res.json(db.DOC_TYPES);
+}));
+
 app.post('/api/tasks/:id/files', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'login required' });
   const t = await db.getTask(req.params.id);
@@ -1027,6 +965,8 @@ app.post('/api/tasks/:id/files', async (req, res) => {
         recorded.push(await db.recordFile({
           task_id: t.id, group_id: t.group_id, uploaded_by: req.user.id,
           filename: f.filename, original_name: f.originalname, mimetype: f.mimetype, size: f.size,
+          subfolder: req._uploadCtx?.subfolder || '',
+          doc_type:  req._uploadCtx?.docType || 'อื่นๆ',
         }));
       }
       let auto_completed = false;
@@ -1044,9 +984,9 @@ app.get('/api/files/:id/download', wrap(async (req, res) => {
   const f = await db.getFile(req.params.id);
   if (!f) return res.status(404).json({ error: 'not found' });
   if (f.kind === 'url') return res.redirect(f.url);
-  const filePath = path.join(db.UPLOAD_DIR, db.folderForGroup(f.group_id), f.filename);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'file missing on disk' });
-  res.download(filePath, f.original_name);
+  const fp = db.filePath(f);                       // honours subfolder column
+  if (!fs.existsSync(fp)) return res.status(404).json({ error: 'file missing on disk' });
+  res.download(fp, f.original_name);
 }));
 
 app.delete('/api/files/:id', wrap(async (req, res) => {
@@ -1225,8 +1165,10 @@ app.post('/api/recordings', (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'audio file required' });
     try {
       const id = 'rec_' + crypto.randomBytes(8).toString('hex');
-      const label = (req.body.label || '').toString().slice(0, 200) ||
-                    'Recording ' + new Date().toLocaleString('th-TH', { hour12: false });
+      // Default label uses dd/mm/yyyy HH:MM (matches the SPA's display format)
+      const _d = new Date();
+      const _stamp = `${String(_d.getDate()).padStart(2,'0')}/${String(_d.getMonth()+1).padStart(2,'0')}/${_d.getFullYear()} ${String(_d.getHours()).padStart(2,'0')}:${String(_d.getMinutes()).padStart(2,'0')}`;
+      const label = (req.body.label || '').toString().slice(0, 200) || `Recording ${_stamp}`;
       const duration_ms = +req.body.duration_ms || 0;
       const rec = await db.createRecording({
         id,
