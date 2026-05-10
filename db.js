@@ -310,6 +310,21 @@ async function initSchema() {
     ALTER TABLE tasks ADD COLUMN IF NOT EXISTS deleted_at TEXT;
     CREATE INDEX IF NOT EXISTS idx_tasks_deleted ON tasks(deleted_at) WHERE deleted_at IS NOT NULL;
 
+    -- Folder-name slug for group uploads (uploads/<folder_name>/...) and a
+    -- generated markdown summary that can be regenerated on demand.
+    ALTER TABLE task_groups ADD COLUMN IF NOT EXISTS folder_name TEXT NOT NULL DEFAULT '';
+    ALTER TABLE task_groups ADD COLUMN IF NOT EXISTS summary_md  TEXT NOT NULL DEFAULT '';
+    ALTER TABLE task_groups ADD COLUMN IF NOT EXISTS summary_at  TEXT;
+
+    -- When a task accumulates ≥ 2 files we promote them into a subfolder
+    -- (uploads/<group>/<task-folder>/...). Empty string = file lives flat in
+    -- the group folder. Set lazily — see recordFile() / multer destination.
+    ALTER TABLE task_files ADD COLUMN IF NOT EXISTS subfolder TEXT NOT NULL DEFAULT '';
+    -- Document category chosen by the uploader (proposal / ปร4 / ผ02 /
+    -- ใบเสนอราคา / presentation / etc). Used for the filename prefix and for
+    -- filtering in the file browser.
+    ALTER TABLE task_files ADD COLUMN IF NOT EXISTS doc_type  TEXT NOT NULL DEFAULT 'อื่นๆ';
+
     -- Polls (one question, N options, multi-vote optional, anonymous optional)
     CREATE TABLE IF NOT EXISTS polls (
       id            TEXT PRIMARY KEY,
@@ -383,6 +398,9 @@ async function seedDefaults() {
 async function init() {
   await initSchema();
   await seedDefaults();
+  // Build the in-memory id→folder_name cache and rename any legacy id-named
+  // upload directories. Idempotent — safe to run on every boot.
+  await hydrateFolderCache();
   return true;
 }
 
@@ -504,6 +522,11 @@ async function createGroup(input) {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
     [g.id, g.name, g.description, g.start_date, g.deadline, g.status, g.target, g.color, g.leader_id, g.created_at]
   );
+  // Pick a folder name now so uploads have a stable directory from day one
+  const folder = await uniqueFolderName(g.name || g.id, g.id);
+  await exec('UPDATE task_groups SET folder_name = $1 WHERE id = $2', [folder, g.id]);
+  _folderCache.set(g.id, folder);
+  g.folder_name = folder;
   if (g.leader_id) await addGroupMember(g.id, g.leader_id);
   return g;
 }
@@ -525,11 +548,12 @@ async function updateGroup(id, patch) {
     }
     color = newColor;
   }
+  const newName = patch.name !== undefined ? String(patch.name).trim() : cur.name;
   await exec(
     `UPDATE task_groups SET name=$1, description=$2, start_date=$3, deadline=$4, status=$5,
                             target=$6, color=$7, leader_id=$8 WHERE id=$9`,
     [
-      patch.name        !== undefined ? String(patch.name).trim()        : cur.name,
+      newName,
       patch.description !== undefined ? String(patch.description).trim() : cur.description,
       patch.start_date  !== undefined ? (patch.start_date || null)       : cur.start_date,
       patch.deadline    !== undefined ? (patch.deadline   || null)       : cur.deadline,
@@ -540,12 +564,152 @@ async function updateGroup(id, patch) {
       id,
     ]
   );
+  // If the name changed, mint a new sanitized folder slug + rename on disk
+  if (patch.name !== undefined && newName && newName !== cur.name) {
+    const newFolder = await uniqueFolderName(newName, id);
+    if (newFolder !== cur.folder_name) {
+      const oldPath = path.join(UPLOAD_DIR, cur.folder_name || id);
+      const newPath = path.join(UPLOAD_DIR, newFolder);
+      try {
+        if (fs.existsSync(oldPath) && !fs.existsSync(newPath)) {
+          fs.renameSync(oldPath, newPath);
+        }
+      } catch (e) { console.warn(`[uploads] rename ${oldPath} → ${newPath}: ${e.message}`); }
+      await exec('UPDATE task_groups SET folder_name=$1 WHERE id=$2', [newFolder, id]);
+      _folderCache.set(id, newFolder);
+    }
+  }
   if (leader_id && leader_id !== cur.leader_id) await addGroupMember(id, leader_id);
   return getGroup(id);
 }
 async function deleteGroup(id) {
+  // Best-effort: remove the on-disk folder so trash doesn't accumulate. The
+  // DB row CASCADEs to tasks/files; their on-disk blobs already moved with
+  // the folder so deleting it once cleans everything up.
+  const folder = _folderCache.get(id);
+  if (folder) {
+    const dirPath = path.join(UPLOAD_DIR, folder);
+    try {
+      if (fs.existsSync(dirPath)) fs.rmSync(dirPath, { recursive: true, force: true });
+    } catch (e) { console.warn(`[uploads] delete folder ${dirPath}: ${e.message}`); }
+  }
+  _folderCache.delete(id);
   return (await exec('DELETE FROM task_groups WHERE id = $1', [id])) > 0;
 }
+// Generate a markdown summary for a group: front-matter, tasks broken down by
+// status, point totals per member, file inventory. Pure DB — caller decides
+// whether to persist to summary_md or just return.
+async function generateGroupSummary(groupId) {
+  const g = await getGroup(groupId);
+  if (!g) throw new Error('group not found');
+  const leader = g.leader_id ? await getMember(g.leader_id) : null;
+  const members = await listGroupMembers(groupId);
+  const tasks = await q(`
+    SELECT t.*, COALESCE(SUM(ta.points_share) FILTER (WHERE t.points_phase='confirmed'), 0)::int AS tot_points
+    FROM tasks t
+    LEFT JOIN task_assignees ta ON ta.task_id = t.id
+    WHERE t.group_id = $1 AND t.deleted_at IS NULL
+    GROUP BY t.id
+    ORDER BY t.created_at ASC
+  `, [groupId]);
+  const files = await q(
+    `SELECT filename, original_name, size, kind, url, label, uploaded_at
+     FROM task_files WHERE group_id = $1 ORDER BY uploaded_at DESC`, [groupId]
+  );
+  // Per-member point totals
+  const ptsRows = await q(`
+    SELECT ta.member_id, m.name, COALESCE(SUM(ta.points_share), 0)::int AS pts
+    FROM task_assignees ta
+    JOIN tasks t ON t.id = ta.task_id AND t.group_id = $1
+    LEFT JOIN members m ON m.id = ta.member_id
+    WHERE t.points_phase = 'confirmed' AND t.deleted_at IS NULL
+    GROUP BY ta.member_id, m.name
+    ORDER BY pts DESC
+  `, [groupId]);
+
+  const byStatus = {};
+  for (const t of tasks) (byStatus[t.status || 'unknown'] ||= []).push(t);
+  const STATUS_HDR = {
+    completed:   '✅ เสร็จแล้ว',
+    in_progress: '⏳ กำลังทำ',
+    on_hold:     '⏸️ พักไว้',
+    cancelled:   '🚫 ยกเลิก',
+  };
+
+  const lines = [];
+  lines.push(`# ${g.name || '(ไม่มีชื่อ)'}`);
+  lines.push('');
+  lines.push(`> ${g.description || '_ไม่มีคำอธิบาย_'}`);
+  lines.push('');
+  lines.push(`- **หัวหน้ากลุ่ม:** ${leader ? leader.name : '—'}`);
+  lines.push(`- **เริ่ม:** ${g.start_date || '—'}` + (g.deadline ? ` · **กำหนดเสร็จ:** ${g.deadline}` : ''));
+  lines.push(`- **สถานะ:** ${g.status || '—'}`);
+  lines.push(`- **เป้าหมาย:** ${g.target || '—'}`);
+  lines.push(`- **สมาชิก:** ${members.length} คน`);
+  lines.push('');
+
+  // Tasks
+  lines.push(`## 📋 งานทั้งหมด (${tasks.length})`);
+  for (const st of ['completed', 'in_progress', 'on_hold', 'cancelled']) {
+    const list = byStatus[st]; if (!list?.length) continue;
+    lines.push('');
+    lines.push(`### ${STATUS_HDR[st]} (${list.length})`);
+    for (const t of list) {
+      const dl = t.deadline ? ` · 📅 ${t.deadline}` : '';
+      const pts = t.tot_points ? ` · ⭐ ${t.tot_points} pts` : '';
+      lines.push(`- **${t.title || '(no title)'}**${dl}${pts}`);
+      if (t.description) lines.push(`  ${String(t.description).split('\n')[0].slice(0, 120)}`);
+    }
+  }
+  lines.push('');
+
+  // Member point totals
+  if (ptsRows.length) {
+    lines.push(`## 👥 คะแนนรวมต่อสมาชิก`);
+    for (const r of ptsRows) lines.push(`- ${r.name || `#${r.member_id}`} — **${r.pts} pts**`);
+    lines.push('');
+  }
+
+  // Files
+  if (files.length) {
+    lines.push(`## 📂 ไฟล์ในกลุ่ม (${files.length})`);
+    for (const f of files) {
+      const sz = f.size ? ` · ${(f.size / 1024).toFixed(1)} KB` : '';
+      const label = f.kind === 'url'
+        ? `🔗 [${f.label || f.url}](${f.url})`
+        : `📄 ${f.original_name || f.filename}${sz}`;
+      lines.push(`- ${label} _(uploaded ${(f.uploaded_at || '').slice(0, 10)})_`);
+    }
+    lines.push('');
+  }
+
+  // Stats footer
+  const completed = byStatus.completed?.length || 0;
+  const totalPts = ptsRows.reduce((s, r) => s + r.pts, 0);
+  lines.push('## 📊 สถิติ');
+  lines.push(`- งานทั้งหมด: ${tasks.length}`);
+  lines.push(`- เสร็จแล้ว: ${completed}` + (tasks.length ? ` (${Math.round(completed / tasks.length * 100)}%)` : ''));
+  lines.push(`- คะแนนรวม: ${totalPts}`);
+  lines.push('');
+  lines.push(`---`);
+  lines.push(`_Generated ${new Date().toISOString().slice(0, 19).replace('T', ' ')} UTC_`);
+  return lines.join('\n');
+}
+
+async function setGroupSummary(groupId, md) {
+  const at = nowIso();
+  await exec(
+    'UPDATE task_groups SET summary_md=$1, summary_at=$2 WHERE id=$3',
+    [String(md || ''), at, groupId]
+  );
+  // Also write to disk so the folder is self-contained when copied to NAS.
+  try {
+    const dir = uploadDir(groupId);
+    fs.writeFileSync(path.join(dir, '_summary.md'), md, 'utf8');
+  } catch (e) { console.warn(`[summary] write file: ${e.message}`); }
+  return { summary_md: md, summary_at: at };
+}
+
 async function isGroupLeader(groupId, memberId) {
   const g = await getGroup(groupId);
   return !!(g && g.leader_id === memberId);
@@ -1507,24 +1671,203 @@ async function deleteConnection(id) {
 }
 
 // ===== Files =====
-function folderForGroup(groupId) { return groupId || '_nogroup'; }
+// Group folder names live in task_groups.folder_name (sanitized + uniqued).
+// `folderForGroup()` is sync, so we keep an in-memory id→name cache that's
+// rehydrated by hydrateFolderCache() at startup and updated whenever a group
+// is created / renamed / deleted.
+const _folderCache = new Map();   // groupId → folder_name (kept in sync with DB)
+
+function sanitizeFolderName(s) {
+  if (!s) return '';
+  // Strip filesystem-hostile chars; collapse whitespace; trim; cap length.
+  let out = String(s)
+    .replace(/[\\/:*?"<>| -]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60);
+  // Avoid hidden / reserved on Windows
+  if (out.startsWith('.')) out = '_' + out.slice(1);
+  if (/^(con|prn|aux|nul|com\d|lpt\d)$/i.test(out)) out = '_' + out;
+  return out || '_unnamed';
+}
+
+// Pick a folder name for `name` that's unique across all groups. If it
+// collides we suffix the group's id (first 6 hex chars) so it stays readable.
+async function uniqueFolderName(desiredName, ownGroupId) {
+  let base = sanitizeFolderName(desiredName);
+  // Check current DB rows (excluding self)
+  const taken = new Set(
+    (await q(
+      `SELECT folder_name FROM task_groups WHERE folder_name <> '' AND id <> $1`,
+      [ownGroupId || '__none__']
+    )).map(r => r.folder_name)
+  );
+  if (!taken.has(base)) return base;
+  const short = ownGroupId ? String(ownGroupId).slice(0, 6) : Math.random().toString(36).slice(2, 8);
+  let candidate = `${base}_${short}`;
+  let i = 1;
+  while (taken.has(candidate) && i < 100) {
+    candidate = `${base}_${short}_${i++}`;
+  }
+  return candidate;
+}
+
+// Fall back to id when cache is empty (e.g. server just booted) so writes
+// don't crash; hydrateFolderCache() runs from initSchema() on startup.
+function folderForGroup(groupId) {
+  if (!groupId) return '_nogroup';
+  return _folderCache.get(groupId) || groupId;
+}
 function uploadDir(groupId) {
   const dir = path.join(UPLOAD_DIR, folderForGroup(groupId));
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
-async function recordFile({ task_id, group_id, uploaded_by, filename, original_name, mimetype, size }) {
+
+// Subfolder name for a task — used when the task gathers ≥ 2 attachments.
+// Sanitized title + last 6 hex chars of the task id so collisions across
+// same-titled tasks stay unique.
+function taskFolderName(task) {
+  if (!task) return '_task';
+  const base = sanitizeFolderName(task.title || '_task');
+  const suffix = String(task.id || '').slice(-6) || 'x';
+  return `${base}_${suffix}`;
+}
+
+// Resolve the on-disk directory a file lives in given its DB row.
+function fileDir(file) {
+  const groupDir = uploadDir(file.group_id);
+  return file.subfolder ? path.join(groupDir, file.subfolder) : groupDir;
+}
+function filePath(file) { return path.join(fileDir(file), file.filename); }
+
+// Document categories the uploader picks from. The id is what goes into the
+// filename ("20260511_<id>_<name>.ext"); the label shows in the UI dropdown.
+// Add/remove rows freely — schema doesn't enforce anything; sanitiseDocType
+// falls back to "อื่นๆ" if an unknown value sneaks in.
+const DOC_TYPES = [
+  { id: 'proposal',     label: '📄 Proposal (ข้อเสนอโครงการ)' },
+  { id: 'ปร4',          label: '📋 ปร.4 (สรุปราคากลาง)' },
+  { id: 'ปร5',          label: '📋 ปร.5 (รายละเอียดประมาณราคา)' },
+  { id: 'ปร6',          label: '📋 ปร.6 (สรุปประเมินราคา)' },
+  { id: 'ผ01',          label: '📊 ผ.01 (แบบสรุปงบประมาณ)' },
+  { id: 'ผ02',          label: '📊 ผ.02 (แบบงบประมาณ)' },
+  { id: 'ผ03',          label: '📊 ผ.03 (แบบรายละเอียด)' },
+  { id: 'ใบเสนอราคา',   label: '💰 ใบเสนอราคา (Quotation)' },
+  { id: 'ใบสั่งซื้อ',   label: '🛒 ใบสั่งซื้อ (PO)' },
+  { id: 'สัญญา',        label: '✍️ สัญญา (Contract)' },
+  { id: 'รายงาน',       label: '📝 รายงาน (Report)' },
+  { id: 'presentation', label: '🎬 Presentation (สไลด์)' },
+  { id: 'ภาพ',          label: '🖼️ รูปภาพ' },
+  { id: 'เสียง',        label: '🎵 ไฟล์เสียง' },
+  { id: 'วิดีโอ',       label: '🎥 ไฟล์วิดีโอ' },
+  { id: 'ข้อมูล',       label: '📊 ข้อมูลดิบ (CSV/JSON/XLSX)' },
+  { id: 'อื่นๆ',        label: '📁 อื่นๆ' },
+];
+const DOC_TYPE_IDS = new Set(DOC_TYPES.map(d => d.id));
+
+function sanitiseDocType(s) {
+  const v = (s || '').toString().trim();
+  return DOC_TYPE_IDS.has(v) ? v : 'อื่นๆ';
+}
+
+// Stored-name format: YYYYMMDD_<docType>_<sanitised original name>.<ext>
+// docType is one of the DOC_TYPES ids; original name keeps Thai/spaces but
+// strips FS-hostile chars. Same-name collisions in the target dir get a
+// 4-hex suffix so we never overwrite.
+function buildFilename(originalName, docType, dir = null) {
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+  const ext = path.extname(originalName || '').toLowerCase().slice(0, 12);
+  const baseRaw = path.basename(originalName || 'file', ext);
+  const baseClean = baseRaw
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80) || 'file';
+  const type = sanitiseDocType(docType);
+  let candidate = `${date}_${type}_${baseClean}${ext}`;
+  if (dir && fs.existsSync(path.join(dir, candidate))) {
+    const tag = crypto.randomBytes(2).toString('hex');
+    candidate = `${date}_${type}_${baseClean}_${tag}${ext}`;
+  }
+  return candidate;
+}
+
+// Decide where the next upload for `taskId` should land. Returns
+// { dir, subfolder } where `subfolder` is '' for flat-in-group, or the
+// task subfolder name when files are being grouped.
+//
+// Side effect: when this is the 2nd file for the task, the existing flat
+// file is migrated into the new subfolder and its DB row is updated.
+async function destForTaskUpload(task) {
+  const groupDir = uploadDir(task.group_id);
+  const existing = (await listFilesForTask(task.id)).filter(f => f.kind !== 'url');
+
+  if (existing.length === 0) {
+    return { dir: groupDir, subfolder: '' };          // first file → flat
+  }
+  // 2nd+ → use task subfolder
+  const sub = taskFolderName(task);
+  const subPath = path.join(groupDir, sub);
+  if (!fs.existsSync(subPath)) fs.mkdirSync(subPath, { recursive: true });
+
+  // Migrate any flat-stored files into the subfolder (only happens once,
+  // when count flips from 1 → 2).
+  for (const f of existing) {
+    if (f.subfolder) continue;                         // already moved
+    const oldPath = path.join(groupDir, f.filename);
+    const newPath = path.join(subPath, f.filename);
+    try {
+      if (fs.existsSync(oldPath) && !fs.existsSync(newPath)) {
+        fs.renameSync(oldPath, newPath);
+      }
+      await exec(`UPDATE task_files SET subfolder=$1 WHERE id=$2`, [sub, f.id]);
+    } catch (e) { console.warn(`[uploads] migrate ${f.filename}: ${e.message}`); }
+  }
+  return { dir: subPath, subfolder: sub };
+}
+
+// Bootstrap the id→folder_name cache, fill in any missing folder_name rows,
+// and rename old uploads/<id>/ directories to uploads/<folder_name>/.
+// Idempotent — safe to run on every startup.
+async function hydrateFolderCache() {
+  const groups = await q(`SELECT id, name, folder_name FROM task_groups`);
+  for (const g of groups) {
+    let folder = g.folder_name;
+    if (!folder) {
+      folder = await uniqueFolderName(g.name || g.id, g.id);
+      await exec('UPDATE task_groups SET folder_name = $1 WHERE id = $2', [folder, g.id]);
+    }
+    _folderCache.set(g.id, folder);
+
+    // One-time migration: if the legacy id-named folder still exists and the
+    // new name-based folder doesn't, rename it. Otherwise leave both alone.
+    const oldPath = path.join(UPLOAD_DIR, g.id);
+    const newPath = path.join(UPLOAD_DIR, folder);
+    try {
+      if (fs.existsSync(oldPath) && !fs.existsSync(newPath) && oldPath !== newPath) {
+        fs.renameSync(oldPath, newPath);
+        console.log(`[uploads] renamed "${g.id}" → "${folder}"`);
+      }
+    } catch (e) {
+      console.warn(`[uploads] rename failed for ${g.id}: ${e.message}`);
+    }
+  }
+}
+async function recordFile({ task_id, group_id, uploaded_by, filename, original_name, mimetype, size, subfolder, doc_type }) {
   const f = {
     id: uid(),
     task_id, group_id: group_id || null, uploaded_by: uploaded_by || null,
     filename, original_name, mimetype: mimetype || '', size: size || 0,
     kind: 'file', url: null, label: null,
+    subfolder: subfolder || '',
+    doc_type: sanitiseDocType(doc_type),
     uploaded_at: nowIso(),
   };
   await exec(
-    `INSERT INTO task_files (id, task_id, group_id, uploaded_by, filename, original_name, mimetype, size, kind, url, label, uploaded_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-    [f.id, f.task_id, f.group_id, f.uploaded_by, f.filename, f.original_name, f.mimetype, f.size, f.kind, f.url, f.label, f.uploaded_at]
+    `INSERT INTO task_files (id, task_id, group_id, uploaded_by, filename, original_name, mimetype, size, kind, url, label, subfolder, doc_type, uploaded_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+    [f.id, f.task_id, f.group_id, f.uploaded_by, f.filename, f.original_name, f.mimetype, f.size, f.kind, f.url, f.label, f.subfolder, f.doc_type, f.uploaded_at]
   );
   return f;
 }
@@ -1580,7 +1923,7 @@ async function deleteFile(id) {
   if (!f) return false;
   await exec('DELETE FROM task_files WHERE id = $1', [id]);
   if (f.kind !== 'url' && f.filename) {
-    const onDisk = path.join(UPLOAD_DIR, folderForGroup(f.group_id), f.filename);
+    const onDisk = filePath(f);   // honours subfolder column
     try { if (fs.existsSync(onDisk)) fs.unlinkSync(onDisk); } catch {}
   }
   return true;
@@ -2207,7 +2550,10 @@ module.exports = {
   proposeOwnPoints, leaderApprovePoints, confirmPoints, reopenPoints, bulkSetShares,
   listConnections, getConnection, createConnection, updateConnection, deleteConnection,
   recordFile, recordUrl, listFilesForTask, listFilesForGroup, listAllFiles, getFile, deleteFile,
-  folderForGroup, uploadDir,
+  folderForGroup, uploadDir, sanitizeFolderName, hydrateFolderCache,
+  taskFolderName, fileDir, filePath, buildFilename, destForTaskUpload,
+  DOC_TYPES, sanitiseDocType,
+  generateGroupSummary, setGroupSummary,
   requestDeadline, listDeadlineRequests, decideDeadline,
   requestPoints, listPointRequests, decidePoints,
   listLeaves, getLeave, listLeavesForMember, createLeave, updateLeave, deleteLeave,
