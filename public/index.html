@@ -73,7 +73,6 @@
         <div class="flex items-center gap-2">
           <button id="bell-btn" class="ios-btn-icon relative" title="การแจ้งเตือน">
             🔔<span id="bell-badge" class="bell-badge hidden">0</span>
-            <span id="rt-dot" class="rt-dot" title="real-time status"></span>
           </button>
           <button id="topbar-action" class="ios-btn-icon hidden" title="Add">＋</button>
           <button id="me-btn" class="ios-avatar-btn">
@@ -87,9 +86,9 @@
 
       <!-- ============== HOME ============== -->
       <section id="page-home" class="page">
-        <div class="space-y-4" id="home-widgets-root" data-widget-section="home">
+        <div class="space-y-4">
           <!-- 1. User info + points -->
-          <div class="bg-gradient-to-br from-indigo-500 to-cyan-400 text-white rounded-2xl p-5 ios-card shadow-md" data-widget="home-greeting">
+          <div class="bg-gradient-to-br from-indigo-500 to-cyan-400 text-white rounded-2xl p-5 ios-card shadow-md">
             <div class="text-sm opacity-80">สวัสดี</div>
             <div class="flex items-center justify-between gap-3">
               <div class="min-w-0">
@@ -106,54 +105,59 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3" data-widget="home-stats">
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div class="ios-stat-card"><div class="ios-stat-icon bg-indigo-100 text-indigo-600">👥</div><div><div class="ios-stat-label">Members</div><div class="ios-stat-value" id="stat-members">0</div></div></div>
             <div class="ios-stat-card"><div class="ios-stat-icon bg-blue-100 text-blue-600">📋</div><div><div class="ios-stat-label">Groups</div><div class="ios-stat-value" id="stat-groups">0</div></div></div>
             <div class="ios-stat-card"><div class="ios-stat-icon bg-emerald-100 text-emerald-600">✅</div><div><div class="ios-stat-label">Done</div><div class="ios-stat-value" id="stat-completed">0</div></div></div>
             <div class="ios-stat-card"><div class="ios-stat-icon bg-rose-100 text-rose-600">⚠️</div><div><div class="ios-stat-label">Overdue</div><div class="ios-stat-value" id="stat-overdue">0</div></div></div>
           </div>
 
-          <!-- 2. Upcoming deadline -->
-          <div class="bg-white rounded-2xl ios-card overflow-hidden" data-widget="home-upcoming">
-            <div class="px-4 pt-3 pb-2 flex items-center justify-between">
-              <h2 class="font-semibold">📅 ใกล้ถึง Deadline</h2>
-              <button class="text-xs text-indigo-600" data-goto="calendar">ดู Calendar</button>
-            </div>
-            <div id="home-upcoming" class="divide-y divide-slate-100"></div>
-          </div>
+          <!-- Two-column on desktop: Upcoming + Open // Scoreboard -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div class="space-y-4 lg:col-span-2">
+              <!-- 2. Upcoming deadline -->
+              <div class="bg-white rounded-2xl ios-card overflow-hidden">
+                <div class="px-4 pt-3 pb-2 flex items-center justify-between">
+                  <h2 class="font-semibold">📅 ใกล้ถึง Deadline</h2>
+                  <button class="text-xs text-indigo-600" data-goto="calendar">ดู Calendar</button>
+                </div>
+                <div id="home-upcoming" class="divide-y divide-slate-100"></div>
+              </div>
 
-          <!-- 2b. Upcoming meetings (≤ 2 days) -->
-          <div class="bg-white rounded-2xl ios-card overflow-hidden" data-widget="home-meetings">
-            <div class="px-4 pt-3 pb-2 flex items-center justify-between">
-              <h2 class="font-semibold">📅 การประชุมที่ใกล้จะถึง</h2>
-              <button class="text-xs text-indigo-600" data-goto="calendar">ดู Calendar</button>
-            </div>
-            <div id="home-meetings" class="divide-y divide-slate-100"></div>
-          </div>
+              <!-- 2b. Upcoming meetings (≤ 2 days) -->
+              <div class="bg-white rounded-2xl ios-card overflow-hidden">
+                <div class="px-4 pt-3 pb-2 flex items-center justify-between">
+                  <h2 class="font-semibold">📅 การประชุมที่ใกล้จะถึง</h2>
+                  <button class="text-xs text-indigo-600" data-goto="calendar">ดู Calendar</button>
+                </div>
+                <div id="home-meetings" class="divide-y divide-slate-100"></div>
+              </div>
 
-          <!-- 3. Open groups (haven't joined yet) -->
-          <div class="bg-white rounded-2xl ios-card overflow-hidden" data-widget="home-open">
-            <div class="px-4 pt-3 pb-2 flex items-center justify-between">
-              <h2 class="font-semibold">🪪 กลุ่มงานที่ยังไม่ได้เข้าร่วม</h2>
-              <button class="text-xs text-indigo-600" data-goto="summary">ดูทั้งหมด</button>
+              <!-- 3. Open groups (haven't joined yet) -->
+              <div class="bg-white rounded-2xl ios-card overflow-hidden">
+                <div class="px-4 pt-3 pb-2 flex items-center justify-between">
+                  <h2 class="font-semibold">🪪 กลุ่มงานที่ยังไม่ได้เข้าร่วม</h2>
+                  <button class="text-xs text-indigo-600" data-goto="summary">ดูทั้งหมด</button>
+                </div>
+                <div id="home-open" class="divide-y divide-slate-100"></div>
+              </div>
             </div>
-            <div id="home-open" class="divide-y divide-slate-100"></div>
-          </div>
 
-          <!-- 4. Scoreboard (pie chart) -->
-          <div class="bg-white rounded-2xl ios-card overflow-hidden" data-widget="home-scoreboard">
-            <div class="px-4 pt-3 pb-2 flex items-center justify-between">
-              <h2 class="font-semibold">📊 Scoreboard</h2>
-              <span class="text-xs text-slate-500">จากงานที่เสร็จ</span>
-            </div>
-            <div class="p-4">
-              <div id="scoreboard-chart" class="flex items-center justify-center"></div>
-              <div id="scoreboard-legend" class="mt-3 space-y-1"></div>
+            <!-- 4. Scoreboard (pie chart) -->
+            <div class="bg-white rounded-2xl ios-card overflow-hidden">
+              <div class="px-4 pt-3 pb-2 flex items-center justify-between">
+                <h2 class="font-semibold">📊 Scoreboard</h2>
+                <span class="text-xs text-slate-500">จากงานที่เสร็จ</span>
+              </div>
+              <div class="p-4">
+                <div id="scoreboard-chart" class="flex items-center justify-center"></div>
+                <div id="scoreboard-legend" class="mt-3 space-y-1"></div>
+              </div>
             </div>
           </div>
 
           <!-- Polls / votes -->
-          <div class="bg-white rounded-2xl ios-card overflow-hidden" data-widget="home-polls">
+          <div class="bg-white rounded-2xl ios-card overflow-hidden">
             <div class="px-4 pt-3 pb-2 flex items-center justify-between">
               <h2 class="font-semibold">🗳️ โพล / โหวต</h2>
               <button class="text-xs text-indigo-600" id="poll-new-btn">+ สร้างใหม่</button>
@@ -162,7 +166,7 @@
           </div>
 
           <!-- Pending deadline requests (admin only) -->
-          <div id="home-pending-extensions" class="bg-white rounded-2xl ios-card overflow-hidden hidden" data-widget="home-extensions">
+          <div id="home-pending-extensions" class="bg-white rounded-2xl ios-card overflow-hidden hidden">
             <div class="px-4 pt-3 pb-2 flex items-center justify-between">
               <h2 class="font-semibold">⏰ คำขอเลื่อน Deadline (Admin)</h2>
             </div>
@@ -173,21 +177,21 @@
 
       <!-- ============== TASKS ============== -->
       <section id="page-tasks" class="page hidden">
-        <div data-widget-section="tasks">
-          <div data-widget="tasks-search" class="flex gap-2">
+        <div class="mb-3 space-y-2">
+          <div class="flex gap-2">
             <div class="relative flex-1">
               <input id="task-search" class="ios-input pl-9" placeholder="🔎 ค้นหางาน…">
               <button id="task-search-clear" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hidden">✕</button>
             </div>
             <button id="task-filter-btn" class="ios-btn-ghost relative" title="ตัวกรอง">🎚<span id="task-filter-badge" class="filter-badge hidden">0</span></button>
           </div>
-          <div data-widget="tasks-segmented" class="ios-segmented" id="task-segmented">
+          <div class="ios-segmented" id="task-segmented">
             <button data-seg="mine"  class="active">งานของฉัน</button>
             <button data-seg="lead"  class="hidden">งานที่ฉันเป็นหัวหน้า</button>
             <button data-seg="admin" class="hidden">งานของ Admin</button>
           </div>
-          <div data-widget="tasks-list" id="tasks-list" class="space-y-3"></div>
         </div>
+        <div id="tasks-list" class="space-y-3"></div>
       </section>
 
       <!-- Filter sheet (slides up from bottom) -->
@@ -238,9 +242,12 @@
 
       <!-- ============== CALENDAR ============== -->
       <section id="page-calendar" class="page hidden">
-        <div data-widget-section="calendar" class="cal-fullbleed">
-          <!-- Big calendar grid (left) -->
-          <div data-widget="calendar-grid" class="bg-white rounded-2xl ios-card p-4 cal-card-big cal-sticky-left">
+        <!-- 70:30 split at lg (1024+). Below that the right column stacks
+             vertically below the calendar (better for portrait tablets / phones). -->
+        <div class="cal-fullbleed grid grid-cols-1 lg:grid-cols-10 gap-4 items-start">
+          <!-- Calendar grid — 7/10 columns (70%) on desktop · sticks to top while
+               the right column scrolls past -->
+          <div class="lg:col-span-7 bg-white rounded-2xl ios-card p-4 cal-card-big cal-sticky-left">
             <div class="flex items-center justify-between mb-3">
               <button id="cal-prev" class="ios-btn-icon">‹</button>
               <div id="cal-title" class="font-semibold text-lg">—</div>
@@ -252,64 +259,63 @@
             <div id="cal-grid" class="grid grid-cols-7 gap-1.5"></div>
           </div>
 
-          <!-- Quick-create bar -->
-          <div data-widget="calendar-create" id="cal-create-bar" class="bg-white rounded-xl ios-card p-3">
-            <div id="cal-create-hint" class="text-[11px] text-slate-500 mb-2">เลือกวันที่บนปฏิทินเพื่อตั้ง deadline ให้งานใหม่</div>
-            <div class="flex flex-wrap gap-2">
-              <button type="button" class="ios-btn-secondary text-xs flex-1" data-cal-create="task">📋 + งาน</button>
-              <button type="button" class="ios-btn-secondary text-xs flex-1" data-cal-create="meeting">📅 + ประชุม</button>
+          <!-- Right column — 3/10 columns (30%) on desktop. The create-bar sits OUTSIDE
+               the scroll container and the meetings/tasks scroll INSIDE it — clean
+               separation, no "content visible behind sticky bar" effect. -->
+          <div class="lg:col-span-3 cal-right-col">
+            <!-- Create-bar (outside scroll, always visible) -->
+            <div id="cal-create-bar" class="bg-white rounded-xl ios-card p-3">
+              <div id="cal-create-hint" class="text-[11px] text-slate-500 mb-2">เลือกวันที่บนปฏิทินเพื่อตั้ง deadline ให้งานใหม่</div>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="ios-btn-secondary text-xs flex-1" data-cal-create="task">📋 + งาน</button>
+                <button type="button" class="ios-btn-secondary text-xs flex-1" data-cal-create="meeting">📅 + ประชุม</button>
+              </div>
             </div>
-          </div>
 
-          <!-- Meetings list -->
-          <div data-widget="calendar-meetings" class="bg-white rounded-2xl ios-card p-4">
-            <h3 class="font-semibold text-sm mb-2"><span id="cal-meetings-label">📅 การประชุม</span></h3>
-            <div id="cal-meetings-list" class="space-y-3"></div>
-          </div>
-
-          <!-- Tasks list -->
-          <div data-widget="calendar-tasks" class="bg-white rounded-2xl ios-card p-4">
-            <h3 class="font-semibold text-sm mb-2"><span id="cal-day-label">📋 งานในเดือนนี้</span></h3>
-            <div id="cal-day-list" class="space-y-3"></div>
-          </div>
-
-          <!-- Leaves list -->
-          <div data-widget="calendar-leaves" class="bg-white rounded-2xl ios-card p-4">
-            <h3 class="font-semibold text-sm mb-2"><span id="cal-leaves-label">🏖️ วันลาในเดือนนี้</span></h3>
-            <div id="cal-leaves-list" class="space-y-2"></div>
+            <!-- Internal scroll: meetings + tasks scroll inside this box -->
+            <div class="cal-right-zone space-y-4 mt-4">
+              <div>
+                <h3 class="font-semibold text-sm mb-2"><span id="cal-meetings-label">📅 การประชุม</span></h3>
+                <div id="cal-meetings-list" class="space-y-3"></div>
+              </div>
+              <div>
+                <h3 class="font-semibold text-sm mb-2"><span id="cal-day-label">📋 งานในเดือนนี้</span></h3>
+                <div id="cal-day-list" class="space-y-3"></div>
+              </div>
+              <div>
+                <h3 class="font-semibold text-sm mb-2"><span id="cal-leaves-label">🏖️ วันลาในเดือนนี้</span></h3>
+                <div id="cal-leaves-list" class="space-y-2"></div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
       <!-- ============== PEOPLE (members + connections) ============== -->
       <section id="page-people" class="page hidden">
-        <div data-widget-section="people">
-          <div data-widget="people-segmented" class="ios-segmented" id="people-segmented" style="grid-template-columns: 1fr 1fr">
-            <button data-pseg="members" class="active">สมาชิก</button>
-            <button data-pseg="connections">Connections</button>
+        <div class="ios-segmented mb-3" id="people-segmented" style="grid-template-columns: 1fr 1fr">
+          <button data-pseg="members" class="active">สมาชิก</button>
+          <button data-pseg="connections">Connections</button>
+        </div>
+        <div id="people-members" class="space-y-3"></div>
+        <div id="people-connections" class="hidden space-y-3">
+          <div class="relative">
+            <input id="conn-search" class="ios-input pl-9" placeholder="🔎 ค้นหา Connection — ชื่อ / หน่วยงาน / หัวข้อ / เบอร์ ...">
+            <button id="conn-search-clear" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hidden">✕</button>
           </div>
-          <div data-widget="people-members" id="people-members" class="space-y-3"></div>
-          <div data-widget="people-connections" id="people-connections" class="hidden space-y-3">
-            <div class="relative">
-              <input id="conn-search" class="ios-input pl-9" placeholder="🔎 ค้นหา Connection — ชื่อ / หน่วยงาน / หัวข้อ / เบอร์ ...">
-              <button id="conn-search-clear" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hidden">✕</button>
-            </div>
-            <div id="conn-list"></div>
-          </div>
+          <div id="conn-list"></div>
         </div>
       </section>
 
       <!-- ============== SUMMARY ============== -->
       <section id="page-summary" class="page hidden">
-        <div data-widget-section="summary">
-          <div data-widget="summary-content" id="summary-content"></div>
-        </div>
+        <div id="summary-content"></div>
       </section>
 
       <!-- ============== PROFILE ============== -->
       <section id="page-profile" class="page hidden">
-        <div class="space-y-4 max-w-md mx-auto" id="profile-widgets-root" data-widget-section="profile">
-          <div class="bg-white rounded-2xl ios-card p-5 text-center" data-widget="profile-avatar">
+        <div class="space-y-4 max-w-md mx-auto">
+          <div class="bg-white rounded-2xl ios-card p-5 text-center">
             <!-- Avatar with hover-overlay button to change picture -->
             <div class="relative inline-block">
               <div id="me-avatar-big" class="ios-avatar mx-auto" style="width:96px; height:96px; font-size:1.8rem; overflow:hidden"></div>
@@ -321,13 +327,13 @@
             <div id="me-email" class="text-sm text-slate-500 mt-1"></div>
             <button id="me-avatar-remove" class="text-xs text-rose-600 mt-2 hidden">ลบรูปโปรไฟล์</button>
           </div>
-          <div class="bg-white rounded-2xl ios-card overflow-hidden" data-widget="profile-stats">
+          <div class="bg-white rounded-2xl ios-card overflow-hidden">
             <div class="ios-list-row"><span>⭐ คะแนนสะสม</span><span class="text-slate-500" id="me-pts">0 pts</span></div>
             <div class="ios-list-row"><span>✅ งานที่ทำเสร็จ</span><span class="text-slate-500" id="me-done">0</span></div>
             <div class="ios-list-row"><span>⏳ งานกำลังทำ</span><span class="text-slate-500" id="me-doing">0</span></div>
             <div class="ios-list-row"><span>📋 งานทั้งหมด</span><span class="text-slate-500" id="me-all">0</span></div>
           </div>
-          <div class="bg-white rounded-2xl ios-card overflow-hidden" data-widget="profile-actions">
+          <div class="bg-white rounded-2xl ios-card overflow-hidden">
             <button class="ios-list-row w-full text-left" id="btn-change-pw"><span>🔑 เปลี่ยน PIN</span><span class="text-slate-400">›</span></button>
             <button class="ios-list-row w-full text-left" id="btn-manage-leaves"><span>🏖️ จัดการวันลาของฉัน</span><span class="text-slate-400">›</span></button>
             <button class="ios-list-row w-full text-left" id="btn-manage-groups"><span>📁 จัดการ Task Groups</span><span class="text-slate-400">›</span></button>
@@ -343,15 +349,14 @@
 
       <!-- ============== WHITEBOARD ============== -->
       <section id="page-whiteboard" class="page hidden">
-        <div data-widget-section="whiteboard">
-          <div data-widget="whiteboard-list" id="wb-list-view">
-            <div class="flex items-center justify-between mb-4">
-              <h2 class="font-bold text-lg">Whiteboards</h2>
-              <button id="wb-new-btn" class="ios-btn-primary text-sm px-4 py-2">+ สร้างใหม่</button>
-            </div>
-            <div id="wb-list" class="space-y-2"></div>
+        <div id="wb-list-view">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-bold text-lg">Whiteboards</h2>
+            <button id="wb-new-btn" class="ios-btn-primary text-sm px-4 py-2">+ สร้างใหม่</button>
           </div>
-          <div data-widget="whiteboard-canvas" id="wb-canvas-view" class="hidden flex flex-col h-full">
+          <div id="wb-list" class="space-y-2"></div>
+        </div>
+        <div id="wb-canvas-view" class="hidden flex flex-col h-full">
           <div id="wb-toolbar" class="wb-toolbar">
             <button id="wb-back" class="wb-tool" title="กลับ">←</button>
             <span id="wb-board-name" class="font-semibold text-sm px-1 truncate"></span>
@@ -424,7 +429,6 @@
               </div>
               <div class="space-y-2" id="wb-inject-list"></div>
             </div>
-          </div>
           </div>
         </div>
       </section>
