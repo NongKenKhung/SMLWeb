@@ -1,0 +1,25 @@
+{
+  "name": "Smart City Lab",
+  "short_name": "SML",
+  "description": "Team workspace — tasks, calendar, members, audio recordings with Thai speech-to-text",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f1f5f9",
+  "theme_color": "#4f46e5",
+  "lang": "th",
+  "dir": "ltr",
+  "icons": [
+    { "src": "/icon.svg",         "sizes": "any",     "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-192.png",     "sizes": "192x192", "type": "image/png",     "purpose": "any" },
+    { "src": "/icon-512.png",     "sizes": "512x512", "type": "image/png",     "purpose": "any" },
+    { "src": "/icon-mask-512.png","sizes": "512x512", "type": "image/png",     "purpose": "maskable" }
+  ],
+  "categories": ["productivity", "business"],
+  "shortcuts": [
+    { "name": "งานของฉัน",   "url": "/#tasks",    "description": "ดูรายการงานทั้งหมด" },
+    { "name": "ปฏิทิน",       "url": "/#calendar", "description": "เปิดปฏิทิน" },
+    { "name": "โพรไฟล์",     "url": "/#profile",  "description": "ดูโพรไฟล์ของฉัน" }
+  ]
+}

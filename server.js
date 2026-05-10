@@ -97,6 +97,9 @@ app.use(express.static(path.join(__dirname, 'public'), {
   maxAge: isProd ? '1h' : 0,
   setHeaders(res, filePath) {
     if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+    // PWA assets — ensure correct content-types so the browser registers them
+    if (filePath.endsWith('.webmanifest')) res.setHeader('Content-Type', 'application/manifest+json');
+    if (filePath.endsWith('sw.js')) res.setHeader('Cache-Control', 'no-cache'); // SW must not cache itself
   },
 }));
 
@@ -270,6 +273,7 @@ const DEFAULT_UI_CONFIG = {
       { id: 'home-scoreboard', label: '🥧 Scoreboard',            visible: true, width: 4,  height: 360    },
       { id: 'home-meetings',   label: '📅 การประชุมที่ใกล้ถึง',   visible: true, width: 6,  height: 320    },
       { id: 'home-open',       label: '🪪 กลุ่มที่ยังไม่ได้เข้า',  visible: true, width: 6,  height: 320    },
+      { id: 'home-polls',      label: '🗳️ โพล / โหวต',            visible: true, width: 12, height: 'auto' },
       { id: 'home-extensions', label: '⏰ คำขอเลื่อน Deadline',    visible: true, width: 12, height: 'auto' },
     ],
     tasks: [
@@ -619,14 +623,83 @@ app.delete('/api/tasks/:id', wrap(async (req, res) => {
   const isAdmin = req.user.role === 'admin';
   const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, req.user.id));
   if (!isAdmin && !isGroupLeader) return res.status(403).json({ error: 'admin or group leader only' });
-  await db.deleteTask(req.params.id);
+  // ?permanent=1 → hard delete (only from trash). Default = soft delete (recycle bin).
+  const permanent = req.query.permanent === '1';
+  if (permanent) await db.purgeTask(req.params.id);
+  else           await db.deleteTask(req.params.id);   // soft delete
 
   // Meeting deletion → CANCEL invitation to attendees so the event drops from their cal.
   // Sequence is bumped client-side (in-memory snapshot) since the row is gone.
-  if (t.kind === 'meeting') {
+  if (t.kind === 'meeting' && permanent) {
     const seq = (t.ics_sequence || 0) + 1;
     mailer.sendCancel(t, req.user, seq).catch(e => console.error('[mailer] delete-cancel error:', e.message));
   }
+  res.json({ ok: true, permanent });
+}));
+
+// Recycle bin — list / restore / purge.
+app.get('/api/tasks/trash', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const isAdmin = req.user.role === 'admin';
+  const all = await db.listTrashedTasks();
+  // Non-admin sees only their own trashed tasks (assigned or in groups they lead)
+  if (isAdmin) return res.json(all);
+  const myGroupIds = new Set();
+  // (lightweight filter — group leaders see their group's trash)
+  for (const t of all) {
+    if (!t.group_id) continue;
+    if (await db.isGroupLeader(t.group_id, req.user.id)) myGroupIds.add(t.group_id);
+  }
+  res.json(all.filter(t => myGroupIds.has(t.group_id)));
+}));
+app.post('/api/tasks/:id/restore', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const all = await db.listTrashedTasks();
+  const t = all.find(x => x.id === req.params.id);
+  if (!t) return res.status(404).json({ error: 'not in trash' });
+  const isAdmin = req.user.role === 'admin';
+  const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, req.user.id));
+  if (!isAdmin && !isGroupLeader) return res.status(403).json({ error: 'admin or group leader only' });
+  await db.restoreTask(req.params.id);
+  res.json({ ok: true });
+}));
+
+// ── Task comments ──
+app.get('/api/tasks/:id/comments', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const t = await db.getTask(req.params.id);
+  if (!t) return res.status(404).json({ error: 'task not found' });
+  res.json(await db.listTaskComments(req.params.id));
+}));
+app.post('/api/tasks/:id/comments', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const t = await db.getTask(req.params.id);
+  if (!t) return res.status(404).json({ error: 'task not found' });
+  const body = (req.body?.body || '').trim();
+  if (!body) return res.status(400).json({ error: 'body required' });
+  const id = 'cm_' + crypto.randomBytes(6).toString('hex');
+  const c = await db.createComment({ id, task_id: req.params.id, member_id: req.user.id, body });
+  res.json(c);
+}));
+app.put('/api/comments/:id', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const c = await db.getComment(req.params.id);
+  if (!c || c.deleted_at) return res.status(404).json({ error: 'not found' });
+  if (c.member_id !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'owner or admin only' });
+  }
+  const body = (req.body?.body || '').trim();
+  if (!body) return res.status(400).json({ error: 'body required' });
+  res.json(await db.updateComment(req.params.id, body));
+}));
+app.delete('/api/comments/:id', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const c = await db.getComment(req.params.id);
+  if (!c || c.deleted_at) return res.status(404).json({ error: 'not found' });
+  if (c.member_id !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'owner or admin only' });
+  }
+  await db.deleteComment(req.params.id);
   res.json({ ok: true });
 }));
 
@@ -1063,6 +1136,76 @@ app.get('/api/point-ledger', wrap(async (req, res) => {
   res.json({ rows, count: rows.length, total: rows.reduce((s, r) => s + (r.points || 0), 0) });
 }));
 
+// ── Polls ──
+// Anyone logged-in can create or vote. Owner OR admin can close/delete.
+// Anonymous polls strip member_id from the per-vote map in responses.
+app.get('/api/polls', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  res.json(await db.listPolls({ includeClosed: true }));
+}));
+app.get('/api/polls/:id', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const p = await db.getPoll(req.params.id);
+  if (!p) return res.status(404).json({ error: 'not found' });
+  if (p.anonymous) p.votes_by_member = {}; // hide identities
+  res.json(p);
+}));
+app.post('/api/polls', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const { question, options, multi_choice, anonymous, group_id, expires_at } = req.body || {};
+  if (!question || !Array.isArray(options) || options.length < 2) {
+    return res.status(400).json({ error: 'question + at least 2 options required' });
+  }
+  const id = 'pl_' + crypto.randomBytes(6).toString('hex');
+  const p = await db.createPoll({
+    id, question, options, multi_choice, anonymous,
+    created_by: req.user.id, group_id, expires_at,
+  });
+  res.json(p);
+}));
+app.post('/api/polls/:id/vote', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const p = await db.getPoll(req.params.id);
+  if (!p) return res.status(404).json({ error: 'not found' });
+  if (p.closed) return res.status(400).json({ error: 'poll is closed' });
+  if (p.expires_at && new Date(p.expires_at) < new Date()) return res.status(400).json({ error: 'poll expired' });
+  const idx = Array.isArray(req.body?.option_indices) ? req.body.option_indices :
+              Number.isFinite(+req.body?.option_index) ? [+req.body.option_index] : [];
+  if (!p.multi_choice && idx.length > 1) return res.status(400).json({ error: 'single choice only' });
+  const updated = await db.votePoll(req.params.id, req.user.id, idx);
+  if (updated.anonymous) updated.votes_by_member = {};
+  res.json(updated);
+}));
+app.post('/api/polls/:id/close', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const p = await db.getPoll(req.params.id);
+  if (!p) return res.status(404).json({ error: 'not found' });
+  if (p.created_by !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'creator or admin only' });
+  }
+  await db.closePoll(req.params.id);
+  res.json({ ok: true });
+}));
+app.delete('/api/polls/:id', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const p = await db.getPoll(req.params.id);
+  if (!p) return res.status(404).json({ error: 'not found' });
+  if (p.created_by !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'creator or admin only' });
+  }
+  await db.deletePoll(req.params.id);
+  res.json({ ok: true });
+}));
+
+// Auto-purge old trashed tasks once a day (default: 30 days).
+const TRASH_PURGE_DAYS = +(process.env.TRASH_PURGE_DAYS || 30);
+setInterval(async () => {
+  try {
+    const n = await db.purgeOldTrash(TRASH_PURGE_DAYS);
+    if (n > 0) console.log(`[trash] purged ${n} task(s) older than ${TRASH_PURGE_DAYS} days`);
+  } catch (e) { console.warn('[trash] purge failed:', e.message); }
+}, 24 * 3600_000).unref();
+
 // ── Recordings (audio) ──
 // Authenticated user can record + manage their own clips. Admin sees and can
 // delete any. Files live on disk; metadata in DB. Streaming endpoint supports
@@ -1115,8 +1258,20 @@ app.post('/api/recordings/:id/transcribe', wrap(async (req, res) => {
   if (rec.member_id !== req.user.id && req.user.role !== 'admin') {
     return res.status(403).json({ error: 'admin or owner only' });
   }
-  // Don't await — let it run in background and return current state
   transcribeRecording(rec.id).catch(e => console.warn('[asr] retry error:', e.message));
+  res.json({ ok: true, queued: true });
+}));
+
+// Manual AI summary retry (re-run on existing transcript).
+app.post('/api/recordings/:id/summarise', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const rec = await db.getRecording(req.params.id);
+  if (!rec) return res.status(404).json({ error: 'recording not found' });
+  if (rec.member_id !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'admin or owner only' });
+  }
+  if (!rec.transcript) return res.status(400).json({ error: 'no transcript yet — run transcribe first' });
+  summariseRecording(rec.id).catch(e => console.warn('[ai] retry error:', e.message));
   res.json({ ok: true, queued: true });
 }));
 
@@ -1155,11 +1310,63 @@ async function transcribeRecording(id) {
     });
     broadcast('change', { path: '/api/recordings', method: 'PATCH', by: rec.member_id });
     console.log(`[asr] transcribed ${id} in ${data.timings?.total_sec || '?'}s`);
+    // Kick off summary in the background — don't block the response. Skips
+    // cleanly if OLLAMA_URL isn't set or the transcript is empty.
+    summariseRecording(id).catch(e => console.warn('[ai] auto-summary error:', e.message));
   } catch (e) {
     const msg = e.name === 'AbortError' ? 'timeout (>6 min)' : (e.message || String(e));
     await db.updateRecording(id, { transcript_status: 'error', transcript_error: msg.slice(0, 500) });
     broadcast('change', { path: '/api/recordings', method: 'PATCH', by: rec.member_id });
     console.warn(`[asr] ${id} failed: ${msg}`);
+  }
+}
+
+// AI summary: posts the transcript to the ASR service's /summarise endpoint
+// (which forwards to Ollama). Status flow mirrors transcript_status:
+//   pending → processing → done | error | skipped
+async function summariseRecording(id) {
+  const ASR_URL = process.env.ASR_URL;
+  if (!ASR_URL) return;
+
+  const rec = await db.getRecording(id);
+  if (!rec || !rec.transcript) return;
+
+  await db.updateRecording(id, { summary_status: 'processing', summary_error: '' });
+  broadcast('change', { path: '/api/recordings', method: 'PATCH', by: rec.member_id });
+
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5 * 60 * 1000);
+    const r = await fetch(`${ASR_URL}/summarise`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: rec.transcript, language: 'th' }),
+      signal: ctrl.signal,
+    }).finally(() => clearTimeout(timer));
+
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      // 500 with message containing "OLLAMA_URL not configured" → mark skipped
+      if ((body.error || '').includes('not configured')) {
+        await db.updateRecording(id, { summary_status: 'skipped' });
+        return;
+      }
+      throw new Error(body.error || `summariser returned ${r.status}`);
+    }
+    const data = await r.json();
+    await db.updateRecording(id, {
+      summary: data.summary || '',
+      action_items: JSON.stringify(data.action_items || []),
+      summary_status: 'done',
+      summary_error: '',
+    });
+    broadcast('change', { path: '/api/recordings', method: 'PATCH', by: rec.member_id });
+    console.log(`[ai] summarised ${id}`);
+  } catch (e) {
+    const msg = e.name === 'AbortError' ? 'timeout (>5 min)' : (e.message || String(e));
+    await db.updateRecording(id, { summary_status: 'error', summary_error: msg.slice(0, 500) });
+    broadcast('change', { path: '/api/recordings', method: 'PATCH', by: rec.member_id });
+    console.warn(`[ai] ${id} failed: ${msg}`);
   }
 }
 

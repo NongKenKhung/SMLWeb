@@ -73,12 +73,13 @@ services:
       postgres:
         condition: service_healthy
 
-  # ── PyThaiASR microservice (Python + Flask) ────────────────────────────
-  # Wraps github.com/PyThaiNLP/pythaiasr. Mounts the same `uploads` volume
-  # read-only so the app can hand it a filename instead of re-uploading.
-  # First boot pulls ~1.2GB of model weights into the cache volume; subsequent
-  # restarts are fast. ASR is optional — server.js silently skips transcription
-  # if this container is down.
+  # ── WhisperX microservice (Python + Flask) ─────────────────────────────
+  # Wraps github.com/m-bain/whisperX. Mounts the same `uploads` volume
+  # read-only so the app hands it a filename instead of re-uploading.
+  # First boot pulls model weights into the cache volume:
+  #   tiny ~75 MB · base ~150 MB · small ~500 MB (default) · medium ~1.5 GB · large-v3 ~3 GB
+  # Subsequent restarts are fast. ASR is optional — server.js silently skips
+  # transcription if this container is down.
   asr:
     build: ./asr-service
     image: sml-asr:latest
@@ -86,14 +87,51 @@ services:
     restart: unless-stopped
     environment:
       UPLOAD_DIR: /uploads
+      # Whisper model size — bigger = better quality, slower, more RAM.
+      # Override per environment via .env or `docker compose run -e WHISPER_MODEL=medium`.
+      WHISPER_MODEL: ${WHISPER_MODEL:-small}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-cpu}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}
+      WHISPER_LANG: ${WHISPER_LANG:-th}
+      WHISPER_ALIGN: ${WHISPER_ALIGN:-1}
+      WHISPER_BATCH_SIZE: ${WHISPER_BATCH_SIZE:-8}
+      # whisperx ships no default Thai alignment model; point it at a Thai
+      # wav2vec2 on HuggingFace. Set empty to use whisperx's own defaults.
+      WHISPER_ALIGN_MODEL: ${WHISPER_ALIGN_MODEL:-airesearch/wav2vec2-large-xlsr-53-th}
+      # Ollama is reached via compose DNS. Empty = AI summary disabled.
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
     volumes:
       - ./uploads:/uploads:ro
       - asr_cache:/cache
     # Uncomment to expose for direct curl tests (otherwise only `app` reaches it)
     # ports: ["8000:8000"]
 
+  # ── Ollama (local LLM for AI summarisation) ─────────────────────────────
+  # Pulls llama3.2:3b on first run (~2 GB). Swap OLLAMA_MODEL for any model in
+  # the Ollama library — qwen2.5:3b, gemma2:2b, scb10x/llama3.2-typhoon2-3b
+  # (Thai-tuned), etc. Skip starting this service to disable AI summaries
+  # cleanly — ASR will mark `summary_status='skipped'`.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: sml_ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    # Uncomment to expose for direct curl tests (otherwise only `asr` reaches it)
+    # ports: ["11434:11434"]
+    # GPU acceleration: uncomment when running on a host with NVIDIA + nvidia-container-toolkit
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
 volumes:
   pg_data:
   pgadmin_data:
   app_state:
   asr_cache:
+  ollama_models:

@@ -103,7 +103,7 @@ logged in as admin (`🛠️ Dev & Test Tools`).
 | Panel | What it does |
 |---|---|
 | 🎨 **Whiteboard** | Real-time canvas (Fabric.js + WebSocket). Sub-tab below ↓ |
-| 🎙️ **Audio Recorder** | Record → upload → server stores blob + DB row → **Thai transcription via PyThaiASR**. Mobile-friendly with HTTPS hint, mic selector, live waveform, wake-lock. |
+| 🎙️ **Audio Recorder** | Record → upload → server stores blob + DB row → **Thai transcription via WhisperX** (word-level timestamps). Mobile-friendly with HTTPS hint, mic selector, live waveform, wake-lock. |
 | 🔬 **Component Lab** | Live HTML/CSS/JS playground. |
 | 📐 **Room Designer** | 2D + 3D floor-plan editor. 12-col snap grid, drag-resize-rotate items, collision detection, layered items (laptop on desk), structures (column/wall) block layers, custom catalog, **Three.js 3D view** with select / drag / orbit / pan. Multi-room storage in localStorage. |
 | 📖 **About Editor** | Block-based CMS (h1/h2/h3, paragraph, image, list, quote, callout, link, code, video, columns) → preview rendered HTML, multi-page, JSON export/import, persisted in localStorage. |
@@ -135,9 +135,10 @@ postgres ←── app (Node, SSE, WS, REST) ──→ asr (Python Flask + PyTha
 - **pgadmin**: pgAdmin 4 on `:5050`.
 - **app**: Node 20 (Express + `pg` + `ws` + `multer`). Reaches `asr` via the
   compose network DNS.
-- **asr**: Python 3.11 + Flask + ffmpeg + PyThaiASR. Wraps
-  [PyThaiNLP/pythaiasr](https://github.com/PyThaiNLP/pythaiasr) (wav2vec2 Thai
-  model, ~1.2 GB cached in volume `asr_cache`).
+- **asr**: Python 3.11 + Flask + ffmpeg + WhisperX. Wraps
+  [m-bain/whisperX](https://github.com/m-bain/whisperX) (faster-whisper +
+  word-level alignment via wav2vec2). Model size configurable via
+  `WHISPER_MODEL` env (default `small`, ~500 MB cached in volume `asr_cache`).
 
 Set `ASR_URL=` empty in `app.environment` to disable transcription cleanly —
 clips stay in `transcript_status='pending'` and the UI shows a 🔄 retry
@@ -184,9 +185,9 @@ button.
 │   ├── style.css             — Tailwind + iOS-flavoured custom CSS
 │   └── dev.html              — /dev admin sandbox (~5k lines)
 ├── asr-service/
-│   ├── Dockerfile            — Python 3.11 + ffmpeg + torch
-│   ├── requirements.txt      — pythaiasr 1.1.1, transformers 4.41.2, torch 2.2
-│   ├── app.py                — Flask /health · /transcribe
+│   ├── Dockerfile            — Python 3.11 + ffmpeg + CPU-only torch 2.5
+│   ├── requirements.txt      — whisperx 3.1.5
+│   ├── app.py                — Flask /health · /transcribe (+ word timestamps)
 │   └── README.md             — service-specific notes
 ├── uploads/                  — file storage (host-mounted)
 └── pgadmin/servers.json      — pre-configured pgadmin connection
@@ -229,6 +230,71 @@ docker compose logs -f app asr  # tail logs
 docker compose build asr        # rebuild after editing requirements.txt
 docker compose logs -f asr      # watch model download on first call
 ```
+
+---
+
+## Storing uploads on a NAS
+
+By default `./uploads/` is bind-mounted into the `app` container at `/app/uploads`
+and the ASR container at `/uploads:ro`. To put it on a NAS instead, mount the
+NAS share at the host's `./uploads` path (or change the bind path in
+`docker-compose.yml`). Three common options:
+
+### Option A — SMB / CIFS (Synology, TrueNAS, Windows share)
+
+Mount on the Linux host first, then point compose at the mount.
+
+```bash
+# On the Docker host
+sudo apt install cifs-utils
+sudo mkdir -p /mnt/sml-uploads
+
+# /etc/fstab line — auto-mount on boot:
+//nas.local/sml-uploads  /mnt/sml-uploads  cifs  \
+  username=YOUR_USER,password=YOUR_PASS,uid=1000,gid=1000,iocharset=utf8,vers=3.0,_netdev  0  0
+
+sudo mount -a
+```
+
+Then in `docker-compose.yml` swap the bind:
+
+```yaml
+services:
+  app:
+    volumes:
+      - app_state:/data
+      - /mnt/sml-uploads:/app/uploads      # was: ./uploads
+  asr:
+    volumes:
+      - /mnt/sml-uploads:/uploads:ro       # same path, read-only
+```
+
+### Option B — NFS
+
+```bash
+# On host
+sudo apt install nfs-common
+sudo mkdir -p /mnt/sml-uploads
+sudo mount -t nfs nas.local:/volume1/sml-uploads /mnt/sml-uploads
+
+# /etc/fstab
+nas.local:/volume1/sml-uploads  /mnt/sml-uploads  nfs  defaults,_netdev  0  0
+```
+
+Compose changes are identical to SMB above.
+
+### Option C — S3 / MinIO (object storage)
+
+For S3-compatible storage, mount with [s3fs](https://github.com/s3fs-fuse/s3fs-fuse)
+or [rclone mount](https://rclone.org/commands/rclone_mount/) and point compose at
+the FUSE mount — same pattern as A/B. (Or, longer term, swap multer's disk
+storage for an S3 SDK; that's a code change, not a config change.)
+
+### Backup tip
+
+The two paths to back up are:
+- Postgres: `docker exec sml_postgres pg_dump -U smluser smartcitylab | gzip > backup.sql.gz`
+- Files: rsync `./uploads/` (or your NAS path) — already lives on the NAS in this setup, so the NAS's own snapshot/replication handles it.
 
 ---
 

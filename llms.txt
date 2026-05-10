@@ -1,0 +1,129 @@
+# Smart City Lab (SML)
+
+> Web app for managing members, task groups, tasks, points, files, calendar, and real-time whiteboards in a small lab/team. Stack: Node.js/Express + PostgreSQL + vanilla JS SPA + Python (WhisperX) ASR microservice. Built around a 12-column responsive masonry grid that admins can re-arrange live via an in-app visual editor, plus a `/dev` admin sandbox with experimental tools (room designer, audio recorder + Thai speech-to-text, point ledger, etc).
+
+The codebase ships with a `docker compose` stack that boots the entire system (postgres, pgadmin, the Node app, and the WhisperX microservice). Source: https://github.com/NongKenKhung/SMLWeb. Schema migrations are forward-only and idempotent; the app auto-creates tables on startup.
+
+## Documentation
+
+- [README.md](README.md): full project guide — architecture, quick start, env vars, /dev panels, deployment
+- [asr-service/README.md](asr-service/README.md): WhisperX microservice configuration (model size, alignment, env vars)
+
+## Browser routes
+
+- [/](/ ): main SPA shell — login screen, then 6 default tabs (Home, Todo, Calendar, People, Summary, Profile). Whiteboard tab is hidden by default and incubates inside `/dev`.
+- [/dev](/dev): admin-only sandbox SPA with 13 panels — entry point is the "🛠 Dev & Test Tools" button in the Profile page (admin only).
+- [/healthz](/healthz): liveness probe (no auth)
+
+## REST API
+
+### Auth
+- POST /api/login: { name, password } → { token, user }
+- POST /api/logout: invalidate session token
+- GET /api/me: current authenticated user
+- PUT /api/me/password: change PIN
+- POST /api/me/avatar: multipart image upload
+
+### Members + groups + people
+- GET / POST / PUT / DELETE /api/members: member CRUD (admin only for write)
+- GET / POST / PUT / DELETE /api/groups: task-group CRUD with leader + colour
+- GET / POST / PUT / DELETE /api/connections: contact directory (kind + topics)
+- POST / DELETE /api/groups/:gid/members/:mid: group membership
+
+### Tasks
+- GET / POST / PUT / DELETE /api/tasks: task CRUD; supports multi-assignee with role + points share
+- POST /api/tasks/:id/claim and /drop: self-assign / unassign
+- POST /api/tasks/:id/files: file or URL submission (multer)
+- GET / POST /api/deadline-requests: deadline extension flow
+- GET / POST /api/point-requests: leader-review point pipeline (proposing → leader_review → final_review → confirmed)
+
+### Calendar + events
+- GET / POST / PUT / DELETE /api/leaves: per-member leave records
+- GET /api/stats: aggregate counts + scoreboard + upcoming
+- GET /api/categories: connection topic list
+
+### Whiteboards
+- GET / POST / PUT / DELETE /api/whiteboards: collaborative drawing boards
+- WebSocket /ws/whiteboard?board=ID&token=T: real-time per-board sync (Fabric.js canvas JSON)
+
+### UI / layout
+- GET /api/ui-config: admin-defined layout (tab order + visibility, per-widget width/height)
+- PUT /api/ui-config: save layout (admin only)
+- POST /api/ui-config/reset: revert to defaults
+
+### Audio recordings + transcription
+- GET /api/recordings: list own recordings (admin: ?all=1 for everyone)
+- POST /api/recordings: multipart audio upload — server stores blob + DB row, fires async WhisperX transcription
+- GET /api/recordings/:id/stream: stream audio with HTTP Range support (`?token=` query supported for `<audio>` tags)
+- PATCH /api/recordings/:id: rename label
+- DELETE /api/recordings/:id: delete row + on-disk file
+- POST /api/recordings/:id/transcribe: manually retry transcription
+
+### Point ledger (admin)
+- GET /api/point-ledger: read-only audit of every point share — task title, group, role, phase, earned-at timestamp
+
+### Real-time
+- GET /api/events?token=T: Server-Sent Events stream — every successful mutating request fans out a `change` event so all open clients re-fetch
+
+## Architecture
+
+- **Backend**: Node 20 + Express + `pg` + `ws` + `multer`
+- **Database**: PostgreSQL 16 (idempotent schema; no ORM)
+- **Frontend**: Vanilla JS + Tailwind (CDN) + Fabric.js (whiteboard) + Three.js (3D room designer, lazy-loaded from cdnjs)
+- **Speech-to-text**: Python 3.11 + Flask + WhisperX 3.8.5 (faster-whisper + Thai wav2vec2 alignment from `airesearch/wav2vec2-large-xlsr-53-th`)
+- **Real-time**: Server-Sent Events (`/api/events`) + WebSocket (`/ws/whiteboard`)
+- **Layout**: 12-col CSS grid + ResizeObserver-driven masonry; mobile collapses to 1 col
+- **Deployment**: docker-compose with 4 services (postgres, pgadmin, app, asr)
+
+## /dev panels
+
+The admin sandbox at `/dev` contains 13 panels organised into 3 sections:
+
+### Main
+- **API Playground**: hit any endpoint with custom method/body/headers + replay history
+- **Data Explorer**: browse every table with row counts and quick filters
+- **System Info**: env vars, SMTP info, DB stats, active sessions
+
+### Lab (experimental)
+- **Whiteboard**: real-time canvas (Fabric.js + WebSocket); sub-tab Audio Recorder
+- **Audio Recorder**: record → upload → server stores blob → **WhisperX Thai transcription** with word-level timestamps; mobile-friendly with HTTPS hint, mic selector, live waveform, wake-lock
+- **Component Lab**: live HTML/CSS/JS playground
+- **Room Designer**: 2D + 3D floor-plan editor — 12-col snap grid, drag/resize/rotate, collision detection, layered items (laptop on desk), structures (column/wall) block layers, custom catalog, Three.js 3D view (left=select, right=orbit, middle/shift+left=pan), multi-room storage in localStorage
+- **About Editor**: block-based CMS (h1/h2/h3, paragraph, image, list, quote, callout, link, code, video, columns) with preview mode + multi-page + JSON export/import
+- **Point Ledger**: read-only audit of every point share with filter/search/sort/CSV export
+- **Activity Log**: live SSE event stream tail
+- **Dev Notes**: per-browser scratch pad
+
+### Admin
+- **Site Layout**: visual layout editor — drag widgets, resize columns + rows, toggle visibility per widget, for every page; "✏️ Edit on Preview" mode embeds the real app in an iframe with on-widget handles, changes round-trip via postMessage
+- **Settings**: system settings (admin toggles, SMTP enable, etc)
+- **Members**: member CRUD UI
+
+## Source files
+
+- [server.js](server.js): Express app, REST endpoints, SSE, WebSocket bridge
+- [db.js](db.js): pg pool, schema init, CRUD helpers (single source of writes)
+- [auth.js](auth.js): file-backed token store with hot reload
+- [mailer.js](mailer.js): SMTP for invitations and reminders
+- [seed.js](seed.js): demo data seeder
+- [public/index.html](public/index.html): main SPA shell
+- [public/app.js](public/app.js): main SPA logic (~6k lines)
+- [public/style.css](public/style.css): Tailwind + iOS-flavoured custom CSS
+- [public/dev.html](public/dev.html): /dev admin sandbox (~5k lines, single-page)
+- [asr-service/app.py](asr-service/app.py): WhisperX Flask service (`/health`, `/transcribe`)
+- [asr-service/Dockerfile](asr-service/Dockerfile): Python 3.11 + ffmpeg + CPU-only torch
+- [asr-service/requirements.txt](asr-service/requirements.txt): whisperx 3.8.5
+- [docker-compose.yml](docker-compose.yml): postgres + pgadmin + app + asr
+- [Dockerfile](Dockerfile): Node 20 image for the main app
+- [.gitignore](.gitignore): blocks .env, data.db, .tokens.json, uploads/*, .claude/, etc
+
+## Configuration
+
+Configure via `.env` at the project root. Required: `DATABASE_URL`. Optional: `ASR_URL` (set empty to disable transcription), `WHISPER_MODEL` (tiny/base/**small**/medium/large-v3), `WHISPER_LANG` (default `th`), `SMTP_*`, `TOKEN_FILE`, `TRUST_PROXY`. See [README.md#configuration](README.md) for the full table.
+
+## Optional
+
+- [pgadmin/servers.json](pgadmin/servers.json): pre-configured pgAdmin connection
+- [mock_files.js](mock_files.js): sample-file generator for testing submissions
+- [ecosystem.config.js](ecosystem.config.js): PM2 config — alternative to Docker for bare-metal deploys
+- [test_api.js](test_api.js): minimal smoke-test script for the REST API

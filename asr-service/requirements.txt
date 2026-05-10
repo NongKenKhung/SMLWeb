@@ -1,11 +1,8 @@
 flask==3.0.3
-pythaiasr==1.1.1
-# Pin transformers to a version that:
-#   - works with torch 2.2 (so we don't need to download torch 2.4+ wheels)
-#   - is recent enough to load wav2vec2-large-xlsr-53-th cleanly
-# transformers 4.41 was the last major before they started requiring torch>=2.4.
-transformers==4.41.2
-torch==2.2.2
-torchaudio==2.2.2
+# WhisperX wraps OpenAI Whisper with batched inference (faster-whisper /
+# ctranslate2) and word-level alignment via wav2vec2. Pulls in torch,
+# torchaudio, transformers, ctranslate2, faster-whisper, pyannote.audio.
+# Pinned to a non-yanked version (3.x.x lineage has lots of yanks; 3.8.5 is
+# the current top of the un-yanked list).
+whisperx==3.8.5
 soundfile==0.12.1
-numpy==1.26.4

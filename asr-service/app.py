@@ -1,115 +1,255 @@
 """
-PyThaiASR Flask microservice
-============================
+WhisperX Flask microservice
+===========================
 Endpoints
-  GET  /health               → liveness probe
-  POST /transcribe           → body { "filename": "<hex>.webm" } → { "text": "..." }
-  POST /transcribe/upload    → multipart audio file (no metadata) → { "text": "..." }
+  GET  /health              → liveness + model state
+  POST /transcribe          → body { "filename": "...", "summarise"?: bool } → transcript + (optional) summary
+  POST /transcribe/upload   → multipart `audio` (no metadata) → same shape
+  POST /summarise           → body { "text": "..." }          → { summary, action_items }
 
-Audio is converted to 16kHz mono WAV via ffmpeg before feeding into the model
-(PyThaiASR expects WAV @ 16kHz). The model is loaded lazily on the first
-request so the container starts up fast — first request takes ~30-60s, then
-subsequent ones are quick.
+WhisperX = OpenAI Whisper (via ctranslate2 / faster-whisper for speed) +
+optional word-level alignment via wav2vec2. Output is a list of `segments`
+each with start/end/text and (when alignment is on) a `words` array with
+per-word timing.
+
+If OLLAMA_URL is set, every /transcribe call also asks Ollama to:
+  1. Summarise the transcript in 2-3 sentences (Thai)
+  2. Extract any action items as a JSON array
+
+Configuration (env vars)
+  WHISPER_MODEL         "tiny" | "base" | "small" (default) | "medium" | "large-v3"
+  WHISPER_DEVICE        "cpu" (default) | "cuda"
+  WHISPER_COMPUTE_TYPE  "int8" (default for cpu) | "float16" | "float32"
+  WHISPER_LANG          forced source language; "" = auto-detect (default "th")
+  WHISPER_ALIGN         "1" (default) to run alignment for word-level timing
+  WHISPER_BATCH_SIZE    transcription batch size (default 8)
+  WHISPER_ALIGN_MODEL   custom HF wav2vec2 model for alignment
+  OLLAMA_URL            Ollama server URL (default http://ollama:11434, empty = disable)
+  OLLAMA_MODEL          model tag (default llama3.2:3b)
 """
+from __future__ import annotations
+import json
 import os
-import subprocess
 import tempfile
-import time
 import threading
+import time
+import traceback
+import urllib.request
+import urllib.error
 from pathlib import Path
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
 UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", "/uploads"))
 AUDIO_DIR = UPLOAD_DIR / "_audio"
 
-# Lazily-loaded ASR model. PyThaiASR downloads ~1.2GB of weights on first use,
-# cached under HF_HOME for subsequent runs.
-_asr_model = None
-_asr_model_lock = threading.Lock()
-_asr_model_loading = False
+# Read settings once at startup so changes need a container restart.
+MODEL_NAME    = os.environ.get("WHISPER_MODEL", "small")
+DEVICE        = os.environ.get("WHISPER_DEVICE", "cpu")
+COMPUTE_TYPE  = os.environ.get("WHISPER_COMPUTE_TYPE", "int8" if DEVICE == "cpu" else "float16")
+DEFAULT_LANG  = os.environ.get("WHISPER_LANG", "th") or None
+ENABLE_ALIGN  = os.environ.get("WHISPER_ALIGN", "1") == "1"
+BATCH_SIZE    = int(os.environ.get("WHISPER_BATCH_SIZE", "8"))
+# whisperx 3.8.x doesn't ship a default alignment model for Thai. Point it at a
+# HuggingFace wav2vec2 model that does — defaults to the same model PyThaiASR
+# uses. Empty = let whisperx pick its own default (fails for Thai).
+ALIGN_MODEL   = os.environ.get("WHISPER_ALIGN_MODEL", "airesearch/wav2vec2-large-xlsr-53-th")
+# Ollama (optional) — generates a summary + action-items list per transcript
+OLLAMA_URL    = os.environ.get("OLLAMA_URL", "").rstrip("/")
+OLLAMA_MODEL  = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
+
+# Lazy globals — first request triggers model download (~250 MB for `small`,
+# ~1.5 GB for `large-v3`). Cached in HF_HOME / TORCH_HOME volumes.
+_model = None
+_align_cache: dict[str, tuple] = {}
+_load_lock = threading.Lock()
+_loading = False
 
 
-def get_model():
-    """Returns the loaded ASR model, loading it on first call. Thread-safe."""
-    global _asr_model, _asr_model_loading
-    if _asr_model is not None:
-        return _asr_model
-    with _asr_model_lock:
-        if _asr_model is not None:
-            return _asr_model
-        _asr_model_loading = True
+def _load_main():
+    """Lazy-load the main Whisper model under the lock."""
+    global _model, _loading
+    if _model is not None:
+        return _model
+    with _load_lock:
+        if _model is not None:
+            return _model
+        _loading = True
         try:
-            print("[asr] loading pythaiasr model... (first call downloads ~1.2GB)")
+            print(f"[asr] loading whisperx model='{MODEL_NAME}' device={DEVICE} "
+                  f"compute_type={COMPUTE_TYPE} ...", flush=True)
             t0 = time.time()
-            from pythaiasr import ASR  # imported lazily so /health works during boot
-            _asr_model = ASR()
-            print(f"[asr] model ready in {time.time() - t0:.1f}s")
+            import whisperx  # imported lazily so /health stays responsive on boot
+            _model = whisperx.load_model(MODEL_NAME, DEVICE, compute_type=COMPUTE_TYPE)
+            print(f"[asr] main model ready in {time.time() - t0:.1f}s", flush=True)
         finally:
-            _asr_model_loading = False
-    return _asr_model
+            _loading = False
+    return _model
 
 
-def to_wav_16k(src: Path) -> Path:
-    """Decode any audio container/codec to 16kHz mono PCM WAV via ffmpeg.
-    Returns path to a temp file the caller is responsible for deleting."""
-    fd, out_path = tempfile.mkstemp(suffix=".wav")
-    os.close(fd)
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", str(src),
-        "-ac", "1",          # mono
-        "-ar", "16000",      # 16 kHz
-        "-vn",               # no video
-        "-f", "wav",
-        out_path,
-    ]
-    proc = subprocess.run(cmd, capture_output=True)
-    if proc.returncode != 0:
-        try: os.unlink(out_path)
-        except OSError: pass
-        raise RuntimeError(f"ffmpeg failed: {proc.stderr.decode(errors='replace')[:300]}")
-    return Path(out_path)
+def _load_align(lang: str):
+    """Lazy-load the per-language alignment model. Cached per language."""
+    if lang in _align_cache:
+        return _align_cache[lang]
+    with _load_lock:
+        if lang in _align_cache:
+            return _align_cache[lang]
+        try:
+            t0 = time.time()
+            import whisperx
+            # If WHISPER_ALIGN_MODEL is set, prefer that (e.g. for languages
+            # whisperx doesn't have a default for, like Thai). Otherwise let
+            # whisperx pick its own per-language default.
+            kwargs = {"language_code": lang, "device": DEVICE}
+            if ALIGN_MODEL:
+                kwargs["model_name"] = ALIGN_MODEL
+                print(f"[asr] loading align model '{ALIGN_MODEL}' for '{lang}' ...", flush=True)
+            else:
+                print(f"[asr] loading default align model for '{lang}' ...", flush=True)
+            model_a, metadata = whisperx.load_align_model(**kwargs)
+            _align_cache[lang] = (model_a, metadata)
+            print(f"[asr] align '{lang}' ready in {time.time() - t0:.1f}s", flush=True)
+            return _align_cache[lang]
+        except Exception as e:
+            print(f"[asr] align unavailable for '{lang}': {e}", flush=True)
+            _align_cache[lang] = None
+            return None
 
 
-def transcribe_file(src: Path) -> dict:
-    t_start = time.time()
-    wav_path = to_wav_16k(src)
+def transcribe_path(src: Path) -> dict:
+    """Run the full pipeline: ffmpeg-decode → whisper → (optional) align."""
+    import whisperx
+
+    t0 = time.time()
+    audio = whisperx.load_audio(str(src))   # ffmpeg → 16kHz float32 mono ndarray
+    t_loaded = time.time()
+
+    model = _load_main()
+    kwargs = {"batch_size": BATCH_SIZE}
+    if DEFAULT_LANG:
+        kwargs["language"] = DEFAULT_LANG
+    result = model.transcribe(audio, **kwargs)
+    t_transcribed = time.time()
+    detected_lang = result.get("language") or DEFAULT_LANG or "en"
+
+    # Alignment (word-level timestamps). Best-effort — not all languages have a
+    # default align model; we just skip if it fails.
+    aligned_segments = result.get("segments", [])
+    if ENABLE_ALIGN and aligned_segments:
+        am = _load_align(detected_lang)
+        if am:
+            try:
+                model_a, metadata = am
+                aligned = whisperx.align(
+                    aligned_segments, model_a, metadata,
+                    audio, DEVICE, return_char_alignments=False,
+                )
+                aligned_segments = aligned.get("segments", aligned_segments)
+            except Exception as e:
+                print(f"[asr] align step failed: {e}", flush=True)
+
+    full_text = " ".join((s.get("text") or "").strip() for s in aligned_segments).strip()
+    t_done = time.time()
+
+    return {
+        "text": full_text,
+        "language": detected_lang,
+        "model": MODEL_NAME,
+        "segments": aligned_segments,
+        "timings": {
+            "decode_sec":     round(t_loaded - t0, 3),
+            "transcribe_sec": round(t_transcribed - t_loaded, 3),
+            "align_sec":      round(t_done - t_transcribed, 3),
+            "total_sec":      round(t_done - t0, 3),
+        },
+    }
+
+
+def summarise_with_ollama(text: str, lang_hint: str = "th") -> dict:
+    """Ask Ollama to summarise + extract action items. Returns
+    { summary: str, action_items: [str, ...] } or raises on failure."""
+    if not OLLAMA_URL:
+        raise RuntimeError("OLLAMA_URL not configured")
+    if not text.strip():
+        return {"summary": "", "action_items": []}
+
+    lang_label = "Thai" if lang_hint == "th" else lang_hint or "the same language as the input"
+    prompt = (
+        f"You are a helpful meeting-notes assistant. Read the transcript below "
+        f"and produce a JSON object with exactly two keys:\n"
+        f'  "summary": a 1-3 sentence summary in {lang_label}\n'
+        f'  "action_items": an array of short action-item strings (in {lang_label}). Empty array if none.\n'
+        f"Reply ONLY with the JSON object, no commentary.\n\n"
+        f"Transcript:\n\"\"\"\n{text}\n\"\"\"\n"
+    )
+    body = json.dumps({
+        "model": OLLAMA_MODEL,
+        "prompt": prompt,
+        "stream": False,
+        "format": "json",          # ask Ollama for guaranteed JSON output
+        "options": { "temperature": 0.2 },
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        f"{OLLAMA_URL}/api/generate",
+        data=body, method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    # Timeout long enough for cold-start model load on CPU
+    with urllib.request.urlopen(req, timeout=300) as resp:
+        raw = resp.read().decode("utf-8")
+    parsed = json.loads(raw)
+    out_text = parsed.get("response", "")
+    # Ollama with format=json returns valid JSON in `response`
     try:
-        t_loaded = time.time()
-        model = get_model()
-        t_inference_start = time.time()
-        text = model(str(wav_path))
-        t_done = time.time()
-        return {
-            "text": text or "",
-            "timings": {
-                "ffmpeg_sec":   round(t_loaded - t_start, 3),
-                "model_load_sec": round(t_inference_start - t_loaded, 3),
-                "inference_sec":  round(t_done - t_inference_start, 3),
-                "total_sec":      round(t_done - t_start, 3),
-            },
-        }
-    finally:
-        try: os.unlink(wav_path)
-        except OSError: pass
+        data = json.loads(out_text)
+    except Exception:
+        data = {"summary": out_text.strip(), "action_items": []}
+    return {
+        "summary": str(data.get("summary") or "").strip(),
+        "action_items": [str(x).strip() for x in (data.get("action_items") or []) if str(x).strip()][:20],
+    }
 
+
+# ── HTTP routes ─────────────────────────────────────────────────────────────
 
 @app.get("/health")
 def health():
     return jsonify({
         "ok": True,
-        "model_loaded": _asr_model is not None,
-        "model_loading": _asr_model_loading,
+        "model": MODEL_NAME,
+        "device": DEVICE,
+        "compute_type": COMPUTE_TYPE,
+        "language": DEFAULT_LANG,
+        "alignment": ENABLE_ALIGN,
+        "main_loaded": _model is not None,
+        "loading": _loading,
+        "align_loaded": list(k for k, v in _align_cache.items() if v is not None),
         "audio_dir_exists": AUDIO_DIR.exists(),
+        "ollama_enabled": bool(OLLAMA_URL),
+        "ollama_model": OLLAMA_MODEL if OLLAMA_URL else None,
     })
+
+
+@app.post("/summarise")
+def summarise_endpoint():
+    """Standalone summariser — give it text, get back summary + action items."""
+    data = request.get_json(silent=True) or {}
+    text = (data.get("text") or "").strip()
+    lang = data.get("language") or "th"
+    if not text:
+        return jsonify({"error": "text required"}), 400
+    try:
+        result = summarise_with_ollama(text, lang)
+        return jsonify({"ok": True, **result})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)[:500]}), 500
 
 
 @app.post("/transcribe")
 def transcribe_by_filename():
-    """Caller passes { "filename": "abc123.webm" } and we read it from the
-    shared /uploads/_audio volume — avoids re-uploading the file."""
     data = request.get_json(silent=True) or {}
     name = (data.get("filename") or "").strip()
     if not name or "/" in name or "\\" in name or name.startswith("."):
@@ -118,16 +258,15 @@ def transcribe_by_filename():
     if not src.is_file():
         return jsonify({"error": f"file not found: {name}"}), 404
     try:
-        result = transcribe_file(src)
+        result = transcribe_path(src)
         return jsonify({"ok": True, **result})
     except Exception as e:
-        print(f"[asr] error transcribing {name}: {e}")
-        return jsonify({"error": str(e)[:300]}), 500
+        traceback.print_exc()
+        return jsonify({"error": str(e)[:500]}), 500
 
 
 @app.post("/transcribe/upload")
 def transcribe_uploaded():
-    """Direct upload path for ad-hoc testing without the shared volume."""
     f = request.files.get("audio")
     if not f:
         return jsonify({"error": "audio file required"}), 400
@@ -135,18 +274,21 @@ def transcribe_uploaded():
     os.close(fd)
     try:
         f.save(tmp)
-        result = transcribe_file(Path(tmp))
+        result = transcribe_path(Path(tmp))
         return jsonify({"ok": True, **result})
     except Exception as e:
-        return jsonify({"error": str(e)[:300]}), 500
+        traceback.print_exc()
+        return jsonify({"error": str(e)[:500]}), 500
     finally:
         try: os.unlink(tmp)
         except OSError: pass
 
 
 if __name__ == "__main__":
-    print(f"[asr] starting on :8000 · UPLOAD_DIR={UPLOAD_DIR}")
-    # threaded=True so /health stays responsive while another request is
-    # transcribing. The model itself is single-threaded though — concurrent
-    # transcribes will queue on the model lock.
+    print(f"[asr] starting whisperx microservice on :8000")
+    print(f"[asr] config: model={MODEL_NAME} device={DEVICE} compute={COMPUTE_TYPE} "
+          f"lang={DEFAULT_LANG or '(auto)'} align={ENABLE_ALIGN} batch={BATCH_SIZE}")
+    print(f"[asr] UPLOAD_DIR={UPLOAD_DIR}")
+    # threaded=True keeps /health responsive while transcription runs;
+    # the model itself is single-threaded so concurrent calls queue on the lock.
     app.run(host="0.0.0.0", port=8000, threaded=True)

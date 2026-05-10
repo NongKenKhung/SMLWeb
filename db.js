@@ -286,6 +286,53 @@ async function initSchema() {
     ALTER TABLE recordings ADD COLUMN IF NOT EXISTS transcript_status TEXT NOT NULL DEFAULT 'pending';
     ALTER TABLE recordings ADD COLUMN IF NOT EXISTS transcript_error  TEXT NOT NULL DEFAULT '';
     ALTER TABLE recordings ADD COLUMN IF NOT EXISTS transcribed_at    TEXT;
+
+    -- AI summary columns (Ollama / OpenAI / Anthropic). Same status states.
+    ALTER TABLE recordings ADD COLUMN IF NOT EXISTS summary           TEXT NOT NULL DEFAULT '';
+    ALTER TABLE recordings ADD COLUMN IF NOT EXISTS summary_status    TEXT NOT NULL DEFAULT 'pending';
+    ALTER TABLE recordings ADD COLUMN IF NOT EXISTS summary_error     TEXT NOT NULL DEFAULT '';
+    ALTER TABLE recordings ADD COLUMN IF NOT EXISTS action_items      TEXT NOT NULL DEFAULT '[]';
+
+    -- Task comments (threaded discussion under each task card)
+    CREATE TABLE IF NOT EXISTS task_comments (
+      id          TEXT PRIMARY KEY,
+      task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      member_id   TEXT REFERENCES members(id) ON DELETE SET NULL,
+      body        TEXT NOT NULL,
+      created_at  TEXT NOT NULL,
+      updated_at  TEXT NOT NULL,
+      deleted_at  TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_tc_task    ON task_comments(task_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_tc_member  ON task_comments(member_id);
+
+    -- Soft-delete column on tasks (recycle bin)
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS deleted_at TEXT;
+    CREATE INDEX IF NOT EXISTS idx_tasks_deleted ON tasks(deleted_at) WHERE deleted_at IS NOT NULL;
+
+    -- Polls (one question, N options, multi-vote optional, anonymous optional)
+    CREATE TABLE IF NOT EXISTS polls (
+      id            TEXT PRIMARY KEY,
+      question      TEXT NOT NULL,
+      options       TEXT NOT NULL,           -- JSON array of strings
+      multi_choice  BOOLEAN NOT NULL DEFAULT FALSE,
+      anonymous     BOOLEAN NOT NULL DEFAULT FALSE,
+      created_by    TEXT REFERENCES members(id) ON DELETE SET NULL,
+      group_id      TEXT REFERENCES task_groups(id) ON DELETE SET NULL,
+      expires_at    TEXT,
+      closed        BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at    TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_polls_active ON polls(closed, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS poll_votes (
+      poll_id       TEXT NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+      member_id     TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+      option_indices TEXT NOT NULL,          -- JSON array of integers
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL,
+      PRIMARY KEY (poll_id, member_id)
+    );
   `);
 
   // One-time backfill: assign unique palette colors to existing groups in creation order.
@@ -1060,7 +1107,9 @@ async function fuzzyScoreAsync(query, task) {
 }
 
 async function listTasks(filter = {}) {
-  let sql = 'SELECT t.* FROM tasks t WHERE 1=1';
+  // By default exclude soft-deleted (recycle bin). Set filter.includeDeleted=true
+  // to see them; the trash UI uses listTrashedTasks() instead.
+  let sql = 'SELECT t.* FROM tasks t WHERE t.deleted_at IS NULL';
   const params = [];
   let i = 1;
   if (filter.group)  { sql += ` AND t.group_id = $${i++}`; params.push(filter.group); }
@@ -1268,7 +1317,8 @@ async function updateTask(id, patch) {
   return getTask(id);
 }
 async function deleteTask(id) {
-  return (await exec('DELETE FROM tasks WHERE id = $1', [id])) > 0;
+  // Soft-delete by default (goes to recycle bin). Use purgeTask() for hard delete.
+  return softDeleteTask(id);
 }
 
 // Atomically increment + return the new ICS sequence for a meeting.
@@ -2000,6 +2050,136 @@ async function deleteRecording(id) {
   return (await exec('DELETE FROM recordings WHERE id=$1', [id])) > 0;
 }
 
+// ===== Task Comments =====
+async function listTaskComments(taskId) {
+  return q(`
+    SELECT c.id, c.task_id, c.member_id, c.body, c.created_at, c.updated_at,
+           m.name AS member_name, m.color AS member_color, m.avatar_url
+    FROM task_comments c
+    LEFT JOIN members m ON m.id = c.member_id
+    WHERE c.task_id = $1 AND c.deleted_at IS NULL
+    ORDER BY c.created_at ASC
+  `, [taskId]);
+}
+async function getComment(id) {
+  return q1(`SELECT * FROM task_comments WHERE id=$1`, [id]);
+}
+async function createComment({ id, task_id, member_id, body }) {
+  const now = nowIso();
+  await exec(
+    `INSERT INTO task_comments (id, task_id, member_id, body, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$5)`,
+    [id, task_id, member_id, String(body || '').slice(0, 5000), now]
+  );
+  return getComment(id);
+}
+async function updateComment(id, body) {
+  await exec(
+    `UPDATE task_comments SET body=$1, updated_at=$2 WHERE id=$3 AND deleted_at IS NULL`,
+    [String(body || '').slice(0, 5000), nowIso(), id]
+  );
+  return getComment(id);
+}
+async function deleteComment(id) {
+  // Soft-delete so threads keep their continuity
+  return (await exec(
+    `UPDATE task_comments SET deleted_at=$1 WHERE id=$2 AND deleted_at IS NULL`,
+    [nowIso(), id]
+  )) > 0;
+}
+
+// ===== Recycle bin (tasks) =====
+// listTasks() already filters out soft-deleted rows by default. Use these
+// helpers for the trash UI / restore flow.
+async function listTrashedTasks() {
+  return q(`
+    SELECT t.*, g.name AS group_name, g.color AS group_color
+    FROM tasks t
+    LEFT JOIN task_groups g ON g.id = t.group_id
+    WHERE t.deleted_at IS NOT NULL
+    ORDER BY t.deleted_at DESC
+  `);
+}
+async function softDeleteTask(id) {
+  return (await exec(`UPDATE tasks SET deleted_at=$1 WHERE id=$2 AND deleted_at IS NULL`, [nowIso(), id])) > 0;
+}
+async function restoreTask(id) {
+  return (await exec(`UPDATE tasks SET deleted_at=NULL WHERE id=$1`, [id])) > 0;
+}
+async function purgeTask(id) {
+  return (await exec(`DELETE FROM tasks WHERE id=$1 AND deleted_at IS NOT NULL`, [id])) > 0;
+}
+async function purgeOldTrash(daysOld = 30) {
+  // Permanently delete tasks soft-deleted more than `daysOld` days ago
+  const cutoff = new Date(Date.now() - daysOld * 86400_000).toISOString();
+  return exec(`DELETE FROM tasks WHERE deleted_at IS NOT NULL AND deleted_at < $1`, [cutoff]);
+}
+
+// ===== Polls =====
+async function listPolls({ includeClosed = true } = {}) {
+  const where = includeClosed ? '' : 'WHERE p.closed = FALSE';
+  const polls = await q(`
+    SELECT p.*, m.name AS creator_name, m.color AS creator_color,
+           g.name AS group_name, g.color AS group_color,
+           (SELECT COUNT(*)::int FROM poll_votes v WHERE v.poll_id = p.id) AS vote_count
+    FROM polls p
+    LEFT JOIN members m     ON m.id = p.created_by
+    LEFT JOIN task_groups g ON g.id = p.group_id
+    ${where}
+    ORDER BY p.created_at DESC
+  `);
+  return polls.map(p => ({ ...p, options: _safeParse(p.options, []) }));
+}
+async function getPoll(id) {
+  const p = await q1(`SELECT * FROM polls WHERE id=$1`, [id]);
+  if (!p) return null;
+  p.options = _safeParse(p.options, []);
+  // Tally votes
+  const votes = await q(`SELECT member_id, option_indices FROM poll_votes WHERE poll_id=$1`, [id]);
+  const tally = p.options.map(() => 0);
+  let voters = 0;
+  const myVote = {};
+  for (const v of votes) {
+    const arr = _safeParse(v.option_indices, []);
+    voters++;
+    for (const idx of arr) if (idx >= 0 && idx < tally.length) tally[idx]++;
+    myVote[v.member_id] = arr;
+  }
+  return { ...p, tally, voter_count: voters, votes_by_member: myVote };
+}
+async function createPoll({ id, question, options, multi_choice, anonymous, created_by, group_id, expires_at }) {
+  const now = nowIso();
+  const opts = JSON.stringify(Array.isArray(options) ? options.map(String).slice(0, 20) : []);
+  await exec(
+    `INSERT INTO polls (id, question, options, multi_choice, anonymous, created_by, group_id, expires_at, closed, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,FALSE,$9)`,
+    [id, String(question || '').slice(0, 500), opts, !!multi_choice, !!anonymous, created_by, group_id || null, expires_at || null, now]
+  );
+  return getPoll(id);
+}
+async function closePoll(id) {
+  return (await exec(`UPDATE polls SET closed=TRUE WHERE id=$1`, [id])) > 0;
+}
+async function deletePoll(id) {
+  return (await exec(`DELETE FROM polls WHERE id=$1`, [id])) > 0;
+}
+async function votePoll(pollId, memberId, optionIndices) {
+  const arr = Array.isArray(optionIndices) ? optionIndices.map(n => +n).filter(Number.isFinite) : [];
+  const now = nowIso();
+  await exec(
+    `INSERT INTO poll_votes (poll_id, member_id, option_indices, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$4)
+     ON CONFLICT (poll_id, member_id)
+     DO UPDATE SET option_indices=EXCLUDED.option_indices, updated_at=EXCLUDED.updated_at`,
+    [pollId, memberId, JSON.stringify(arr), now]
+  );
+  return getPoll(pollId);
+}
+
+function _safeParse(s, fallback) {
+  try { return JSON.parse(s || ''); } catch { return fallback; }
+}
+
 async function reset() {
   // Single statement; all CASCADE-truncated together
   await pool.query(`TRUNCATE TABLE
@@ -2038,4 +2218,7 @@ module.exports = {
   getStats, getPointLedger, reset,
   listWhiteboards, createWhiteboard, getWhiteboard, updateWhiteboardCanvas, deleteWhiteboard,
   listRecordings, getRecording, createRecording, updateRecording, deleteRecording,
+  listTaskComments, getComment, createComment, updateComment, deleteComment,
+  listTrashedTasks, softDeleteTask, restoreTask, purgeTask, purgeOldTrash,
+  listPolls, getPoll, createPoll, closePoll, deletePoll, votePoll,
 };

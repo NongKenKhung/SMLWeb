@@ -501,6 +501,28 @@
     }
     .aud-transcript-retry:hover { background:#334155; color:#e2e8f0; }
 
+    /* AI summary block — sits below the transcript */
+    .aud-summary {
+      grid-column: 1 / -1;
+      background:#1e1b4b; border:1px solid #3730a3; border-radius:.35rem;
+      padding:.5rem .65rem; margin-top:.25rem;
+      font-size:.78rem; line-height:1.55; color:#e0e7ff;
+    }
+    .aud-summary-row { display:flex; align-items:flex-start; gap:.5rem; }
+    .aud-summary-text { flex:1; word-break: break-word; }
+    .aud-summary-text:empty::before { content:'— ยังไม่มีสรุป —'; color:#818cf8; }
+    .aud-summary-status {
+      flex-shrink:0; font-size:.6rem; font-family:'JetBrains Mono', monospace;
+      padding:.1rem .4rem; border-radius:.2rem;
+    }
+    .aud-summary-status.pending    { background:#1e293b; color:#94a3b8; }
+    .aud-summary-status.processing { background:#3730a3; color:#c7d2fe; animation: aud-pulse 1.2s ease-in-out infinite; }
+    .aud-summary-status.done       { background:#3730a3; color:#a5b4fc; }
+    .aud-summary-status.error      { background:#7f1d1d; color:#fecaca; cursor:help; }
+    .aud-summary-status.skipped    { background:#3f3f46; color:#a1a1aa; }
+    .aud-actions { margin:.5rem 0 0; padding-left:1.1rem; color:#c7d2fe; font-size:.75rem; }
+    .aud-actions li { margin:.15rem 0; }
+
     /* Environment warning banner (HTTPS, MediaRecorder support, etc) */
     .aud-env-warn {
       background:#451a03; border:1px solid #b45309; color:#fde68a;
@@ -3747,12 +3769,12 @@ async function audLoadClips() {
 // transcription so the UI status flips to 'done' without a manual refresh.
 let _audPollTimer = null;
 function audMaybeStartPolling() {
-  const pending = _audClips.some(c =>
-    c.transcript_status === 'pending' || c.transcript_status === 'processing'
-  );
+  const isPending = (c) =>
+    c.transcript_status === 'pending'  || c.transcript_status === 'processing' ||
+    c.summary_status    === 'pending'  || c.summary_status    === 'processing';
+  const pending = _audClips.some(isPending);
   if (pending && !_audPollTimer) {
     _audPollTimer = setInterval(async () => {
-      // Stop polling if user has navigated away (no point refreshing offscreen UI)
       if (!document.getElementById('panel-whiteboard')?.classList.contains('active') ||
           document.getElementById('wb-sub-audio')?.style.display === 'none') {
         clearInterval(_audPollTimer); _audPollTimer = null; return;
@@ -3765,10 +3787,10 @@ function audMaybeStartPolling() {
           audRenderClips();
         }
       } catch {}
-      if (!_audClips.some(c => c.transcript_status === 'pending' || c.transcript_status === 'processing')) {
+      if (!_audClips.some(isPending)) {
         clearInterval(_audPollTimer); _audPollTimer = null;
       }
-    }, 3000);
+    }, 4000);
   } else if (!pending && _audPollTimer) {
     clearInterval(_audPollTimer); _audPollTimer = null;
   }
@@ -4018,6 +4040,37 @@ function audToggleShowAll(checked) {
   audLoadClips();
 }
 
+function audSummaryHtml(c) {
+  const SUM_LBL = { pending: '⏳ รอ AI', processing: '🤖 AI กำลังสรุป', done: '✨ สรุปแล้ว', error: '❌ ผิดพลาด', skipped: '— ปิด AI' };
+  const status = c.summary_status || 'pending';
+  // Don't render the summary block if both transcript and summary are missing
+  if (!c.transcript && status === 'pending') return '';
+  let actions = [];
+  try { actions = JSON.parse(c.action_items || '[]'); } catch {}
+  const showRetry = status === 'error' || (status === 'pending' && c.transcript) || status === 'skipped';
+  return `
+    <div class="aud-summary">
+      <div class="aud-summary-row">
+        <span class="aud-summary-status ${esc(status)}" title="${esc(c.summary_error || '')}">${esc(SUM_LBL[status] || status)}</span>
+        <div class="aud-summary-text">${esc(c.summary || '')}</div>
+        ${showRetry ? `<button class="aud-transcript-retry" onclick="audRetrySummary('${esc(c.id)}')" title="สรุปใหม่ด้วย AI">🔄</button>` : ''}
+      </div>
+      ${actions.length ? `<ul class="aud-actions">${actions.map(a => `<li>☐ ${esc(a)}</li>`).join('')}</ul>` : ''}
+    </div>`;
+}
+
+async function audRetrySummary(id) {
+  try {
+    const r = await apiFetch('POST', `/api/recordings/${id}/summarise`);
+    if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || 'retry failed');
+    const c = _audClips.find(x => x.id === id);
+    if (c) { c.summary_status = 'processing'; c.summary_error = ''; audRenderClips(); }
+    setTimeout(audLoadClips, 3000);
+    setTimeout(audLoadClips, 10000);
+    setTimeout(audLoadClips, 30000);
+  } catch (e) { toast('Retry ล้มเหลว: ' + e.message, 'error'); }
+}
+
 async function audRetryTranscribe(id) {
   try {
     const r = await apiFetch('POST', `/api/recordings/${id}/transcribe`);
@@ -4077,6 +4130,7 @@ function audRenderClips() {
           <div class="aud-transcript-text">${esc(c.transcript || '')}</div>
           ${(status === 'error' || status === 'pending') ? `<button class="aud-transcript-retry" onclick="audRetryTranscribe('${esc(c.id)}')" title="ถอดเสียงใหม่">🔄</button>` : ''}
         </div>
+        ${audSummaryHtml(c)}
       `}`;
     list.appendChild(el);
   }
