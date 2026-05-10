@@ -57,6 +57,30 @@
     .adm-badge { font-size: .62rem; font-weight: 700; background: #fbbf24; color: #1e293b; padding: .1rem .38rem; border-radius: 99px; }
     #hdr-clock { font-family: 'JetBrains Mono', monospace; font-size: .72rem; color: #475569; }
 
+    /* Real-time status indicator (auto-connects on auth) */
+    #hdr-rt {
+      display: none; align-items: center; gap: .35rem;
+      background: #0f172a; border: 1px solid #334155; border-radius: 99px;
+      padding: .2rem .55rem; font-size: .68rem; color: #94a3b8;
+      font-family: 'JetBrains Mono', monospace; letter-spacing: .03em;
+    }
+    #hdr-rt.show { display: inline-flex; }
+    .hdr-rt-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #475569; flex-shrink: 0;
+      box-shadow: 0 0 0 0 rgba(16,185,129,0);
+      transition: background-color .2s;
+    }
+    #hdr-rt.live  .hdr-rt-dot { background: #10b981; animation: hdr-rt-pulse 2s infinite; }
+    #hdr-rt.warn  .hdr-rt-dot { background: #f59e0b; }
+    #hdr-rt.dead  .hdr-rt-dot { background: #ef4444; }
+    #hdr-rt.live  { color: #cbd5e1; }
+    @keyframes hdr-rt-pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(16,185,129,0.55); }
+      70%  { box-shadow: 0 0 0 5px rgba(16,185,129,0); }
+      100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+    }
+
     /* ── Layout ── */
     #layout { display: flex; flex: 1; overflow: hidden; }
 
@@ -276,129 +300,6 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #334155; border-radius: 99px; }
     ::-webkit-scrollbar-thumb:hover { background: #475569; }
-
-    /* ─────────────── SITE LAYOUT EDITOR (visual 12-col grid) ─────────────── */
-    /* The editor's center pane mirrors the real page's grid so what admin sees
-       is what users get. Cards are draggable + horizontally resizable. */
-    .lyt-section-card { padding: .85rem; }
-    .lyt-section-hdr { display:flex; align-items:center; gap:.5rem; margin-bottom:.55rem; font-size:.78rem; color:#cbd5e1; }
-    .lyt-section-hdr .badge { font-size:.6rem; background:#1e293b; padding:.1rem .4rem; border-radius:.25rem; color:#94a3b8; }
-
-    .lyt-canvas {
-      display: grid; grid-template-columns: repeat(12, minmax(0, 1fr));
-      grid-auto-rows: 4px;            /* tiny row unit so heights pack tightly */
-      grid-auto-flow: row dense;      /* fill gaps so narrow widgets sit beside tall ones */
-      gap: .55rem; padding: .65rem; background: #020617;
-      border: 1px dashed #1e293b; border-radius: .55rem;
-      min-height: 4rem;
-      align-items: stretch;
-    }
-    .lyt-card {
-      grid-column: span 12; /* set inline per item */
-      display: flex; flex-direction: column; gap: .4rem;
-      padding: .55rem .65rem; background: #0b1220; border: 1px solid #1e293b;
-      border-radius: .45rem; transition: background .12s, border-color .12s, transform .1s;
-      cursor: default; position: relative; overflow: hidden;
-    }
-    .lyt-card:hover { background: #0f172a; border-color: #334155; }
-    .lyt-card.dragging { opacity: .35; transform: scale(.97); }
-    .lyt-card.drop-before { box-shadow: inset 4px 0 0 0 var(--accent); }
-    .lyt-card.drop-after  { box-shadow: inset -4px 0 0 0 var(--accent); }
-    .lyt-card.is-hidden { opacity: .45; background: #0a0f1d; }
-    .lyt-card.is-hidden .lyt-label { text-decoration: line-through; color: #64748b; }
-
-    .lyt-row1 { display:flex; align-items:center; gap:.45rem; }
-    .lyt-grip { cursor: grab; color: #475569; font-size: 1.05rem; user-select: none; flex-shrink:0; }
-    .lyt-grip:active { cursor: grabbing; }
-    .lyt-grip:hover { color: #94a3b8; }
-    .lyt-chk { width: 1rem; height: 1rem; cursor: pointer; accent-color: var(--accent); flex-shrink:0; }
-    .lyt-label { flex:1; font-size:.78rem; color: #e2e8f0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .lyt-w-badge {
-      font-size: .62rem; font-family: 'JetBrains Mono', monospace; color: #fbbf24;
-      background: #422006; padding: .08rem .35rem; border-radius: .2rem; flex-shrink:0;
-    }
-    .lyt-h-badge {
-      font-size: .58rem; font-family: 'JetBrains Mono', monospace; color: #86efac;
-      background: #064e3b; padding: .08rem .35rem; border-radius: .2rem; flex-shrink:0;
-    }
-    .lyt-h-presets { display:flex; gap:.15rem; flex-wrap:wrap; margin-top:.15rem; }
-    .lyt-h-preset {
-      background:#020617; color:#64748b; border:1px solid #1e293b;
-      padding:.05rem .35rem; border-radius:.2rem; cursor:pointer;
-      font-size:.58rem; font-family:'JetBrains Mono', monospace;
-    }
-    .lyt-h-preset:hover { color:#cbd5e1; border-color:#334155; }
-    .lyt-h-preset.on { background:#064e3b; color:#a7f3d0; border-color:#10b981; }
-    .lyt-row2 { display:flex; align-items:center; gap:.25rem; }
-    .lyt-id {
-      font-size:.6rem; color:#475569; font-family:'JetBrains Mono', monospace;
-      padding:.05rem .3rem; background:#020617; border-radius:.2rem;
-      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1;
-    }
-    .lyt-w-controls { display:flex; gap:.15rem; flex-shrink:0; }
-    .lyt-w-controls button {
-      background:#1e293b; color:#94a3b8; border:1px solid #334155;
-      width:1.4rem; height:1.4rem; border-radius:.25rem; cursor:pointer;
-      display:flex; align-items:center; justify-content:center; font-size:.65rem;
-      font-family:'JetBrains Mono', monospace;
-    }
-    .lyt-w-controls button:hover:not(:disabled) { background:#334155; color:#e2e8f0; }
-    .lyt-w-controls button:disabled { opacity:.3; cursor:not-allowed; }
-
-    /* Width preset chips */
-    .lyt-w-presets { display:flex; gap:.15rem; flex-wrap:wrap; }
-    .lyt-w-preset {
-      background:#020617; color:#64748b; border:1px solid #1e293b;
-      padding:.05rem .35rem; border-radius:.2rem; cursor:pointer;
-      font-size:.6rem; font-family:'JetBrains Mono', monospace;
-    }
-    .lyt-w-preset:hover { color:#cbd5e1; border-color:#334155; }
-    .lyt-w-preset.on { background:#3730a3; color:#e0e7ff; border-color:#6366f1; }
-
-    /* Resize handle (right edge of card) */
-    .lyt-resize-handle {
-      position:absolute; right:0; top:0; bottom:0; width:6px;
-      cursor: ew-resize; background: transparent;
-      transition: background .1s;
-    }
-    .lyt-resize-handle:hover, .lyt-card.resizing .lyt-resize-handle { background: var(--accent); }
-    .lyt-card.resizing { border-color: var(--accent); user-select:none; }
-
-    /* Tabs editor — simpler, single column */
-    .lyt-tabs-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:.3rem; }
-    .lyt-tab-row {
-      display:flex; align-items:center; gap:.55rem;
-      padding:.45rem .65rem; background:#0b1220; border:1px solid #1e293b; border-radius:.4rem;
-    }
-    .lyt-tab-row:hover { background:#0f172a; border-color:#334155; }
-    .lyt-tab-row.dragging { opacity:.35; }
-    .lyt-tab-row.drop-before { border-top: 2px solid var(--accent); }
-    .lyt-tab-row.drop-after  { border-bottom: 2px solid var(--accent); }
-    .lyt-tab-row.is-hidden .lyt-label { text-decoration:line-through; color:#64748b; }
-    .lyt-arrows { display:flex; gap:.15rem; flex-shrink:0; }
-    .lyt-arrows button {
-      background:#1e293b; color:#94a3b8; border:1px solid #334155;
-      width:1.4rem; height:1.4rem; border-radius:.25rem; cursor:pointer;
-      display:flex; align-items:center; justify-content:center; font-size:.65rem;
-    }
-    .lyt-arrows button:hover:not(:disabled) { background:#334155; color:#e2e8f0; }
-    .lyt-arrows button:disabled { opacity:.3; cursor:not-allowed; }
-
-    /* "Unsaved" indicator */
-    #layout-save-btn.dirty {
-      background:#f59e0b; color:#000; animation: pulse-dirty 1.5s ease-in-out infinite;
-    }
-    @keyframes pulse-dirty { 0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,.5); } 50% { box-shadow: 0 0 0 6px rgba(245,158,11,0); } }
-
-    /* Mini ruler showing 12 columns */
-    .lyt-ruler {
-      display:grid; grid-template-columns:repeat(12,minmax(0,1fr));
-      gap:.55rem; padding: 0 .65rem; margin-top:.25rem;
-    }
-    .lyt-ruler span {
-      font-size:.55rem; color:#475569; text-align:center;
-      font-family:'JetBrains Mono', monospace;
-    }
 
     /* ─────────────── WHITEBOARD SUB-TABS ─────────────── */
     .wb-subtabs {
@@ -740,26 +641,6 @@
       background:#3730a3; color:#e0e7ff; border-color:#6366f1;
     }
 
-    /* Live preview iframe — scaled-down view of the actual main app */
-    .lyt-preview-wrap {
-      position:relative; width:100%;
-      height: 580px;
-      overflow: auto;
-      border:1px solid #334155; border-radius:.5rem;
-      background:#cbd5e1;
-    }
-    .lyt-preview-frame {
-      border:0; background:#fff;
-      transform-origin: 0 0;
-      /* width/height/transform set in JS based on zoom + viewport */
-    }
-    .lyt-preview-loading {
-      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-      color:#475569; font-size:.85rem; pointer-events:none;
-      background:rgba(241,245,249,.6); transition:opacity .2s;
-    }
-    .lyt-preview-loading.gone { opacity:0; }
-
     /* ─────────────── ROOM DESIGNER ─────────────── */
     .rm-input {
       background:#020617; color:#e2e8f0; border:1px solid #1e293b;
@@ -1068,6 +949,9 @@
       <span id="hdr-name">—</span>
       <span class="adm-badge">ADMIN</span>
     </div>
+    <span id="hdr-rt" title="Real-time event stream">
+      <span class="hdr-rt-dot"></span><span id="hdr-rt-label">offline</span>
+    </span>
     <span id="hdr-clock"></span>
   </div>
 </header>
@@ -1088,13 +972,13 @@
     <button class="nav-btn" data-pnl="components"><span class="nav-icon">🔬</span>Component Lab</button>
     <button class="nav-btn" data-pnl="room"><span class="nav-icon">📐</span>Room Designer</button>
     <button class="nav-btn" data-pnl="about"><span class="nav-icon">📖</span>About Editor</button>
+    <button class="nav-btn" data-pnl="files"><span class="nav-icon">📂</span>Files Browser</button>
     <button class="nav-btn" data-pnl="ledger"><span class="nav-icon">💰</span>Point Ledger</button>
     <button class="nav-btn" data-pnl="log"><span class="nav-icon">📜</span>Activity Log</button>
     <button class="nav-btn" data-pnl="notes"><span class="nav-icon">📝</span>Dev Notes</button>
 
     <div class="nav-sep"></div>
     <div class="sec-lbl">Admin</div>
-    <button class="nav-btn" data-pnl="layout"><span class="nav-icon">🎛️</span>Site Layout</button>
     <button class="nav-btn" data-pnl="settings"><span class="nav-icon">🔧</span>Settings</button>
     <button class="nav-btn" data-pnl="members"><span class="nav-icon">👥</span>Members</button>
 
@@ -1590,6 +1474,51 @@ console.log('Component loaded');</textarea>
       </div>
     </div>
 
+    <!-- ═══ FILES BROWSER (admin) ═══ -->
+    <div class="panel" id="panel-files">
+      <div class="panel-hdr">
+        <span class="panel-ico">📂</span>
+        <div>
+          <div class="panel-title">Files Browser</div>
+          <div class="panel-sub">เรียกดูทุกโฟลเดอร์ใน <code class="lyt-id">uploads/</code> · admin only · read-only</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-ttl" style="justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+          <div class="btn-row" style="gap:.35rem;flex-wrap:wrap;align-items:center">
+            <span style="color:#94a3b8;font-size:.7rem">📂</span>
+            <span id="fb-breadcrumb" style="font-family:'JetBrains Mono', monospace;font-size:.78rem;color:#cbd5e1">/</span>
+          </div>
+          <div class="btn-row" style="gap:.3rem">
+            <button class="btn btn-ghost btn-sm" onclick="fbReload()">🔄 Reload</button>
+            <button class="btn btn-ghost btn-sm" onclick="fbGoUp()">⬆ Up</button>
+            <button class="btn btn-ghost btn-sm" onclick="fbGoRoot()">🏠 Root</button>
+          </div>
+        </div>
+        <div id="fb-status" style="font-size:.7rem;color:#64748b;margin-top:.4rem">เปิด tab นี้แล้วระบบจะโหลดให้</div>
+      </div>
+
+      <div class="card">
+        <div class="card-ttl">📋 Entries <span class="card-ttl-r" style="font-size:.65rem;color:#64748b" id="fb-count"></span></div>
+        <div class="pl-table-wrap">
+          <table class="pl-table" id="fb-table">
+            <thead>
+              <tr>
+                <th style="width:1.5rem"></th>
+                <th>📛 Name</th>
+                <th class="num">Size</th>
+                <th>Modified</th>
+                <th style="width:9rem">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="fb-tbody">
+              <tr><td colspan="5" style="text-align:center;color:#64748b;padding:2rem">— กดเปิด tab —</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ═══ ABOUT EDITOR ═══ -->
     <div class="panel" id="panel-about">
       <div class="panel-hdr">
@@ -1696,96 +1625,6 @@ console.log('Component loaded');</textarea>
       </div>
     </div>
 
-    <!-- ═══ SITE LAYOUT (Visual Editor) ═══ -->
-    <div class="panel" id="panel-layout">
-      <div class="panel-hdr">
-        <span class="panel-ico">🎛️</span>
-        <div>
-          <div class="panel-title">Site Layout</div>
-          <div class="panel-sub">จัด layout หน้าหลักแบบ 12-col grid · ลาก drag-drop · ปรับขนาด · apply ทันทีให้ทุกผู้ใช้</div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-ttl" style="justify-content:space-between">
-          <span>📦 Status</span>
-          <div class="btn-row">
-            <button class="btn btn-ghost btn-sm" onclick="layoutReload()">🔄 Reload</button>
-            <button class="btn btn-ghost btn-sm" onclick="layoutResetDefaults()">↺ Reset to defaults</button>
-            <button class="btn btn-primary btn-sm" id="layout-save-btn" onclick="layoutSave()">💾 บันทึก</button>
-          </div>
-        </div>
-        <div id="layout-status" style="font-size:.78rem;color:#64748b">กำลังโหลด...</div>
-        <div style="font-size:.7rem;color:#475569;margin-top:.4rem;line-height:1.55">
-          <b style="color:#cbd5e1">วิธีใช้:</b>
-          ⋮⋮ <b>ลาก</b> = ย้ายตำแหน่ง · ☐ <b>checkbox</b> = แสดง/ซ่อน ·
-          <code style="color:#fbbf24">−/+</code> = ลด/เพิ่มขนาด 1 col ·
-          <b>ขอบขวา</b> = ลากเพื่อปรับขนาด · ตัวเลข <b>3/4/6/8/12</b> = ขนาดสำเร็จรูป
-        </div>
-      </div>
-
-      <!-- Tabs section -->
-      <div class="card">
-        <div class="card-ttl">📑 แท็บใน Sidebar / Top Nav</div>
-        <ul id="layout-tabs-list" class="lyt-tabs-list"></ul>
-      </div>
-
-      <!-- Widgets — rendered dynamically (one card per section) -->
-      <div id="layout-widgets-root"></div>
-
-      <!-- Edit-on-Preview — iframe runs in ?edit=1 mode; widgets sprout
-           drag/resize/hide handles. Every change posts back here, we update
-           _layoutDraft, render the schematic above, and push the new config
-           back so the iframe re-renders instantly. Save commits to server. -->
-      <div class="card">
-        <div class="card-ttl" style="justify-content:space-between;flex-wrap:wrap;gap:.4rem">
-          <span>✏️ Edit on Preview — แก้ layout บนหน้าจริง</span>
-          <div class="btn-row" style="gap:.3rem;flex-wrap:wrap">
-            <select id="lyt-preview-sec" class="rm-input" title="เลือกหน้าที่จะ preview">
-              <option value="home">🏠 Home</option>
-              <option value="tasks">📋 Todo</option>
-              <option value="calendar" selected>📅 Calendar</option>
-              <option value="people">👥 People</option>
-              <option value="summary">📊 Summary</option>
-              <option value="profile">👤 Profile</option>
-              <option value="whiteboard">🎨 Whiteboard</option>
-            </select>
-            <select id="lyt-preview-zoom" class="rm-input" title="ระดับ zoom">
-              <option value="0.35">35%</option>
-              <option value="0.45" selected>45%</option>
-              <option value="0.55">55%</option>
-              <option value="0.7">70%</option>
-              <option value="1">100%</option>
-            </select>
-            <select id="lyt-preview-vw" class="rm-input" title="ความกว้าง viewport ที่จำลอง (เพื่อทดสอบ responsive)">
-              <option value="1440">🖥️ Desktop 1440</option>
-              <option value="1280" selected>🖥️ Desktop 1280</option>
-              <option value="1024">📱 iPad land 1024</option>
-              <option value="820">📱 iPad portrait 820</option>
-              <option value="430">📱 Mobile 430</option>
-            </select>
-            <button class="btn btn-ghost btn-sm" onclick="lytReloadPreview()" title="โหลดใหม่">🔄</button>
-            <button class="btn btn-ghost btn-sm" onclick="lytOpenPreviewFull()" title="เปิดหน้าจริงใน tab ใหม่">↗</button>
-          </div>
-        </div>
-        <div class="lyt-preview-wrap" id="lyt-preview-wrap">
-          <iframe id="lyt-preview" class="lyt-preview-frame" src="about:blank" loading="lazy" title="Live preview"></iframe>
-          <div class="lyt-preview-loading" id="lyt-preview-loading">⏳ กำลังโหลด...</div>
-        </div>
-        <div style="font-size:.66rem;color:#475569;margin-top:.4rem;line-height:1.55">
-          💡 hover widget → ⋮⋮ ลาก = ย้าย · ✕ = ซ่อน · ขอบขวา = ปรับกว้าง · ขอบล่าง = ปรับสูง · <b style="color:#fbbf24">บันทึก</b> ด้านบน = commit เข้า server
-        </div>
-      </div>
-
-      <div class="card" style="background:#1e3a8a;border-color:#3b82f6">
-        <div style="font-size:.75rem;color:#dbeafe;line-height:1.6">
-          💡 <b style="color:#fff">เคล็ดลับ:</b>
-          แต่ละ widget มีความกว้าง 1-12 col · ผลรวมในแถวจะไม่เกิน 12 widget ที่ทำให้ผลรวมเกินจะถูก wrap ลงแถวใหม่อัตโนมัติ ·
-          มือถือ (จอ &lt;768px) จะแสดงทุก widget เต็มจอเป็น stack ลงแนวตั้งเสมอ
-        </div>
-      </div>
-    </div>
-
     <!-- ═══ SETTINGS ═══ -->
     <div class="panel" id="panel-settings">
       <div class="panel-hdr">
@@ -1846,6 +1685,8 @@ console.log('Component loaded');</textarea>
 /* ─── State ─── */
 let _token = null, _user = null;
 let _sseSource = null;
+let _rtSource = null;          // persistent SSE connection just for the header indicator
+let _rtRetryTimer = null;
 let _reqHist = [];
 let _membersData = [];
 let _settingsData = {};
@@ -1856,7 +1697,13 @@ const MC   = { GET:'m-get', POST:'m-post', PUT:'m-put', DELETE:'m-delete', PATCH
 
 /* ─── Helpers ─── */
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function fmtDate(s) { if(!s)return'—'; try{ return new Date(s).toLocaleDateString('th-TH'); }catch{ return s; } }
+function fmtDate(s) {
+  if (!s) return '—';
+  try {
+    const d = new Date(s); if (isNaN(d)) return s;
+    return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+  } catch { return s; }
+}
 function now() { return new Date().toLocaleTimeString('th-TH',{hour12:false}); }
 
 function toast(msg, type='') {
@@ -1901,6 +1748,7 @@ async function initAuth() {
     // module that needs fixing — the other panels still work.
     const safe = (label, fn) => { try { fn(); } catch (e) { console.error(`[dev] ${label} failed:`, e); } };
     safe('startClock',      startClock);
+    safe('startRtIndicator', startRtIndicator);
     safe('initSidebar',     initSidebar);
     safe('initApiPanel',    initApiPanel);
     safe('initCompLab',     initCompLab);
@@ -1920,9 +1768,55 @@ async function initAuth() {
 /* ─── Clock ─── */
 function startClock() {
   const el = document.getElementById('hdr-clock');
-  function tick() { el.textContent = new Date().toLocaleDateString('th-TH') + ' ' + new Date().toLocaleTimeString('th-TH',{hour12:false}); }
+  function tick() {
+    const d = new Date();
+    const date = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+    el.textContent = date + ' ' + d.toLocaleTimeString('en-GB', { hour12: false });  // HH:MM:SS
+  }
   tick(); setInterval(tick, 1000);
 }
+
+/* ─── Real-time indicator (persistent SSE for header) ───
+   Auto-connects after auth; auto-reconnects with backoff on error.
+   Independent of the SSE Log panel's _sseSource so the user can clear that
+   panel without losing the header indicator. */
+function setRtState(state, label) {
+  const chip = document.getElementById('hdr-rt');
+  if (!chip) return;
+  chip.classList.remove('live','warn','dead');
+  if (state) chip.classList.add(state);
+  chip.classList.add('show');
+  const lab = document.getElementById('hdr-rt-label');
+  if (lab && label) lab.textContent = label;
+}
+function startRtIndicator() {
+  if (!_token) return;
+  stopRtIndicator();
+  setRtState('warn', 'connecting…');
+  try {
+    _rtSource = new EventSource(`/api/events?token=${encodeURIComponent(_token)}`);
+    _rtSource.onopen  = () => { setRtState('live', 'realtime'); };
+    _rtSource.onerror = () => {
+      setRtState('dead', 'reconnecting…');
+      // EventSource retries automatically, but on hard failure (token revoked) it stays in
+      // CLOSED. We schedule one explicit retry so transient blips recover quickly.
+      if (_rtSource && _rtSource.readyState === EventSource.CLOSED) {
+        clearTimeout(_rtRetryTimer);
+        _rtRetryTimer = setTimeout(startRtIndicator, 5000);
+      }
+    };
+    // No onmessage handler — header indicator only cares about connection liveness.
+    // The SSE Log panel uses its own _sseSource for event payloads.
+  } catch (err) {
+    console.warn('[dev] rt indicator failed', err);
+    setRtState('dead', 'unavailable');
+  }
+}
+function stopRtIndicator() {
+  clearTimeout(_rtRetryTimer);
+  if (_rtSource) { try { _rtSource.close(); } catch {} _rtSource = null; }
+}
+window.addEventListener('beforeunload', stopRtIndicator);
 
 /* ─── Sidebar nav ─── */
 function initSidebar() {
@@ -1936,553 +1830,21 @@ function initSidebar() {
       if (panel) panel.classList.add('active');
       // Set main overflow for whiteboard
       document.getElementById('main').style.overflowY = id === 'whiteboard' ? 'hidden' : 'auto';
-      // Lazy-load Layout Editor on first open
-      if (id === 'layout' && !_layoutLoaded) layoutReload();
       // Lazy-load Room Designer on first open
       if (id === 'room' && !_rmInited) { _rmInited = true; rmInit(); }
       // Lazy-load About Editor on first open
       if (id === 'about' && !_abInited) { _abInited = true; abInit(); }
       // Lazy-load Point Ledger on first open
       if (id === 'ledger' && !_plInited) { _plInited = true; plInit(); }
+      // Lazy-load Files Browser on first open
+      if (id === 'files' && !_fbInited) { _fbInited = true; fbInit(); }
     });
   });
 }
 let _rmInited = false;
 let _abInited = false;
 let _plInited = false;
-
-/* ════════════════════════════════════════════
-   SITE LAYOUT EDITOR
-   ──────────────────────────────────────────
-   Lets admin toggle visibility & reorder tabs/widgets in the main SPA.
-   Server endpoint: GET/PUT /api/ui-config, POST /api/ui-config/reset
-   Edits live in `_layoutDraft` until "บันทึก" pushes them up.
-════════════════════════════════════════════ */
-let _layoutLoaded = false;
-let _layoutDraft = null;     // working copy (mutated by drag/checkbox)
-let _layoutServer = null;    // last known server state (for "dirty" check)
-
-async function layoutReload() {
-  const status = document.getElementById('layout-status');
-  if (status) status.textContent = '⏳ กำลังโหลด...';
-  try {
-    const r = await apiFetch('GET', '/api/ui-config');
-    const cfg = await r.json();
-    _layoutServer = JSON.parse(JSON.stringify(cfg));
-    _layoutDraft  = JSON.parse(JSON.stringify(cfg));
-    _layoutLoaded = true;
-    layoutRender();
-    layoutSetDirty(false);
-    if (status) status.textContent = `✅ โหลดสำเร็จ · v${cfg.version || 1} · ${cfg.tabs?.length || 0} tabs · ${Object.keys(cfg.widgets || {}).length} sections`;
-    lytInitPreviewIfNeeded();
-  } catch (e) {
-    if (status) status.textContent = '❌ ' + e.message;
-    toast('โหลด config ล้มเหลว: ' + e.message, 'error');
-  }
-}
-
-/* ─── Live preview (iframe of the real main app) ─────────────────────────── */
-let _lytPreviewInited = false;
-function lytInitPreviewIfNeeded() {
-  if (_lytPreviewInited) return;
-  _lytPreviewInited = true;
-  document.getElementById('lyt-preview-sec').addEventListener('change', lytReloadPreview);
-  document.getElementById('lyt-preview-zoom').addEventListener('change', lytApplyPreviewSize);
-  document.getElementById('lyt-preview-vw').addEventListener('change', lytApplyPreviewSize);
-  // Fade out the loading overlay when iframe finishes loading
-  const f = document.getElementById('lyt-preview');
-  f.addEventListener('load', () => {
-    document.getElementById('lyt-preview-loading')?.classList.add('gone');
-  });
-  // First paint
-  setTimeout(lytReloadPreview, 100);
-}
-
-function lytApplyPreviewSize() {
-  const zoom = +document.getElementById('lyt-preview-zoom').value || 0.45;
-  const vw   = +document.getElementById('lyt-preview-vw').value   || 1280;
-  const wrap = document.getElementById('lyt-preview-wrap');
-  const f    = document.getElementById('lyt-preview');
-  if (!wrap || !f) return;
-  // Render iframe at the target viewport width, then scale down so it fits the wrap.
-  // Height is generous (1600 px) so the page can scroll if it's tall.
-  const vh = 1600;
-  f.style.width  = vw + 'px';
-  f.style.height = vh + 'px';
-  f.style.transform = `scale(${zoom})`;
-  // The wrap's scrollable area also needs to grow with the scaled iframe so
-  // both axes can scroll if the page extends past the visible region.
-  wrap.scrollTo({ top: 0, left: 0 });
-}
-
-function lytReloadPreview() {
-  const sec = document.getElementById('lyt-preview-sec').value || 'home';
-  const f   = document.getElementById('lyt-preview');
-  if (!f) return;
-  document.getElementById('lyt-preview-loading')?.classList.remove('gone');
-  lytApplyPreviewSize();
-  // edit=1 turns on the in-place editor handles inside the iframe
-  f.src = '/?edit=1#' + sec;
-}
-
-function lytOpenPreviewFull() {
-  const sec = document.getElementById('lyt-preview-sec').value || 'home';
-  window.open('/#' + sec, '_blank');
-}
-
-// Push the current draft into the preview iframe so it re-renders without saving.
-function lytPushDraftToPreview() {
-  const f = document.getElementById('lyt-preview');
-  if (!f || !_layoutDraft) return;
-  try { f.contentWindow.postMessage({ type: 'ui-config-push', config: _layoutDraft }, '*'); } catch {}
-}
-
-// Receive edits from the iframe and fold them into _layoutDraft.
-window.addEventListener('message', e => {
-  const m = e.data;
-  if (!m || typeof m !== 'object') return;
-  if (!_layoutDraft) return;
-  if (m.type === 'ui-edit-set') {
-    const list = _layoutDraft.widgets[m.section];
-    if (!Array.isArray(list)) return;
-    const item = list.find(w => w.id === m.widget);
-    if (!item || !m.patch) return;
-    Object.assign(item, m.patch);
-    layoutRender();
-    layoutCheckDirty();
-    lytPushDraftToPreview();
-    return;
-  }
-  if (m.type === 'ui-edit-reorder') {
-    const list = _layoutDraft.widgets[m.section];
-    if (!Array.isArray(list)) return;
-    const srcIdx = list.findIndex(w => w.id === m.dragId);
-    let dstIdx   = list.findIndex(w => w.id === m.dropId);
-    if (srcIdx < 0 || dstIdx < 0) return;
-    const [moved] = list.splice(srcIdx, 1);
-    if (m.after && dstIdx > srcIdx) dstIdx--;       // re-anchor after splice
-    if (m.after) dstIdx++;
-    list.splice(dstIdx, 0, moved);
-    layoutRender();
-    layoutCheckDirty();
-    lytPushDraftToPreview();
-    return;
-  }
-});
-
-async function layoutSave() {
-  if (!_layoutDraft) return toast('ยังไม่ได้โหลด config', 'error');
-  const btn = document.getElementById('layout-save-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ บันทึก...'; }
-  try {
-    const r = await apiFetch('PUT', '/api/ui-config', _layoutDraft);
-    if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || 'save failed');
-    const j = await r.json();
-    _layoutServer = JSON.parse(JSON.stringify(j.config));
-    _layoutDraft  = JSON.parse(JSON.stringify(j.config));
-    layoutRender();
-    layoutSetDirty(false);
-    toast('บันทึก layout สำเร็จ — apply ให้ทุก client แล้ว', 'success');
-  } catch (e) {
-    toast('บันทึกล้มเหลว: ' + e.message, 'error');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '💾 บันทึก'; }
-  }
-}
-
-async function layoutResetDefaults() {
-  if (!confirm('คืนค่า layout เป็นค่าเริ่มต้น? — การเปลี่ยนแปลงทั้งหมดจะหายและ apply ทันที')) return;
-  try {
-    const r = await apiFetch('POST', '/api/ui-config/reset');
-    if (!r.ok) throw new Error('reset failed');
-    const j = await r.json();
-    _layoutServer = JSON.parse(JSON.stringify(j.config));
-    _layoutDraft  = JSON.parse(JSON.stringify(j.config));
-    layoutRender();
-    layoutSetDirty(false);
-    toast('คืนค่า defaults แล้ว', 'success');
-  } catch (e) {
-    toast('reset ล้มเหลว: ' + e.message, 'error');
-  }
-}
-
-function layoutSetDirty(d) {
-  const btn = document.getElementById('layout-save-btn');
-  if (!btn) return;
-  btn.classList.toggle('dirty', d);
-  btn.textContent = d ? '💾 บันทึก *' : '💾 บันทึก';
-}
-function layoutCheckDirty() {
-  layoutSetDirty(JSON.stringify(_layoutDraft) !== JSON.stringify(_layoutServer));
-}
-
-/* ─── Render the whole editor ─────────────────────────────────────────────── */
-function layoutRender() {
-  if (!_layoutDraft) return;
-
-  // Tabs (top section — single column, just for ordering + visibility)
-  const tabsUl = document.getElementById('layout-tabs-list');
-  tabsUl.innerHTML = '';
-  _layoutDraft.tabs.forEach((t, i) =>
-    tabsUl.appendChild(layoutMakeTabRow(t, i, _layoutDraft.tabs.length))
-  );
-  layoutEnableTabsDnd(tabsUl);
-
-  // Widgets — one section card each, with a 12-col visual canvas inside
-  const root = document.getElementById('layout-widgets-root');
-  root.innerHTML = '';
-  const SECTION_LABEL = {
-    home:       '🏠 หน้า Home',
-    tasks:      '📋 หน้า Todo',
-    calendar:   '📅 หน้า Calendar',
-    people:     '👥 หน้า People',
-    summary:    '📊 หน้า Summary',
-    profile:    '👤 หน้า Profile',
-    whiteboard: '🎨 หน้า Whiteboard',
-  };
-  for (const sec of Object.keys(_layoutDraft.widgets || {})) {
-    const list = _layoutDraft.widgets[sec] || [];
-    const visibleCount = list.filter(w => w.visible !== false).length;
-    const card = document.createElement('div');
-    card.className = 'card lyt-section-card';
-    card.innerHTML = `
-      <div class="lyt-section-hdr">
-        <span style="font-size:.95rem">${esc(SECTION_LABEL[sec] || sec)}</span>
-        <span class="badge">section: ${esc(sec)}</span>
-        <span class="badge">${visibleCount}/${list.length} visible</span>
-      </div>
-      <div class="lyt-canvas" data-sec="${esc(sec)}"></div>
-      <div class="lyt-ruler">${Array.from({length:12}, (_,i) => `<span>${i+1}</span>`).join('')}</div>`;
-    root.appendChild(card);
-    const canvas = card.querySelector('.lyt-canvas');
-    list.forEach((w, i) => canvas.appendChild(layoutMakeWidgetCard(sec, w, i)));
-    layoutEnableCanvasDnd(canvas, sec);
-    layoutSetupMasonry(canvas);
-  }
-}
-
-// Mirror of the main-app masonry helper: measure each auto-height card's
-// natural content height and set its grid-row span to match. Without this,
-// widgets in `grid-auto-rows: 4px` collapse to ~4px and overlap each other.
-const _LYT_MASONRY = new WeakMap();
-function layoutSetupMasonry(canvas) {
-  const ROW = 4, GAP = 9;
-  const spanFor = (px) => Math.max(1, Math.ceil((px + GAP) / (ROW + GAP)));
-  const old = _LYT_MASONRY.get(canvas);
-  if (old) old.disconnect();
-
-  const lastH = new WeakMap();
-  const measure = (el) => {
-    if (el.dataset.lytExplicitH) return;     // explicit pixel — already set
-    const h = el.scrollHeight;
-    const last = lastH.get(el) || 0;
-    if (Math.abs(h - last) < 4) return;       // anti-loop
-    lastH.set(el, h);
-    el.style.gridRow = `span ${spanFor(h)}`;
-  };
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    canvas.querySelectorAll('.lyt-card').forEach(measure);
-  }));
-  const ro = new ResizeObserver(entries => {
-    for (const e of entries) measure(e.target);
-  });
-  canvas.querySelectorAll('.lyt-card').forEach(el => ro.observe(el));
-  _LYT_MASONRY.set(canvas, ro);
-}
-
-/* ─── Tab row (top list — drag to reorder, checkbox to hide) ──────────────── */
-function layoutMakeTabRow(tab, idx, total) {
-  const li = document.createElement('li');
-  li.className = 'lyt-tab-row' + (tab.visible === false ? ' is-hidden' : '');
-  li.draggable = true;
-  li.dataset.idx = idx;
-  li.innerHTML = `
-    <span class="lyt-grip" title="ลากเพื่อจัดเรียง">⋮⋮</span>
-    <input type="checkbox" class="lyt-chk" ${tab.visible === false ? '' : 'checked'} title="แสดง / ซ่อน">
-    <span class="lyt-label">${esc(tab.label || tab.id)}</span>
-    <code class="lyt-id">${esc(tab.id)}</code>
-    <span class="lyt-arrows">
-      <button data-act="up"   ${idx === 0 ? 'disabled' : ''} title="ขึ้น">▲</button>
-      <button data-act="down" ${idx === total - 1 ? 'disabled' : ''} title="ลง">▼</button>
-    </span>`;
-  li.querySelector('.lyt-chk').addEventListener('change', e => {
-    tab.visible = e.target.checked;
-    li.classList.toggle('is-hidden', !tab.visible);
-    layoutCheckDirty();
-  });
-  li.querySelectorAll('.lyt-arrows button').forEach(b => {
-    b.addEventListener('click', () => {
-      const j = _layoutDraft.tabs.indexOf(tab);
-      const k = b.dataset.act === 'up' ? j - 1 : j + 1;
-      if (k < 0 || k >= _layoutDraft.tabs.length) return;
-      [_layoutDraft.tabs[j], _layoutDraft.tabs[k]] = [_layoutDraft.tabs[k], _layoutDraft.tabs[j]];
-      layoutRender(); layoutCheckDirty();
-    });
-  });
-  return li;
-}
-
-function layoutEnableTabsDnd(ul) {
-  let srcIdx = null;
-  ul.querySelectorAll('.lyt-tab-row').forEach(row => {
-    row.addEventListener('dragstart', e => {
-      srcIdx = +row.dataset.idx; row.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      try { e.dataTransfer.setData('text/plain', 'tab:' + srcIdx); } catch {}
-    });
-    row.addEventListener('dragend', () => {
-      row.classList.remove('dragging');
-      ul.querySelectorAll('.drop-before,.drop-after').forEach(x => x.classList.remove('drop-before','drop-after'));
-    });
-    row.addEventListener('dragover', e => {
-      e.preventDefault(); e.dataTransfer.dropEffect = 'move';
-      ul.querySelectorAll('.drop-before,.drop-after').forEach(x => x.classList.remove('drop-before','drop-after'));
-      const r = row.getBoundingClientRect();
-      const after = (e.clientY - r.top) > r.height / 2;
-      row.classList.add(after ? 'drop-after' : 'drop-before');
-    });
-    row.addEventListener('drop', e => {
-      e.preventDefault();
-      let dst = +row.dataset.idx;
-      const r = row.getBoundingClientRect();
-      const after = (e.clientY - r.top) > r.height / 2;
-      if (after) dst++;
-      if (srcIdx == null) return;
-      if (dst > srcIdx) dst--;
-      if (dst === srcIdx) return;
-      const [moved] = _layoutDraft.tabs.splice(srcIdx, 1);
-      _layoutDraft.tabs.splice(dst, 0, moved);
-      layoutRender(); layoutCheckDirty();
-    });
-  });
-}
-
-/* ─── Widget card (inside the 12-col canvas) ──────────────────────────────── */
-const WIDTH_PRESETS  = [3, 4, 6, 8, 12];
-const HEIGHT_PRESETS = ['auto', 200, 300, 400, 500, 600, 800];
-
-// Layout-editor preview scale: 1 px in the live config ≈ this many preview px.
-// 0.4 keeps a 600 px calendar widget around 240 px tall in the editor — big
-// enough to read, small enough that the right-column stack still fits beside.
-const LYT_PREV_SCALE = 0.4;
-
-function layoutMakeWidgetCard(sec, item, idx) {
-  const w = _clampW(item.width);
-  const h = _clampH(item.height);
-  const card = document.createElement('div');
-  card.className = 'lyt-card' + (item.visible === false ? ' is-hidden' : '');
-  card.draggable = true;
-  card.dataset.idx = idx;
-  card.dataset.sec = sec;
-  card.style.gridColumn = `span ${w} / span ${w}`;
-
-  // Mirror the main app's masonry: explicit pixel heights translate into a
-  // proportional row-span here too, so the preview LOOKS like the real page.
-  // 'auto' falls through to the ResizeObserver in layoutSetupMasonry.
-  if (typeof h === 'number') {
-    const ROW = 4, GAP_PX = 9;             // matches .lyt-canvas grid-auto-rows + gap
-    const previewH = Math.max(60, Math.round(h * LYT_PREV_SCALE));
-    const span = Math.max(1, Math.ceil((previewH + GAP_PX) / (ROW + GAP_PX)));
-    card.style.gridRow = `span ${span} / span ${span}`;
-    card.style.minHeight = previewH + 'px';
-    card.dataset.lytExplicitH = String(previewH);
-  } else {
-    card.style.gridRow = 'span 1';   // observer will replace this with the real span
-    card.style.minHeight = '';
-    delete card.dataset.lytExplicitH;
-  }
-
-  const presetsHtml = WIDTH_PRESETS.map(p =>
-    `<button class="lyt-w-preset ${p === w ? 'on' : ''}" data-preset="${p}" title="ตั้งกว้าง ${p}/12">${p}</button>`
-  ).join('');
-  const heightChips = HEIGHT_PRESETS.map(p => {
-    const isOn = (p === 'auto' && h === 'auto') || (typeof h === 'number' && p === h);
-    const lbl = p === 'auto' ? 'auto' : (p + 'px');
-    return `<button class="lyt-h-preset ${isOn ? 'on' : ''}" data-h-preset="${p}" title="ความสูง ${lbl}">${lbl}</button>`;
-  }).join('');
-  const heightLbl = h === 'auto' ? 'auto' : (h + 'px');
-
-  card.innerHTML = `
-    <div class="lyt-row1">
-      <span class="lyt-grip" title="ลากเพื่อย้ายตำแหน่ง">⋮⋮</span>
-      <input type="checkbox" class="lyt-chk" ${item.visible === false ? '' : 'checked'} title="แสดง / ซ่อน">
-      <span class="lyt-label" title="${esc(item.label || item.id)}">${esc(item.label || item.id)}</span>
-      <span class="lyt-w-badge">${w}/12</span>
-      <span class="lyt-h-badge" title="ความสูง">${esc(heightLbl)}</span>
-    </div>
-    <div class="lyt-row2">
-      <code class="lyt-id" title="${esc(item.id)}">${esc(item.id)}</code>
-      <div class="lyt-w-controls">
-        <button data-w-act="dec" ${w <= 1 ? 'disabled' : ''} title="ลดกว้าง">−</button>
-        <button data-w-act="inc" ${w >= 12 ? 'disabled' : ''} title="เพิ่มกว้าง">+</button>
-      </div>
-    </div>
-    <div class="lyt-w-presets" data-presets="width">${presetsHtml}</div>
-    <div class="lyt-h-presets" data-presets="height">${heightChips}</div>
-    <div class="lyt-resize-handle" title="ลากเพื่อปรับขนาดความกว้าง"></div>`;
-
-  // Visibility toggle
-  card.querySelector('.lyt-chk').addEventListener('change', e => {
-    item.visible = e.target.checked;
-    card.classList.toggle('is-hidden', !item.visible);
-    layoutCheckDirty();
-  });
-
-  // − / + buttons
-  card.querySelectorAll('[data-w-act]').forEach(b => {
-    b.addEventListener('click', () => {
-      const cur = _clampW(item.width);
-      item.width = _clampW(cur + (b.dataset.wAct === 'inc' ? 1 : -1));
-      layoutRender(); layoutCheckDirty();
-    });
-  });
-
-  // Width preset buttons
-  card.querySelectorAll('[data-preset]').forEach(b => {
-    b.addEventListener('click', () => {
-      item.width = _clampW(+b.dataset.preset);
-      layoutRender(); layoutCheckDirty();
-    });
-  });
-
-  // Height preset buttons
-  card.querySelectorAll('[data-h-preset]').forEach(b => {
-    b.addEventListener('click', () => {
-      const v = b.dataset.hPreset;
-      item.height = (v === 'auto') ? 'auto' : _clampH(+v);
-      layoutRender(); layoutCheckDirty();
-    });
-  });
-
-  // Right-edge resize handle (free-form width by dragging)
-  layoutAttachResize(card, item);
-
-  return card;
-}
-
-/* Drag the right edge of a card to set width 1..12. The grid lives in 12
-   logical columns; we measure the canvas's actual pixel width once at start,
-   then convert pointer Δx into column units. */
-function layoutAttachResize(card, item) {
-  const handle = card.querySelector('.lyt-resize-handle');
-  let startX = 0, startW = 0, colPx = 0, suppressClick = false;
-  handle.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    e.stopPropagation();
-    const canvas = card.parentElement;
-    const cs = getComputedStyle(canvas);
-    const gap = parseFloat(cs.columnGap) || 0;
-    const cw = canvas.getBoundingClientRect().width;
-    colPx = (cw - gap * 11) / 12;
-    startX = e.clientX;
-    startW = _clampW(item.width);
-    card.classList.add('resizing');
-    handle.setPointerCapture(e.pointerId);
-    suppressClick = true;
-
-    function onMove(ev) {
-      const delta = Math.round((ev.clientX - startX) / colPx);
-      const next = _clampW(startW + delta);
-      if (next !== item.width) {
-        item.width = next;
-        card.style.gridColumn = `span ${next} / span ${next}`;
-        const badge = card.querySelector('.lyt-w-badge');
-        if (badge) badge.textContent = `${next}/12`;
-        // refresh preset highlights
-        card.querySelectorAll('[data-preset]').forEach(b =>
-          b.classList.toggle('on', +b.dataset.preset === next)
-        );
-        // refresh +/- disabled state
-        const dec = card.querySelector('[data-w-act="dec"]');
-        const inc = card.querySelector('[data-w-act="inc"]');
-        if (dec) dec.disabled = next <= 1;
-        if (inc) inc.disabled = next >= 12;
-      }
-    }
-    function onUp(ev) {
-      handle.releasePointerCapture?.(e.pointerId);
-      handle.removeEventListener('pointermove', onMove);
-      handle.removeEventListener('pointerup', onUp);
-      handle.removeEventListener('pointercancel', onUp);
-      card.classList.remove('resizing');
-      layoutCheckDirty();
-      // small delay so the trailing click on the handle doesn't bubble
-      setTimeout(() => { suppressClick = false; }, 100);
-    }
-    handle.addEventListener('pointermove', onMove);
-    handle.addEventListener('pointerup', onUp);
-    handle.addEventListener('pointercancel', onUp);
-  });
-  // Prevent the handle from starting a drag/drop on the card
-  handle.addEventListener('dragstart', e => e.preventDefault());
-  handle.addEventListener('mousedown', e => e.stopPropagation());
-}
-
-/* ─── Drag & drop within a section's 12-col canvas ────────────────────────── */
-function layoutEnableCanvasDnd(canvas, sec) {
-  let srcIdx = null;
-  canvas.querySelectorAll('.lyt-card').forEach(card => {
-    card.addEventListener('dragstart', e => {
-      // Don't start a drag if the press came from the resize handle
-      if (e.target.classList.contains('lyt-resize-handle')) {
-        e.preventDefault(); return;
-      }
-      srcIdx = +card.dataset.idx;
-      card.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      try { e.dataTransfer.setData('text/plain', 'w:' + sec + ':' + srcIdx); } catch {}
-    });
-    card.addEventListener('dragend', () => {
-      card.classList.remove('dragging');
-      canvas.querySelectorAll('.drop-before,.drop-after').forEach(x => x.classList.remove('drop-before','drop-after'));
-    });
-    card.addEventListener('dragover', e => {
-      e.preventDefault(); e.dataTransfer.dropEffect = 'move';
-      canvas.querySelectorAll('.drop-before,.drop-after').forEach(x => x.classList.remove('drop-before','drop-after'));
-      const r = card.getBoundingClientRect();
-      const after = (e.clientX - r.left) > r.width / 2;
-      card.classList.add(after ? 'drop-after' : 'drop-before');
-    });
-    card.addEventListener('drop', e => {
-      e.preventDefault();
-      let dst = +card.dataset.idx;
-      const r = card.getBoundingClientRect();
-      const after = (e.clientX - r.left) > r.width / 2;
-      if (after) dst++;
-      if (srcIdx == null) return;
-      if (dst > srcIdx) dst--;
-      if (dst === srcIdx) return;
-      const arr = _layoutDraft.widgets[sec];
-      const [moved] = arr.splice(srcIdx, 1);
-      arr.splice(dst, 0, moved);
-      layoutRender(); layoutCheckDirty();
-    });
-  });
-  // Allow dropping into empty space at end of canvas
-  canvas.addEventListener('dragover', e => {
-    if (e.target === canvas) e.preventDefault();
-  });
-  canvas.addEventListener('drop', e => {
-    if (e.target !== canvas || srcIdx == null) return;
-    e.preventDefault();
-    const arr = _layoutDraft.widgets[sec];
-    const [moved] = arr.splice(srcIdx, 1);
-    arr.push(moved);
-    layoutRender(); layoutCheckDirty();
-  });
-}
-
-function _clampW(w) {
-  const n = Math.round(Number(w));
-  if (!Number.isFinite(n)) return 12;
-  return Math.max(1, Math.min(12, n));
-}
-function _clampH(h) {
-  if (h === 'auto' || h == null || h === '') return 'auto';
-  const n = Math.round(Number(h));
-  if (!Number.isFinite(n) || n < 40) return 'auto';
-  return Math.min(2000, n);
-}
+let _fbInited = false;
 
 /* ════════════════════════════════════════════
    ROOM DESIGNER
@@ -3978,7 +3340,7 @@ async function audSaveClip(mime) {
   // Add an extension hint so the browser-server multer can detect it from MIME.
   const ext = mime.includes('webm') ? 'webm' : mime.includes('ogg') ? 'ogg' : mime.includes('mp4') ? 'm4a' : 'bin';
   fd.append('audio', blob, `recording.${ext}`);
-  fd.append('label', 'Recording ' + new Date().toLocaleString('th-TH', { hour12: false }));
+  fd.append('label', 'Recording ' + plFmt(new Date().toISOString()));
   fd.append('duration_ms', String(durMs));
 
   // Show a placeholder "uploading..." state immediately
@@ -4112,7 +3474,7 @@ function audRenderClips() {
       <div class="aud-clip-info">
         <div class="aud-clip-label">${esc(c.label || 'Recording')}</div>
         <div class="aud-clip-meta">
-          ${audFmtDur(dur)} · ${sizeKB} KB · ${ts.toLocaleString('th-TH', { hour12: false })}
+          ${audFmtDur(dur)} · ${sizeKB} KB · ${plFmt(ts.toISOString())}
           ${_audShowAll || (c.member_id && c.member_id !== _user?.id) ? ` · 👤 ${esc(owner)}` : ''}
         </div>
       </div>
@@ -4712,8 +4074,12 @@ function plRender() {
 function plFmt(iso) {
   if (!iso) return '—';
   try {
-    const d = new Date(iso);
-    return d.toLocaleString('th-TH', { hour12: false, year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const d = new Date(iso); if (isNaN(d)) return iso;
+    const dd = String(d.getDate()).padStart(2,'0');
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const HH = String(d.getHours()).padStart(2,'0');
+    const MM = String(d.getMinutes()).padStart(2,'0');
+    return `${dd}/${mm}/${d.getFullYear()} ${HH}:${MM}`;
   } catch { return iso; }
 }
 
@@ -4735,6 +4101,90 @@ function plExportCsv() {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   toast(`Export ${_plRows.length} rows สำเร็จ`, 'success');
 }
+
+/* ════════════════════════════════════════════
+   FILES BROWSER (admin)
+   ──────────────────────────────────────────
+   Read-only inventory of UPLOAD_DIR. Folders open into themselves; files
+   open in a new tab (preview) or download via ?download=1.
+════════════════════════════════════════════ */
+let _fbPath = '';
+function fbInit() {
+  fbReload();
+}
+function fbGoRoot() { _fbPath = ''; fbReload(); }
+function fbGoUp() {
+  if (!_fbPath) return;
+  const idx = _fbPath.lastIndexOf('/');
+  _fbPath = idx > 0 ? _fbPath.slice(0, idx) : '';
+  fbReload();
+}
+function fbOpen(rel) { _fbPath = rel; fbReload(); }
+async function fbReload() {
+  const status = document.getElementById('fb-status');
+  status.textContent = '⏳ กำลังโหลด...';
+  status.style.color = '#94a3b8';
+  try {
+    const url = '/api/files/browse' + (_fbPath ? '?path=' + encodeURIComponent(_fbPath) : '');
+    const r = await apiFetch('GET', url);
+    if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || 'load failed');
+    const data = await r.json();
+    fbRender(data);
+    status.textContent = `✅ ${data.entries.length} entries`;
+    status.style.color = '#86efac';
+  } catch (e) {
+    status.textContent = '❌ ' + e.message;
+    status.style.color = '#fca5a5';
+  }
+}
+function fbRender(data) {
+  const bc = document.getElementById('fb-breadcrumb');
+  bc.innerHTML = data.path ? `/uploads/${esc(data.path)}/` : '/uploads/';
+  document.getElementById('fb-count').textContent = `${data.entries.length} entries`;
+  const tb = document.getElementById('fb-tbody');
+  if (!data.entries.length) {
+    tb.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#64748b;padding:2rem">— โฟลเดอร์ว่าง —</td></tr>`;
+    return;
+  }
+  tb.innerHTML = data.entries.map(e => {
+    const icon = e.type === 'dir' ? '📁' : (
+      /\.(md|txt|log)$/i.test(e.name) ? '📄' :
+      /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(e.name) ? '🖼️' :
+      /\.(mp3|wav|ogg|webm|m4a)$/i.test(e.name) ? '🎵' :
+      /\.(mp4|mov|webm)$/i.test(e.name) ? '🎬' :
+      /\.(pdf)$/i.test(e.name) ? '📕' :
+      /\.(zip|tar|gz|7z)$/i.test(e.name) ? '🗜️' : '📄'
+    );
+    const size = e.type === 'dir' ? '—' : fbFmtSize(e.size);
+    const tok = encodeURIComponent(_token);
+    const rawUrl  = `/api/files/raw?path=${encodeURIComponent(e.path)}&token=${tok}`;
+    const dlUrl   = rawUrl + '&download=1';
+    const actions = e.type === 'dir'
+      ? `<button class="btn btn-ghost btn-sm" onclick="fbOpen('${esc(e.path)}')">เข้า</button>`
+      : `<a class="btn btn-ghost btn-sm" href="${rawUrl}" target="_blank" rel="noopener">ดู</a>
+         <a class="btn btn-ghost btn-sm" href="${dlUrl}">⬇</a>`;
+    return `<tr>
+      <td style="font-size:1rem">${icon}</td>
+      <td>${e.type === 'dir'
+        ? `<a class="pl-task-link" onclick="fbOpen('${esc(e.path)}')">${esc(e.name)}</a>`
+        : esc(e.name)}</td>
+      <td class="pl-pts" style="color:#cbd5e1;font-weight:400">${size}</td>
+      <td class="pl-date">${(e.modified || '').replace('T', ' ').slice(0, 16)}</td>
+      <td>${actions}</td>
+    </tr>`;
+  }).join('');
+}
+function fbFmtSize(bytes) {
+  if (!bytes) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB'];
+  let i = 0; let n = bytes;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return n.toFixed(i ? 1 : 0) + ' ' + u[i];
+}
+// Note: /api/files/raw needs auth — token via query string works because
+// requireAdmin checks req.user, and the auth middleware reads from query too.
+// (See server.js auth middleware → uses extractToken which checks Authorization
+// header only by default. We need to pass token a different way.)
 
 /* ════════════════════════════════════════════
    API PLAYGROUND
