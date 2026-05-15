@@ -11,7 +11,7 @@ The codebase ships with a `docker compose` stack that boots the entire system (p
 
 ## Browser routes
 
-- [/](/ ): main SPA shell — login screen, then 6 default tabs (Home, Todo, Calendar, People, Summary, Profile). Whiteboard tab is hidden by default and incubates inside `/dev`.
+- [/](/ ): main SPA shell — login screen, then 6 tabs (Home, Todo, Calendar, People, Summary, Profile) on both desktop top nav and mobile bottom tabbar. The Whiteboard tab is hidden from both menus; the page is still rendered and reachable only by hash deep-link `/#whiteboard` or programmatic `setTab('whiteboard')`.
 - [/dev](/dev): admin-only sandbox SPA with 13 panels — entry point is the "🛠 Dev & Test Tools" button in the Profile page (admin only).
 - [/healthz](/healthz): liveness probe (no auth)
 
@@ -31,9 +31,20 @@ The codebase ships with a `docker compose` stack that boots the entire system (p
 - POST / DELETE /api/groups/:gid/members/:mid: group membership
 
 ### Tasks
-- GET / POST / PUT / DELETE /api/tasks: task CRUD; supports multi-assignee with role + points share
+- GET / POST / PUT / DELETE /api/tasks: task CRUD; supports multi-assignee with role + points share. `DELETE /api/tasks/:id` is a soft delete (recycle bin); add `?permanent=1` to hard-delete.
+- Meeting `location_type='onsite_internal'` auto-fills `location_detail='Lab @ECC-504'` as a sentinel. If the user later edits the meeting to `online` / `onsite_external`, the submit handler scrubs that sentinel out of `data.location_detail` so the rendered chip can't show "💻 Online · Lab @ECC-504" (contradiction). A defensive helper `meetingDetailFor(t)` returns `''` whenever `location_type !== 'onsite_internal' && location_detail === 'Lab @ECC-504'` — used at every render site (`locationLabel`, `locationChipHtml`, calendar list, detail-sheet card, edit-form pre-fill) so legacy DB rows that were left stale before this patch still display cleanly without a data migration.
+- Meetings (kind='meeting') accept both `deadline` (start) and an optional `end_time` (ISO datetime). End must be strictly after start — enforced at THREE layers: (1) the end-time flatpickr picker has `minDate` dynamically bound to the current start value so invalid times are physically greyed-out, (2) the meeting modal's submit handler throws "เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม" if data slipped through, (3) `db.createTask` / `db.updateTask` repeat the check server-side. If omitted the ICS mailer defaults DTEND to start + 60 min. When the user changes start: end auto-shifts by the same delta to preserve duration; if the delta would make end <= start, end snaps to start + 60 min. Meetings never display "เลย N วัน" overdue chips — past meetings just show their time range.
+- GET /api/tasks/trash: list trashed tasks (admin sees all, group leader sees their group's). Must be registered before `:id` route to avoid Express path shadowing.
+- POST /api/tasks/:id/restore: restore a trashed task
+- UI exposes two ways to send a task to the recycle bin: the 🗑 button in the task-detail sheet, or by dragging a task card to the floating 🗑 bin on the Todo tab. Both fire `DELETE /api/tasks/:id` (soft delete). Neither asks for confirmation — restorable from 🗑 ถังขยะ within 30 days. The one exception is meeting deletion via the detail-sheet button, which still confirms because the same call also sends CANCEL emails to attendees (not undoable). Setting `status='cancelled'` via the status field is a separate workflow — task stays visible but flagged as cancelled.
+- All other destructive confirmations use `uiConfirm(message, opts)` (custom modal, async → `Promise<boolean>`) instead of native `window.confirm`. Modal element is `#confirm-modal` in index.html. There's also a matching `uiPrompt(message, opts)` (modal `#prompt-modal`, async → `Promise<string|null>`) used for free-text inputs like "add new category" so the native `window.prompt` is never called. Service worker `CACHE_VERSION` must be bumped whenever shipping a breaking change to `/app.js` so old precached copies get evicted on next page load.
+- Date / datetime inputs in every modal form are wrapped by **flatpickr** (cdnjs 4.6.13, CSS allow-listed in `styleSrc`). Native HTML5 `<input type="date">` / `<input type="datetime-local">` follow the user's OS locale (mm/dd/yyyy + AM/PM on English Windows), which contradicts the project's "dd/mm/yyyy + 24-hour" convention everywhere else. flatpickr's `altInput: true` keeps the underlying input's value in ISO `Y-m-d` / `Y-m-d\TH:i` (so backend code is unchanged) while the visible field renders `d/m/Y` / `d/m/Y H:i` with `time_24hr: true`. Wiring point is `initFlatpickr(container)` in `app.js` — invoked from `openModal()` after `innerHTML` is set, and from the multi-task `addRow()` for dynamically-added rows. Filenames intentionally keep the `YYYYMMDD_` prefix style (separate format for FS sort-friendliness).
+- Category (tag) picker in the task/meeting form (`_formCategoriesSection`): chips are **bucketed by `<หมวด> - <ชื่อ>` prefix** (Dev / Extrovert / ม้าเร็ว / ศิลป์ / เอกสาร / อื่น ๆ) — each group has its own header card with emoji + count and chips inside. The chip body shows just the suffix (e.g. "Proposal") because the group header already provides the prefix context. Sticky **🔍 live-search input** filters by chip name OR group name and hides whole groups whose chips are all filtered out. **counter** "เลือก N / M" + **ล้างทั้งหมด** button. Within each group, **selected chips bubble to the top** via CSS `order: 1`. **+ เพิ่ม** opens `uiPrompt` (pre-populated with whatever the user typed in search), and the prompt hint recommends the `"หมวด - ชื่อ"` convention so the new chip auto-files into the right group. Helpers: `_splitCategoryName(name)` (parses prefix/sub), `_updateCatCounter()`, `_wireAddCategoryButton()` (binds prompt → POST `/api/categories` → re-renders section in place preserving selection). The picker is rendered in **2 places**: single-task edit form (`taskFormFields`) and the **multi-task batch form** (`openMultiTaskModal` — picker sits ABOVE the rows; selected ids apply to every task in the batch via one shared `category_ids` array). Intentionally **omitted from the meeting form** (`meetingFormFields`) — meetings already carry location_type + organisation context so the extra taxonomy clutters the modal without earning its keep. The form-wide submit collector still reports an empty `category_ids` array for meetings.
+- File preview supports image / PDF / text / audio / video natively, plus Office. `.docx` uses **docx-preview** (loaded from **jsdelivr** — not published to cdnjs; depends on JSZip from cdnjs) which renders OOXML directly into a page-styled container so margins, fonts, colours, headers, inline images mirror the original. `.xlsx`/`.xls`/`.xlsm` uses SheetJS with a **custom table builder** (`renderExcelPreview` → manual `<table>` generation rather than `XLSX.utils.sheet_to_html`) so column widths from `ws['!cols']`, merged cells from `ws['!merges']`, and number/date formatting from `cell.w` are preserved. Excel-style row + column headers, sticky on scroll. Numeric cells right-aligned via `class="xlsx-num"`. The xlsx panel uses `max-height: calc(95vh - 9rem)` + `overflow:auto` so both scrollbars sit next to the table (not at the modal's bottom edge). Libraries lazy-loaded on first preview — CSP `scriptSrc` whitelists both `https://cdnjs.cloudflare.com` and `https://cdn.jsdelivr.net`, and `frame-src` includes `blob:` so the PDF iframe can load blob URLs created via `URL.createObjectURL`. `.pptx` shows a download-only fallback (browser libs render too poorly to ship). Type detection uses extension regex (browser MIME for Office files is inconsistent). Helpers: `isWordFile`, `isExcelFile`, `isPresentationFile`, `isOfficeFile`; render funcs: `renderDocxPreview(blob)` + `_docxRenderInto(blob)` (2-step because docx-preview needs a mounted DOM target), `renderExcelPreview(blob)`.
+- File-delete UX: the global `[data-delete-file-global]` click handler does optimistic DOM removal, then awaits `DELETE /api/files/:id`, then re-renders whichever sheet is open (submission or task detail) plus `loadAll()` for global state. The SSE-driven `debouncedReload` also re-renders the submission sheet when `state.openSubmitTaskId` is set, so file changes broadcast from another tab/user are reflected without manual refresh.
 - POST /api/tasks/:id/claim and /drop: self-assign / unassign
-- POST /api/tasks/:id/files: file or URL submission (multer)
+- POST /api/tasks/:id/files: file or URL submission (multer). One `doc_type` per request via `?doc_type=` query string. The submission sheet stages each file with its own doc-type picker (bottom-sheet modal with full Thai labels — native `<select>` truncated long Thai text on mobile) and groups by doc_type client-side, firing one POST per unique doc_type. On-disk filenames use the pattern `YYYYMMDD_<docType>_<taskTitle>.<ext>` — the BODY is the TASK NAME (not the user's local filename) so the file browser stays self-documenting; the original filename is preserved in DB column `task_files.original_name`. The user's filename is only used to derive the extension. Multiple files of the same docType for one task get a `_xxxx` 4-hex collision suffix. When a task gathers ≥ 2 attachments, they move into a subfolder `uploads/<groupName>/<taskTitle>/` — plain sanitized title, **no id suffix**. Two tasks with identical titles inside one group share the same folder; listing-by-task still works because the API queries `task_files` by `task_id` (not by reading the directory). Thai filenames round-trip correctly out of the box (multer 2.1.x + busboy 1.x decode `filename*=UTF-8''…` per RFC 5987) — do NOT re-decode via `Buffer.from(name, 'latin1').toString('utf8')`, that destroys Thai code points. For legacy rows where an older browser sent the file via the old `filename="<raw bytes>"` form (which busboy decodes as Latin-1, producing strings like "à¹‚à¸„à¸£..." in DB), `db.smartUtf8Decode()` is applied at READ time inside `listFilesForTask` / `listFilesForGroup` / `listAllFiles` / `getFile` / `generateGroupSummary`, and at WRITE time inside `recordFile`. The heuristic only re-decodes when every char is in 0x00–0xFF AND the byte sequence decodes as valid UTF-8 — so proper Thai/CJK strings (chars > 0xFF) and real Latin-1 names like "café" (invalid UTF-8) pass through unchanged.
+- POST /api/tasks/:id/comments: thread comments per task
 - GET / POST /api/deadline-requests: deadline extension flow
 - GET / POST /api/point-requests: leader-review point pipeline (proposing → leader_review → final_review → confirmed)
 
@@ -53,7 +64,7 @@ The codebase ships with a `docker compose` stack that boots the entire system (p
 
 ### Audio recordings + transcription
 - GET /api/recordings: list own recordings (admin: ?all=1 for everyone)
-- POST /api/recordings: multipart audio upload — server stores blob + DB row, fires async WhisperX transcription
+- POST /api/recordings: multipart audio upload — server stores blob + DB row, fires async WhisperX transcription. Accepts any audio extension ffmpeg can decode (mp3/wav/flac/m4a/aac/ogg/opus/webm/wma/aiff/amr/…), up to 500 MB. The /dev → 🎙️ Audio Recorder panel exposes both 🔴 Record (browser MediaRecorder) and 📁 Import (file picker for existing audio files)
 - GET /api/recordings/:id/stream: stream audio with HTTP Range support (`?token=` query supported for `<audio>` tags)
 - PATCH /api/recordings/:id: rename label
 - DELETE /api/recordings/:id: delete row + on-disk file
@@ -70,10 +81,12 @@ The codebase ships with a `docker compose` stack that boots the entire system (p
 - **Backend**: Node 20 + Express + `pg` + `ws` + `multer`
 - **Database**: PostgreSQL 16 (idempotent schema; no ORM)
 - **Frontend**: Vanilla JS + Tailwind (CDN) + Fabric.js (whiteboard) + Three.js (3D room designer, lazy-loaded from cdnjs)
-- **Speech-to-text**: Python 3.11 + Flask + WhisperX 3.8.5 (faster-whisper + Thai wav2vec2 alignment from `airesearch/wav2vec2-large-xlsr-53-th`)
+- **Speech-to-text**: Python 3.11 + Flask + WhisperX 3.8.5 (faster-whisper + Thai wav2vec2 alignment from `airesearch/wav2vec2-large-xlsr-53-th`). Audio is pre-processed through ffmpeg `dynaudnorm=f=200:g=15:p=0.9:m=10` before WhisperX so loud/quiet sections in phone-mic recordings get evened out (boosts quiet speakers up to +10 dB, keeps peaks under -1 dBFS). Toggle via `NORMALIZE_AUDIO` env (default `1`). The Node app does NOT call asr via the built-in `fetch()` — its underlying undici Agent imposes a 5-minute `headersTimeout` which fires before WhisperX finishes on CPU. Instead it uses a `slowFetch()` helper built on `node:http` with a 15-minute socket timeout. Ollama summary calls follow the same pattern (10-minute timeout).
+- **AI summary**: Ollama with `scb10x/llama3.2-typhoon2-3b-instruct` (Thai-tuned Llama 3.2 from SCB10X, ~2 GB) — runs locally in the `ollama` compose service; override via `OLLAMA_MODEL` env
 - **Real-time**: Server-Sent Events (`/api/events`) + WebSocket (`/ws/whiteboard`)
 - **Layout**: 12-col CSS grid + ResizeObserver-driven masonry; mobile collapses to 1 col
 - **Deployment**: docker-compose with 4 services (postgres, pgadmin, app, asr)
+- **NAS-ready storage**: docker-compose.yml ships with a dormant `sml_uploads` named volume (NFSv4, targeted at UGREEN NASync DH4300 Plus) — flip the commented bind-mount swap on `app` + `asr` to migrate `/app/uploads` off the host without code changes. `pg_data`, `asr_cache`, and `ollama_models` stay on local disk (latency / hot-cache concerns).
 
 ## /dev panels
 
@@ -101,20 +114,35 @@ The admin sandbox at `/dev` contains 13 panels organised into 3 sections:
 
 ## Source files
 
-- [server.js](server.js): Express app, REST endpoints, SSE, WebSocket bridge
-- [db.js](db.js): pg pool, schema init, CRUD helpers (single source of writes)
-- [auth.js](auth.js): file-backed token store with hot reload
-- [mailer.js](mailer.js): SMTP for invitations and reminders
-- [seed.js](seed.js): demo data seeder
-- [public/index.html](public/index.html): main SPA shell
-- [public/app.js](public/app.js): main SPA logic (~6k lines)
-- [public/style.css](public/style.css): Tailwind + iOS-flavoured custom CSS
-- [public/dev.html](public/dev.html): /dev admin sandbox (~5k lines, single-page)
-- [asr-service/app.py](asr-service/app.py): WhisperX Flask service (`/health`, `/transcribe`)
+The repo splits server code (`backend/`) from client assets (`frontend/`):
+
+### Backend (`backend/`)
+- [backend/server.js](backend/server.js): Express app, REST endpoints, SSE, WebSocket bridge
+- [backend/db.js](backend/db.js): pg pool, schema init, CRUD helpers (single source of writes). `UPLOAD_DIR` defaults to `<repo>/uploads/` (`__dirname/../uploads`); override via env for NAS mounts.
+- [backend/auth.js](backend/auth.js): file-backed token store with hot reload
+- [backend/mailer.js](backend/mailer.js): SMTP for invitations and reminders. Calendar emails ship the ICS as a single inline `multipart/alternative > text/calendar; method=REQUEST` part (via nodemailer's `alternatives` option) — NOT through `icalEvent`, which would also add a duplicate `application/ics` file attachment and make iOS/Apple Mail render two copies of the same event. Modern clients (Apple, iOS, Gmail, Outlook 365, Thunderbird) handle the inline-only form correctly.
+- [backend/seed.js](backend/seed.js): demo data seeder
+- [backend/mock_files.js](backend/mock_files.js): sample-file generator for testing submissions
+- [backend/test_api.js](backend/test_api.js): minimal smoke-test script for the REST API
+- [backend/ecosystem.config.js](backend/ecosystem.config.js): PM2 config — alternative to Docker for bare-metal deploys
+
+### Frontend (`frontend/public/`)
+- [frontend/public/index.html](frontend/public/index.html): main SPA shell
+- [frontend/public/app.js](frontend/public/app.js): main SPA logic (~6k lines)
+- [frontend/public/style.css](frontend/public/style.css): Tailwind + iOS-flavoured custom CSS
+- [frontend/public/dev.html](frontend/public/dev.html): /dev admin sandbox (~5k lines, single-page)
+- [frontend/public/sw.js](frontend/public/sw.js): PWA service worker (stale-while-revalidate)
+- [frontend/public/manifest.webmanifest](frontend/public/manifest.webmanifest): PWA manifest
+
+### ASR microservice (`asr-service/`)
+- [asr-service/app.py](asr-service/app.py): WhisperX Flask service (`/health`, `/transcribe`, `/summarise`)
 - [asr-service/Dockerfile](asr-service/Dockerfile): Python 3.11 + ffmpeg + CPU-only torch
 - [asr-service/requirements.txt](asr-service/requirements.txt): whisperx 3.8.5
-- [docker-compose.yml](docker-compose.yml): postgres + pgadmin + app + asr
-- [Dockerfile](Dockerfile): Node 20 image for the main app
+
+### Root
+- [docker-compose.yml](docker-compose.yml): postgres + pgadmin + app + asr + ollama
+- [Dockerfile](Dockerfile): Node 20 image; `COPY backend ./backend` + `COPY frontend ./frontend` so container layout mirrors host. `CMD ["node", "backend/server.js"]`.
+- [package.json](package.json): Node deps at repo root; scripts call `node backend/server.js` etc.
 - [.gitignore](.gitignore): blocks .env, data.db, .tokens.json, uploads/*, .claude/, etc
 
 ## Configuration
