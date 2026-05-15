@@ -1281,10 +1281,82 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
 .member-count-pill.has { background: #dbeafe; color: #1d4ed8; }
 
 /* ===== Category chips — multi-select pills used in task & meeting forms ===== */
+.cat-section .cat-counter b { color: #4f46e5; font-weight: 700; }
+
+/* Live search input above the chip grid — sticky so it stays visible while
+   scrolling within long forms. */
+.cat-search-wrap {
+  position: relative;
+  margin-bottom: 0.55rem;
+}
+.cat-search-input {
+  width: 100%;
+  padding: 0.55rem 2.1rem 0.55rem 2.1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.65rem;
+  background: #f8fafc;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color .12s, background .12s;
+}
+.cat-search-input:focus { border-color: #6366f1; background: #fff; box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+.cat-search-icon {
+  position: absolute; left: 0.7rem; top: 50%; transform: translateY(-50%);
+  font-size: 0.85rem; pointer-events: none; opacity: 0.55;
+}
+.cat-search-clear {
+  position: absolute; right: 0.45rem; top: 50%; transform: translateY(-50%);
+  width: 1.5rem; height: 1.5rem;
+  border-radius: 50%;
+  background: #e2e8f0; color: #475569;
+  font-size: 0.95rem; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; border: none;
+}
+.cat-search-clear:hover { background: #cbd5e1; color: #1e293b; }
+
+/* Grouped layout: each "<หมวด> - <ชื่อ>" prefix gets its own collapsible
+   section with header + chip grid. Search filter hides empty groups. */
+.cat-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.15rem;
+}
+.cat-group {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.65rem;
+  padding: 0.5rem 0.6rem 0.55rem;
+}
+.cat-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+.cat-group-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #334155;
+  letter-spacing: 0.01em;
+}
+.cat-group-count {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #64748b;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  padding: 0.06rem 0.4rem;
+  border-radius: 9999px;
+}
+
 .cat-chip-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 0.35rem;
+  /* Selected chips bubble to the top WITHIN each group via flex `order`. */
 }
 .cat-chip {
   display: inline-flex; align-items: center;
@@ -1292,24 +1364,32 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   background: #fff;
   border: 1.5px dashed #cbd5e1;
   border-radius: 9999px;
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   font-weight: 500;
   color: #475569;
   cursor: pointer;
-  transition: transform 0.1s ease, border-color 0.1s ease, background 0.1s ease;
+  transition: transform 0.1s, border-color 0.1s, background 0.1s, color 0.1s;
   user-select: none;
   white-space: nowrap;
+  order: 2;          /* unselected — visually after selected */
 }
-.cat-chip:hover { border-color: #94a3b8; background: #f8fafc; transform: translateY(-1px); }
+.cat-chip:hover {
+  border-color: #6366f1;
+  background: #f5f3ff;
+  color: #4338ca;
+  transform: translateY(-1px);
+}
 .cat-chip.selected {
   border-style: solid;
   border-color: #6366f1;
   background: #eef2ff;
-  color: #4338ca;
+  color: #3730a3;
   font-weight: 600;
-  box-shadow: 0 1px 4px rgba(99,102,241,0.18);
+  box-shadow: 0 1px 4px rgba(99,102,241,0.2);
+  order: 1;          /* selected first */
 }
-.cat-chip.selected::before { content: '✓ '; margin-right: 0.15rem; }
+.cat-chip.selected::before { content: '✓'; margin-right: 0.3rem; font-weight: 700; }
+.cat-chip.selected:hover  { background: #e0e7ff; transform: translateY(-1px); }
 
 /* Category tags — small read-only pills shown on Kanban cards / detail sheets */
 .cat-tag {
@@ -1547,9 +1627,155 @@ body.wb-fullscreen-mode #page-whiteboard:not(.hidden) {
 }
 body.wb-fullscreen-mode .page-container { padding: 0 !important; max-width: none !important; }
 
+/* ===== flatpickr — date / datetime picker overlays ===== */
+/* flatpickr renders a parallel "alt" input + hides the original; we want the
+   visible alt input to inherit our `.ios-input` look exactly. */
+.flatpickr-input.form-control.input + .flatpickr-mobile,
+.flatpickr-input.form-control.input,
+input.flatpickr-input {
+  /* hidden originals keep their natural state — leave alone */
+}
+/* Match the iOS-flavoured input style for the user-facing "alt" field */
+.flatpickr-alt-input {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 0.7rem 0.875rem;
+  font-size: 0.95rem;
+  background: #f8fafc;
+  min-height: 42px;
+  outline: none;
+  transition: border-color .12s, background .12s, box-shadow .12s;
+}
+.flatpickr-alt-input:focus {
+  border-color: #6366f1; background: #fff;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+}
+/* Calendar popup — soften the default chrome to match the app */
+.flatpickr-calendar {
+  border-radius: 0.85rem !important;
+  box-shadow: 0 6px 22px rgba(15,23,42,0.18) !important;
+  border: 1px solid #e2e8f0 !important;
+  font-family: 'Prompt', sans-serif !important;
+}
+.flatpickr-day.selected,
+.flatpickr-day.selected:hover,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange { background: #4f46e5 !important; border-color: #4f46e5 !important; }
+.flatpickr-day.today { border-color: #4f46e5 !important; }
+.flatpickr-time input { font-family: 'JetBrains Mono', monospace !important; }
+
 /* Cursor hints per tool */
 .wb-canvas-wrap[data-tool="pan"]   canvas { cursor: grab; }
 .wb-canvas-wrap[data-tool="pan"].wb-panning canvas { cursor: grabbing; }
 .wb-canvas-wrap[data-tool="eraser"] canvas { cursor: crosshair; }
 .wb-canvas-wrap[data-tool="text"]   canvas { cursor: text; }
+
+/* ===== Office preview (docx-preview for .docx, SheetJS for .xlsx) ===== */
+
+/* .docx — docx-preview injects its own page-styled CSS; we just frame it. */
+.docx-preview-host {
+  background: #f1f5f9;          /* grey "desktop" behind the page */
+  border-radius: .65rem;
+  padding: 1rem .5rem;
+  overflow-x: auto;             /* very wide pages can scroll horizontally */
+}
+.docx-preview-host > .docx-wrapper {
+  display: flex; flex-direction: column; align-items: center; gap: 1rem;
+}
+.docx-preview-host .docx-wrapper > section.docx,
+.docx-preview-host .docx-page {
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.1), 0 4px 12px rgba(15,23,42,0.06);
+  border-radius: 2px;
+  /* docx-preview already sets page dims from the file; we just frame it */
+}
+
+/* .xlsx — sheet tabs + Excel-style table. The PANEL is a bounded scroller
+   (max-height + overflow:auto) so both axes scroll INSIDE the panel — the
+   scrollbar then sits right next to the table edge, fixing the user's
+   "ตัวเลื่อนซ้าย-ขวา จม" complaint (the scrollbar was previously at the bottom
+   of the modal, hidden under the iOS home indicator on mobile). */
+.xlsx-preview {
+  font-family: 'JetBrains Mono', monospace; font-size: .78rem;
+  background: #f1f5f9;
+}
+.xlsx-tabs {
+  display: flex; flex-wrap: nowrap; gap: 0;
+  background: #f1f5f9;
+  border-bottom: 1px solid #cbd5e1;
+  overflow-x: auto;
+  padding: 0 .5rem;
+  position: sticky; top: 0; z-index: 4;
+}
+.xlsx-tab {
+  padding: .5rem .9rem;
+  background: #f1f5f9;
+  color: #475569;
+  font-family: 'Prompt', sans-serif; font-size: .8rem; font-weight: 500;
+  border: none;
+  border-right: 1px solid #cbd5e1;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all .12s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.xlsx-tab:hover  { background: #e2e8f0; }
+.xlsx-tab.active {
+  background: #fff;
+  color: #1e293b;
+  border-bottom-color: #4f46e5;
+}
+
+.xlsx-panel {
+  /* Bounded scroller — fills most of the modal body but leaves room so the
+     horizontal scrollbar lands well above the modal's bottom edge. */
+  max-height: calc(95vh - 9rem);
+  overflow: auto;
+  background: #fff;
+}
+.xlsx-table {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  /* `table-layout: fixed` makes the browser honour the widths declared in
+     `<colgroup>` — without this, browsers ignore them and shrink empty
+     columns to ~0px (visible bug: text in a narrow column wrapped to one
+     letter per row). The widths come from `ws['!cols']` in the workbook,
+     with a 48px floor so deliberately-narrow Excel columns stay readable. */
+  table-layout: fixed;
+}
+.xlsx-table th, .xlsx-table td {
+  border: 1px solid #d1d5db;
+  padding: .25rem .55rem;
+  vertical-align: top;
+  font-size: .78rem;
+  background: #fff;
+  /* Long words wrap inside the cell instead of stretching the column —
+     `overflow-wrap: anywhere` lets us break mid-word on URLs / long ids. */
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.xlsx-table .xlsx-num { text-align: right; font-variant-numeric: tabular-nums; }
+/* Excel-style row + column headers, both sticky so they stay visible while
+   scrolling around large sheets. */
+.xlsx-table .xlsx-header th {
+  background: #f3f4f6;
+  font-weight: 600; color: #475569;
+  text-align: center;
+  position: sticky; top: 0; z-index: 2;
+  font-family: 'Prompt', sans-serif;
+}
+.xlsx-table .xlsx-corner {
+  position: sticky; top: 0; left: 0; z-index: 3;
+  background: #e5e7eb;
+}
+.xlsx-table .xlsx-rownum {
+  background: #f3f4f6;
+  font-weight: 600; color: #475569;
+  text-align: center;
+  position: sticky; left: 0; z-index: 1;
+  min-width: 2.5rem;
+  font-family: 'Prompt', sans-serif;
+}
 
