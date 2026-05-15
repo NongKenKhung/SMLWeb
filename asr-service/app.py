@@ -24,8 +24,11 @@ Configuration (env vars)
   WHISPER_ALIGN         "1" (default) to run alignment for word-level timing
   WHISPER_BATCH_SIZE    transcription batch size (default 8)
   WHISPER_ALIGN_MODEL   custom HF wav2vec2 model for alignment
+  NORMALIZE_AUDIO       "1" (default) to run ffmpeg dynaudnorm before whisper —
+                        evens out loud/quiet sections in phone/laptop-mic recordings
+                        so Whisper doesn't miss soft speakers
   OLLAMA_URL            Ollama server URL (default http://ollama:11434, empty = disable)
-  OLLAMA_MODEL          model tag (default llama3.2:3b)
+  OLLAMA_MODEL          model tag (default scb10x/llama3.2-typhoon2-3b-instruct, Thai-tuned)
 """
 from __future__ import annotations
 import json
@@ -55,9 +58,13 @@ BATCH_SIZE    = int(os.environ.get("WHISPER_BATCH_SIZE", "8"))
 # HuggingFace wav2vec2 model that does — defaults to the same model PyThaiASR
 # uses. Empty = let whisperx pick its own default (fails for Thai).
 ALIGN_MODEL   = os.environ.get("WHISPER_ALIGN_MODEL", "airesearch/wav2vec2-large-xlsr-53-th")
+# Pre-process audio with ffmpeg dynaudnorm to even out loud/quiet parts before
+# Whisper sees the audio. Default on — disable with NORMALIZE_AUDIO=0 for
+# pristine studio recordings where boosting might add noise.
+NORMALIZE_AUDIO = os.environ.get("NORMALIZE_AUDIO", "1") == "1"
 # Ollama (optional) — generates a summary + action-items list per transcript
 OLLAMA_URL    = os.environ.get("OLLAMA_URL", "").rstrip("/")
-OLLAMA_MODEL  = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
+OLLAMA_MODEL  = os.environ.get("OLLAMA_MODEL", "scb10x/llama3.2-typhoon2-3b-instruct")
 
 # Lazy globals — first request triggers model download (~250 MB for `small`,
 # ~1.5 GB for `large-v3`). Cached in HF_HOME / TORCH_HOME volumes.
@@ -117,12 +124,56 @@ def _load_align(lang: str):
             return None
 
 
+def normalize_audio(src: Path) -> str:
+    """Pre-process audio with ffmpeg's `dynaudnorm` filter so loud/quiet
+    parts even out before WhisperX sees them. Meetings recorded on a phone
+    or laptop mic typically have wildly varying levels (close speaker loud,
+    far speaker barely audible); Whisper drops quiet segments or transcribes
+    them as garbage. Dynamic normalisation boosts quiet parts and tames
+    loud peaks in a single pass.
+
+    Returns the path to a 16 kHz mono WAV in a temp dir — caller is
+    responsible for cleanup. Falls back to the original path if ffmpeg
+    fails so transcription never gets blocked.
+    """
+    import subprocess
+    out = tempfile.NamedTemporaryFile(suffix=".wav", delete=False, dir="/tmp")
+    out.close()
+    try:
+        subprocess.run([
+            "ffmpeg", "-y", "-i", str(src),
+            # dynaudnorm params tuned for speech:
+            #   f=200ms frame  → tracks sentence-level loudness
+            #   g=15 gauss     → smooth transitions (avoid pumping)
+            #   p=0.9 peak     → leave ~10% headroom under 0 dBFS
+            #   m=10 max gain  → can boost quiet parts up to +10 dB
+            "-af", "dynaudnorm=f=200:g=15:p=0.9:m=10",
+            "-ar", "16000", "-ac", "1",   # WhisperX expects 16 kHz mono anyway
+            "-loglevel", "error",
+            out.name,
+        ], check=True, timeout=300)
+        return out.name
+    except Exception as e:
+        print(f"[asr] normalize_audio failed ({e!r}); falling back to raw input", flush=True)
+        try: os.remove(out.name)
+        except Exception: pass
+        return str(src)
+
+
 def transcribe_path(src: Path) -> dict:
-    """Run the full pipeline: ffmpeg-decode → whisper → (optional) align."""
+    """Run the full pipeline: normalize → ffmpeg-decode → whisper → (optional) align."""
     import whisperx
 
     t0 = time.time()
-    audio = whisperx.load_audio(str(src))   # ffmpeg → 16kHz float32 mono ndarray
+    # Volume-equalised copy in /tmp; deleted in the `finally` after whisperx finishes.
+    norm_path = normalize_audio(src) if NORMALIZE_AUDIO else str(src)
+    t_normalized = time.time()
+    try:
+        audio = whisperx.load_audio(norm_path)   # ffmpeg → 16kHz float32 mono ndarray
+    finally:
+        if NORMALIZE_AUDIO and norm_path != str(src):
+            try: os.remove(norm_path)
+            except Exception: pass
     t_loaded = time.time()
 
     model = _load_main()
@@ -158,7 +209,8 @@ def transcribe_path(src: Path) -> dict:
         "model": MODEL_NAME,
         "segments": aligned_segments,
         "timings": {
-            "decode_sec":     round(t_loaded - t0, 3),
+            "normalize_sec":  round(t_normalized - t0, 3),
+            "decode_sec":     round(t_loaded - t_normalized, 3),
             "transcribe_sec": round(t_transcribed - t_loaded, 3),
             "align_sec":      round(t_done - t_transcribed, 3),
             "total_sec":      round(t_done - t0, 3),
