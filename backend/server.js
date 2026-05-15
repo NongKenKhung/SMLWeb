@@ -3,6 +3,7 @@ const { WebSocketServer } = require('ws');
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
 const multer = require('multer');
 const crypto = require('crypto');
 const helmet = require('helmet');
@@ -11,6 +12,47 @@ const rateLimit = require('express-rate-limit');
 const db = require('./db');
 const auth = require('./auth');
 const mailer = require('./mailer');
+
+// Long-running HTTP fetch for ASR + Ollama. Node's built-in fetch (undici)
+// enforces a 5-minute `headersTimeout` by default — but WhisperX transcribe
+// of a 1-hour CPU clip takes ~9 minutes, so the fetch fails with a generic
+// "fetch failed" before asr ever responds. The undici Agent isn't exposed
+// as `require('undici')` in the Node 20 base image, so we use the plain
+// `http` module directly with a long `setTimeout` instead — no new dep,
+// minimal surface area. Returns a Response-like object so call sites stay
+// the same shape as `fetch()`.
+function slowFetch(urlStr, opts = {}, timeoutMs = 15 * 60 * 1000) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(urlStr);
+    const req = http.request({
+      hostname: u.hostname,
+      port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search,
+      method: opts.method || 'GET',
+      headers: opts.headers || {},
+    }, (res) => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8');
+        resolve({
+          ok: res.statusCode >= 200 && res.statusCode < 300,
+          status: res.statusCode,
+          headers: res.headers,
+          text:  () => Promise.resolve(body),
+          json:  () => { try { return Promise.resolve(JSON.parse(body)); } catch (e) { return Promise.reject(e); } },
+        });
+      });
+      res.on('error', reject);
+    });
+    req.setTimeout(timeoutMs, () => req.destroy(new Error('socket timeout')));
+    req.on('error', reject);
+    // Wire up external AbortController if provided
+    if (opts.signal) opts.signal.addEventListener('abort', () => req.destroy(new Error('aborted')));
+    if (opts.body) req.write(opts.body);
+    req.end();
+  });
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -47,17 +89,21 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc:  ["'self'", "'unsafe-inline'", 'https://cdn.tailwindcss.com', 'https://cdnjs.cloudflare.com'],
+      scriptSrc:  ["'self'", "'unsafe-inline'", 'https://cdn.tailwindcss.com', 'https://cdnjs.cloudflare.com', 'https://cdn.jsdelivr.net'],
       // helmet defaults script-src-attr to 'none' which blocks every onclick="…"
       // attribute even when scriptSrc allows 'unsafe-inline'. The /dev page (and
       // a couple of buttons in index.html) rely on inline handlers, so allow them.
       scriptSrcAttr: ["'unsafe-inline'"],
-      styleSrc:   ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      styleSrc:   ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
       fontSrc:    ["'self'", 'https://fonts.gstatic.com', 'data:'],
       imgSrc:     ["'self'", 'data:', 'blob:'],
       mediaSrc:   ["'self'", 'blob:'],
       connectSrc: ["'self'", 'ws:', 'wss:'],
       objectSrc:  ["'none'"],
+      // PDF + future Office previews load from blob: URLs created via
+      // URL.createObjectURL() — explicitly allow blob: as a frame source so
+      // newer Chromium versions don't block them under the defaultSrc fallback.
+      frameSrc:   ["'self'", 'blob:'],
       frameAncestors: ["'self'"],
       baseUri:    ["'self'"],
       // Don't auto-upgrade HTTP→HTTPS. We deploy on plain HTTP behind LAN IPs
@@ -84,14 +130,19 @@ app.use(express.json({ limit: '1mb' }));
 // The page itself contains a client-side auth guard that redirects non-admins.
 // All API calls within the page enforce server-side auth independently.
 // A ?token=xxx query param can be passed when navigating from the main app.
+// Resolve the static frontend folder. The repo splits server code (backend/)
+// from client assets (frontend/public/), so `__dirname` is `<repo>/backend`
+// at runtime and we step up one level to reach the assets.
+const PUBLIC_DIR = path.join(__dirname, '..', 'frontend', 'public');
+
 app.get('/dev', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, 'public', 'dev.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'dev.html'));
 });
 
 
 // Static SPA assets — short cache so UI updates land quickly; HTML never cached.
-app.use(express.static(path.join(__dirname, 'public'), {
+app.use(express.static(PUBLIC_DIR, {
   etag: true,
   lastModified: true,
   maxAge: isProd ? '1h' : 0,
@@ -113,6 +164,13 @@ app.use('/avatars', express.static(AVATARS_DIR, {
   immutable: isProd,
 }));
 
+// Note on filename encoding: multer 2.1.x (via busboy 1.x) already returns
+// `file.originalname` as a proper UTF-8 JavaScript string when the browser
+// sends the filename in the Content-Disposition `filename*=UTF-8''…` form
+// (which all modern browsers do). So we just pass it through — re-decoding
+// via `Buffer.from(name, 'latin1').toString('utf8')` would CORRUPT Thai
+// characters (each U+0Exx code point would lose its high byte).
+//
 // Per-request scratchpad: destination() runs first per file and stashes the
 // resolved subfolder so filename() / the route handler can reuse it.
 const upload = multer({
@@ -132,14 +190,16 @@ const upload = multer({
         cb(null, dir);
       } catch (e) { cb(e); }
     },
-    // filename — YYYYMMDD_<docType>_<sanitised original name>.<ext>;
-    // append a random hex suffix if the same name already exists locally.
+    // filename — YYYYMMDD_<docType>_<sanitised task title>.<ext>;
+    // body is the TASK NAME (not the user's local filename) so uploads stay
+    // self-documenting in the file browser. Append a random hex suffix when
+    // the same task uploads multiple files of the same docType.
     filename: (req, file, cb) => {
       const ctx = req._uploadCtx || {};
       const dir = ctx.subfolder
         ? path.join(db.uploadDir(ctx.task.group_id), ctx.subfolder)
         : db.uploadDir(ctx.task?.group_id);
-      cb(null, db.buildFilename(file.originalname, ctx.docType, dir));
+      cb(null, db.buildFilename(file.originalname, ctx.docType, dir, ctx.task?.title));
     },
   }),
   limits: { fileSize: 25 * 1024 * 1024, files: 10 },
@@ -151,24 +211,49 @@ const upload = multer({
 const AUDIO_DIR = path.join(db.UPLOAD_DIR, '_audio');
 if (!fs.existsSync(AUDIO_DIR)) fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
+// Accepted audio extensions for the file-import path. WhisperX uses ffmpeg
+// internally so anything ffmpeg can decode is fair game — keep this list
+// generous and add a regex match to fileFilter for entries whose MIME doesn't
+// start with `audio/` (some browsers/OSes guess wrong, e.g. .3gp → video/3gpp).
+const AUDIO_EXTS = /\.(mp3|wav|wave|flac|aac|ogg|oga|opus|m4a|m4b|wma|webm|weba|aiff|aif|aifc|amr|ac3|au|3gp|3gpp|mka|mp2|mpa|mid|midi)$/i;
+
 const audioUpload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => cb(null, AUDIO_DIR),
     filename: (req, file, cb) => {
-      // Pick extension from MIME (browsers don't always set originalname for blobs)
-      const m = (file.mimetype || '').toLowerCase();
-      const ext = m.includes('webm') ? '.webm'
-                : m.includes('ogg')  ? '.ogg'
-                : m.includes('mp4')  ? '.m4a'
-                : m.includes('wav')  ? '.wav'
-                : m.includes('mp3')  ? '.mp3'
-                :                       '.bin';
+      // 1) Prefer the original filename's extension when present (file imports
+      //    keep the user's format hint exactly — important for ffmpeg/WhisperX).
+      const orig = (file.originalname || '').toLowerCase();
+      const extMatch = orig.match(/\.[a-z0-9]{1,5}$/);
+      let ext = (extMatch && AUDIO_EXTS.test(orig)) ? extMatch[0] : '';
+      // 2) Otherwise derive from MIME (recordings via MediaRecorder send raw blobs
+      //    with `originalname='blob'`).
+      if (!ext) {
+        const m = (file.mimetype || '').toLowerCase();
+        ext = m.includes('webm') ? '.webm'
+            : m.includes('ogg')  ? '.ogg'
+            : m.includes('flac') ? '.flac'
+            : m.includes('opus') ? '.opus'
+            : m.includes('aac')  ? '.aac'
+            : m.includes('mp4')  ? '.m4a'
+            : m.includes('wav')  ? '.wav'
+            : (m.includes('mpeg') || m.includes('mp3')) ? '.mp3'
+            : (m.includes('wma') || m.includes('x-ms-wma')) ? '.wma'
+            : '.bin';
+      }
       cb(null, crypto.randomBytes(10).toString('hex') + ext);
     },
   }),
-  limits: { fileSize: 50 * 1024 * 1024 },  // 50 MB cap
+  limits: { fileSize: 500 * 1024 * 1024 },  // 500 MB cap (raised for long meeting imports)
   fileFilter: (req, file, cb) => {
-    if (!/^audio\//i.test(file.mimetype)) return cb(new Error('รองรับเฉพาะไฟล์เสียง'));
+    // Accept anything with an audio MIME *or* a known audio extension —
+    // browsers / OSes occasionally send `application/octet-stream` for legit
+    // audio (.opus, .amr) and `video/3gpp` for audio-only 3gp.
+    const isAudioMime = /^audio\//i.test(file.mimetype || '');
+    const hasAudioExt = AUDIO_EXTS.test(file.originalname || '');
+    if (!isAudioMime && !hasAudioExt) {
+      return cb(new Error('รองรับเฉพาะไฟล์เสียง (mp3 / wav / flac / m4a / aac / ogg / opus / webm / wma / aiff / amr ฯลฯ)'));
+    }
     cb(null, true);
   },
 });
@@ -479,6 +564,22 @@ app.get('/api/files/raw', wrap(async (req, res) => {
 
 // ===== Tasks =====
 app.get('/api/tasks', wrap(async (req, res) => { if (!requireAuth(req, res)) return; res.json(await db.listTasks(req.query)); }));
+// Recycle bin listing — MUST come before `/api/tasks/:id` so Express doesn't
+// match `:id = 'trash'` first. Restore + purge use sub-paths so they're fine
+// further down.
+app.get('/api/tasks/trash', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const isAdmin = req.user.role === 'admin';
+  const all = await db.listTrashedTasks();
+  // Non-admin sees only their own trashed tasks (group leaders see their group's trash)
+  if (isAdmin) return res.json(all);
+  const myGroupIds = new Set();
+  for (const t of all) {
+    if (!t.group_id) continue;
+    if (await db.isGroupLeader(t.group_id, req.user.id)) myGroupIds.add(t.group_id);
+  }
+  res.json(all.filter(t => myGroupIds.has(t.group_id)));
+}));
 app.get('/api/tasks/:id', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const t = await db.getTask(req.params.id);
@@ -567,21 +668,8 @@ app.delete('/api/tasks/:id', wrap(async (req, res) => {
   res.json({ ok: true, permanent });
 }));
 
-// Recycle bin — list / restore / purge.
-app.get('/api/tasks/trash', wrap(async (req, res) => {
-  if (!requireAuth(req, res)) return;
-  const isAdmin = req.user.role === 'admin';
-  const all = await db.listTrashedTasks();
-  // Non-admin sees only their own trashed tasks (assigned or in groups they lead)
-  if (isAdmin) return res.json(all);
-  const myGroupIds = new Set();
-  // (lightweight filter — group leaders see their group's trash)
-  for (const t of all) {
-    if (!t.group_id) continue;
-    if (await db.isGroupLeader(t.group_id, req.user.id)) myGroupIds.add(t.group_id);
-  }
-  res.json(all.filter(t => myGroupIds.has(t.group_id)));
-}));
+// Recycle bin restore — GET listing is registered higher up (before /:id) to
+// avoid route shadowing. Restore + purge use sub-paths so they stay here.
 app.post('/api/tasks/:id/restore', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const all = await db.listTrashedTasks();
@@ -1229,15 +1317,18 @@ async function transcribeRecording(id) {
   broadcast('change', { path: '/api/recordings', method: 'PATCH', by: rec.member_id });
 
   try {
-    // 6-min timeout — long clips on slow CPUs can take a while
+    // 15-minute ceiling — long clips on slow CPUs + dynaudnorm + alignment can
+    // legitimately run that long. slowFetch's internal socket timeout will
+    // fire at the same limit; AbortController stays as a safety net so a
+    // hung connection doesn't keep the row "processing" forever.
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 6 * 60 * 1000);
-    const r = await fetch(`${ASR_URL}/transcribe`, {
+    const timer = setTimeout(() => ctrl.abort(), 15 * 60 * 1000);
+    const r = await slowFetch(`${ASR_URL}/transcribe`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filename: rec.filename }),
       signal: ctrl.signal,
-    }).finally(() => clearTimeout(timer));
+    }, 15 * 60 * 1000).finally(() => clearTimeout(timer));
 
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
@@ -1279,12 +1370,12 @@ async function summariseRecording(id) {
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5 * 60 * 1000);
-    const r = await fetch(`${ASR_URL}/summarise`, {
+    const r = await slowFetch(`${ASR_URL}/summarise`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: rec.transcript, language: 'th' }),
       signal: ctrl.signal,
-    }).finally(() => clearTimeout(timer));
+    }, 10 * 60 * 1000).finally(() => clearTimeout(timer));
 
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
