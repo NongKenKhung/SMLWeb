@@ -17,12 +17,15 @@ ENV NODE_ENV=production \
 # /app/uploads holds user-submitted files (mount as a host bind for backup).
 RUN groupadd --system --gid 1001 app \
  && useradd  --system --uid 1001 --gid app --create-home --shell /usr/sbin/nologin app \
- && mkdir -p /data /app/uploads \
+ && mkdir -p /data /app/uploads /app/backend /app/frontend \
  && chown -R app:app /data /app
 
 COPY --chown=app:app --from=deps /app/node_modules ./node_modules
-COPY --chown=app:app server.js auth.js db.js mailer.js ./
-COPY --chown=app:app public ./public
+# Repo is split into backend/ (server code) + frontend/ (static assets).
+# Container preserves that layout so __dirname/.. paths in db.js / server.js
+# resolve identically in Docker and on a developer's laptop.
+COPY --chown=app:app backend  ./backend
+COPY --chown=app:app frontend ./frontend
 
 USER app
 EXPOSE 3000
@@ -32,4 +35,4 @@ VOLUME ["/data", "/app/uploads"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "server.js"]
+CMD ["node", "backend/server.js"]
