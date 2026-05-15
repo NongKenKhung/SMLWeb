@@ -1103,6 +1103,8 @@
             <button id="aud-rec-btn"   class="btn btn-primary" onclick="audToggle()">🔴 Record</button>
             <button id="aud-pause-btn" class="btn btn-ghost"   onclick="audPause()" disabled>⏸ Pause</button>
             <button id="aud-stop-btn"  class="btn btn-ghost"   onclick="audStop()" disabled>⏹ Stop</button>
+            <button id="aud-import-btn" class="btn btn-ghost"  onclick="audImportClick()" title="Import ไฟล์เสียงจากเครื่อง (รับทุก format ที่ ffmpeg อ่านได้)">📁 Import</button>
+            <input type="file" id="aud-import-input" accept="audio/*,.mp3,.wav,.flac,.aac,.ogg,.opus,.m4a,.wma,.webm,.aiff,.amr" multiple style="display:none" onchange="audImportFiles(this.files); this.value='';">
             <span id="aud-timer" class="aud-timer">00:00.0</span>
             <select id="aud-mic" class="rm-input" style="margin-left:auto;min-width:12rem"><option>— เลือกไมค์ —</option></select>
           </div>
@@ -3327,6 +3329,50 @@ function audCleanup() {
     ctx.fillStyle = '#020617'; ctx.fillRect(0, 0, cv.width, cv.height);
     ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, cv.height/2); ctx.lineTo(cv.width, cv.height/2); ctx.stroke();
+  }
+}
+
+/* Import audio files from disk — accepts any extension ffmpeg can decode.
+   Files keep their original name as the label (minus extension); the upload
+   reuses /api/recordings so transcription + summary fire automatically. */
+function audImportClick() {
+  document.getElementById('aud-import-input').click();
+}
+async function audImportFiles(files) {
+  if (!files?.length) return;
+  // Upload sequentially so the placeholder ordering stays sane and we don't
+  // saturate the network for big imports.
+  for (const f of files) {
+    const tempId = 'imp_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+    const labelBase = (f.name || 'imported').replace(/\.[a-z0-9]{1,5}$/i, '').slice(0, 200);
+    _audClips.unshift({
+      id: tempId, label: '⬆ Importing: ' + labelBase, mime: f.type || 'audio/*',
+      size_bytes: f.size, duration_ms: 0, created_at: new Date().toISOString(),
+      member_id: _user?.id, member_name: _user?.name, _uploading: true,
+    });
+    audRenderClips();
+
+    const fd = new FormData();
+    fd.append('audio', f, f.name);
+    fd.append('label', labelBase);
+    fd.append('duration_ms', '0');
+    try {
+      const r = await fetch('/api/recordings', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${_token}` },
+        body: fd,
+      });
+      if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || 'import failed');
+      const saved = await r.json();
+      _audClips = _audClips.filter(c => c.id !== tempId);
+      _audClips.unshift(saved);
+      audRenderClips();
+      toast(`📁 Import "${labelBase}" สำเร็จ`, 'success');
+    } catch (e) {
+      _audClips = _audClips.filter(c => c.id !== tempId);
+      audRenderClips();
+      toast(`Import "${labelBase}" failed: ${e.message}`, 'error');
+    }
   }
 }
 
