@@ -10,7 +10,10 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-const UPLOAD_DIR = path.join(__dirname, 'uploads');
+// uploads/ lives at the repo root (one level up from this file in the new
+// backend/ folder). Allow override via UPLOAD_DIR env so the operator can
+// point at a NAS mount without code changes.
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 if (process.env.NODE_ENV !== 'test') {
@@ -74,6 +77,9 @@ async function initSchema() {
     ALTER TABLE members ADD COLUMN IF NOT EXISTS prefix TEXT NOT NULL DEFAULT '';
     -- Per-meeting iCalendar SEQUENCE (RFC 5545) — bumps each time we send a REQUEST/CANCEL
     ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS ics_sequence INTEGER NOT NULL DEFAULT 0;
+    -- Meeting end time (ISO datetime). Optional — falls back to deadline+60min
+    -- in the ICS mailer when null. Only meaningful for kind='meeting'.
+    ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS end_time     TEXT;
 
     -- Connection categories:
     --   'personal' (default, existing behavior) — สมาชิก ↔ บริษัทที่ปรึกษา / บุคคลภายนอกส่วนตัว
@@ -675,9 +681,12 @@ async function generateGroupSummary(groupId) {
     lines.push(`## 📂 ไฟล์ในกลุ่ม (${files.length})`);
     for (const f of files) {
       const sz = f.size ? ` · ${(f.size / 1024).toFixed(1)} KB` : '';
+      // smartUtf8Decode recovers legacy multer Latin-1 mojibake so old
+      // attachments show their Thai filename in the generated markdown.
+      const cleanName = smartUtf8Decode(f.original_name) || smartUtf8Decode(f.filename) || '(no name)';
       const label = f.kind === 'url'
         ? `🔗 [${f.label || f.url}](${f.url})`
-        : `📄 ${f.original_name || f.filename}${sz}`;
+        : `📄 ${cleanName}${sz}`;
       lines.push(`- ${label} _(uploaded ${(f.uploaded_at || '').slice(0, 10)})_`);
     }
     lines.push('');
@@ -1341,6 +1350,15 @@ async function createTask(input, opts = {}) {
   const todayIso = new Date().toISOString().slice(0, 10);
   const startDate = input.start_date || (kind === 'meeting' ? null : todayIso);
 
+  // Meetings only: optional end_time (ISO datetime). Must be strictly after deadline (start).
+  let endTime = null;
+  if (kind === 'meeting' && input.end_time) {
+    endTime = String(input.end_time);
+    if (new Date(endTime) <= new Date(input.deadline)) {
+      throw new Error('เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม');
+    }
+  }
+
   const t = {
     id: uid(),
     title: String(input.title || '').trim(),
@@ -1349,6 +1367,7 @@ async function createTask(input, opts = {}) {
     points: Number.isFinite(+input.points) ? Math.max(0, +input.points) : 0,
     start_date: startDate,
     deadline:   input.deadline   || null,
+    end_time:   endTime,
     status,
     target: String(input.target || '').trim(),
     points_phase,
@@ -1361,10 +1380,10 @@ async function createTask(input, opts = {}) {
   };
   await exec(
     `INSERT INTO tasks
-     (id, title, description, group_id, points, start_date, deadline, status, target, points_phase,
+     (id, title, description, group_id, points, start_date, deadline, end_time, status, target, points_phase,
       kind, location_type, location_detail, created_by, created_at, completed_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
-    [t.id, t.title, t.description, t.group_id, t.points, t.start_date, t.deadline, t.status, t.target, t.points_phase,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+    [t.id, t.title, t.description, t.group_id, t.points, t.start_date, t.deadline, t.end_time, t.status, t.target, t.points_phase,
      t.kind, t.location_type, t.location_detail, t.created_by, t.created_at, t.completed_at]
   );
 
@@ -1425,10 +1444,23 @@ async function updateTask(id, patch) {
     }
   }
 
+  // Meeting end_time: only persisted when kind='meeting'; cleared otherwise.
+  // When provided, must be strictly after the (possibly new) deadline.
+  let nextEndTime = nextKind === 'meeting' ? cur.end_time : null;
+  if (nextKind === 'meeting' && patch.end_time !== undefined) {
+    nextEndTime = patch.end_time || null;
+  }
+  if (nextEndTime) {
+    const nextStart = patch.deadline !== undefined ? (patch.deadline || cur.deadline) : cur.deadline;
+    if (nextStart && new Date(nextEndTime) <= new Date(nextStart)) {
+      throw new Error('เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม');
+    }
+  }
+
   await exec(
     `UPDATE tasks SET title=$1, description=$2, group_id=$3, points=$4, start_date=$5, deadline=$6,
                       status=$7, target=$8, points_phase=$9, kind=$10, location_type=$11,
-                      location_detail=$12, completed_at=$13 WHERE id=$14`,
+                      location_detail=$12, completed_at=$13, end_time=$14 WHERE id=$15`,
     [
       patch.title       !== undefined ? String(patch.title).trim()       : cur.title,
       patch.description !== undefined ? String(patch.description).trim() : cur.description,
@@ -1443,6 +1475,7 @@ async function updateTask(id, patch) {
       nextLocType,
       nextLocDetail,
       completed_at,
+      nextEndTime,
       id,
     ]
   );
@@ -1725,13 +1758,14 @@ function uploadDir(groupId) {
 }
 
 // Subfolder name for a task — used when the task gathers ≥ 2 attachments.
-// Sanitized title + last 6 hex chars of the task id so collisions across
-// same-titled tasks stay unique.
+// Plain sanitized title only (no `_<id-suffix>` — keeps the file browser
+// readable). Two tasks with the same title within one group will share a
+// folder; files inside still don't collide because buildFilename appends a
+// 4-hex tag on duplicate basenames, and listing-by-task uses the DB row
+// (task_id), not directory contents.
 function taskFolderName(task) {
   if (!task) return '_task';
-  const base = sanitizeFolderName(task.title || '_task');
-  const suffix = String(task.id || '').slice(-6) || 'x';
-  return `${base}_${suffix}`;
+  return sanitizeFolderName(task.title || '_task');
 }
 
 // Resolve the on-disk directory a file lives in given its DB row.
@@ -1771,15 +1805,23 @@ function sanitiseDocType(s) {
   return DOC_TYPE_IDS.has(v) ? v : 'อื่นๆ';
 }
 
-// Stored-name format: YYYYMMDD_<docType>_<sanitised original name>.<ext>
-// docType is one of the DOC_TYPES ids; original name keeps Thai/spaces but
-// strips FS-hostile chars. Same-name collisions in the target dir get a
-// 4-hex suffix so we never overwrite.
-function buildFilename(originalName, docType, dir = null) {
+// Stored-name format: YYYYMMDD_<docType>_<sanitised task title>.<ext>
+// The body of the filename is the TASK NAME (not the user's local filename)
+// so uploads are self-documenting in the file browser even when the original
+// was something like "Final v2.pdf". Same-name collisions in the target dir
+// get a 4-hex suffix so we never overwrite — relevant when a task has
+// multiple files of the same docType (e.g. several scanned ปร.4 pages).
+//
+// `originalName` is still used to derive the file extension (PDF / XLSX /
+// PPTX / etc) so the file opens correctly on download.
+function buildFilename(originalName, docType, dir = null, taskTitle = '') {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
   const ext = path.extname(originalName || '').toLowerCase().slice(0, 12);
-  const baseRaw = path.basename(originalName || 'file', ext);
-  const baseClean = baseRaw
+  // Prefer the task title; fall back to the original filename's basename if
+  // the task somehow has no title (defensive — schema requires NOT NULL).
+  const rawBase = (taskTitle && String(taskTitle).trim()) ||
+                  path.basename(originalName || 'file', ext);
+  const baseClean = String(rawBase)
     .replace(/[\\/:*?"<>|]/g, '_')
     .replace(/\s+/g, ' ')
     .trim()
@@ -1854,11 +1896,48 @@ async function hydrateFolderCache() {
     }
   }
 }
+// Heuristic Latin-1 → UTF-8 recovery for filenames that were saved by a
+// previous version (or a legacy browser) that sent the filename via the old
+// `filename="<raw bytes>"` Content-Disposition form. multer/busboy decoded
+// those bytes as Latin-1, producing strings like "à¹‚à¸„à¸£..." in DB columns.
+//
+// Safe-by-default — only re-decodes when the input is _purely_ ASCII +
+// Latin-1 high bytes AND those bytes form a valid UTF-8 sequence. Proper
+// UTF-8 strings (Thai code points U+0Exx, Chinese U+4E00+, etc.) have JS
+// char codes above 0xFF and are returned unchanged. Latin-1 strings like
+// "café" or "résumé" decode to invalid UTF-8 (replacement char) and are
+// also returned unchanged.
+function smartUtf8Decode(name) {
+  if (!name) return name;
+  if (/^[\x00-\x7F]*$/.test(name)) return name;        // pure ASCII
+  for (let i = 0; i < name.length; i++) {
+    if (name.charCodeAt(i) > 0xFF) return name;        // has real Unicode char
+  }
+  try {
+    const candidate = Buffer.from(name, 'latin1').toString('utf8');
+    if (candidate.includes('�')) return name; // invalid UTF-8 → real Latin-1, leave alone
+    return candidate;
+  } catch { return name; }
+}
+
+// Map a file row from DB to API response — decodes legacy mojibake in
+// `original_name` without rewriting the DB. Cheap, idempotent, safe on rows
+// that are already correct UTF-8.
+function decodeFileRow(r) {
+  if (r && r.original_name) r.original_name = smartUtf8Decode(r.original_name);
+  return r;
+}
+
 async function recordFile({ task_id, group_id, uploaded_by, filename, original_name, mimetype, size, subfolder, doc_type }) {
   const f = {
     id: uid(),
     task_id, group_id: group_id || null, uploaded_by: uploaded_by || null,
-    filename, original_name, mimetype: mimetype || '', size: size || 0,
+    // Recover from legacy-browser Latin-1 multer mojibake before persisting,
+    // so going-forward rows are clean even when a stray client sends the old
+    // `filename="<raw bytes>"` Content-Disposition form.
+    filename: smartUtf8Decode(filename),
+    original_name: smartUtf8Decode(original_name),
+    mimetype: mimetype || '', size: size || 0,
     kind: 'file', url: null, label: null,
     subfolder: subfolder || '',
     doc_type: sanitiseDocType(doc_type),
@@ -1888,36 +1967,40 @@ async function recordUrl({ task_id, group_id, uploaded_by, url, label }) {
   return f;
 }
 async function listFilesForTask(taskId) {
-  return q(`SELECT f.*, m.name AS uploader_name, m.color AS uploader_color, t.title AS task_title, g.name AS group_name
+  const rows = await q(`SELECT f.*, m.name AS uploader_name, m.color AS uploader_color, t.title AS task_title, g.name AS group_name
             FROM task_files f
             LEFT JOIN members m ON m.id = f.uploaded_by
             LEFT JOIN tasks t ON t.id = f.task_id
             LEFT JOIN task_groups g ON g.id = f.group_id
             WHERE f.task_id = $1 ORDER BY f.uploaded_at DESC`, [taskId]);
+  return rows.map(decodeFileRow);
 }
 async function listFilesForGroup(groupId) {
-  if (groupId == null) {
-    return q(`SELECT f.*, m.name AS uploader_name, m.color AS uploader_color, t.title AS task_title
+  const rows = groupId == null
+    ? await q(`SELECT f.*, m.name AS uploader_name, m.color AS uploader_color, t.title AS task_title
               FROM task_files f
               LEFT JOIN members m ON m.id = f.uploaded_by
               LEFT JOIN tasks t ON t.id = f.task_id
-              WHERE f.group_id IS NULL ORDER BY f.uploaded_at DESC`);
-  }
-  return q(`SELECT f.*, m.name AS uploader_name, m.color AS uploader_color, t.title AS task_title
+              WHERE f.group_id IS NULL ORDER BY f.uploaded_at DESC`)
+    : await q(`SELECT f.*, m.name AS uploader_name, m.color AS uploader_color, t.title AS task_title
             FROM task_files f
             LEFT JOIN members m ON m.id = f.uploaded_by
             LEFT JOIN tasks t ON t.id = f.task_id
             WHERE f.group_id = $1 ORDER BY f.uploaded_at DESC`, [groupId]);
+  return rows.map(decodeFileRow);
 }
 async function listAllFiles() {
-  return q(`SELECT f.*, m.name AS uploader_name, m.color AS uploader_color, t.title AS task_title, g.name AS group_name
+  const rows = await q(`SELECT f.*, m.name AS uploader_name, m.color AS uploader_color, t.title AS task_title, g.name AS group_name
             FROM task_files f
             LEFT JOIN members m ON m.id = f.uploaded_by
             LEFT JOIN tasks t ON t.id = f.task_id
             LEFT JOIN task_groups g ON g.id = f.group_id
             ORDER BY f.uploaded_at DESC`);
+  return rows.map(decodeFileRow);
 }
-async function getFile(id) { return q1('SELECT * FROM task_files WHERE id = $1', [id]); }
+async function getFile(id) {
+  return decodeFileRow(await q1('SELECT * FROM task_files WHERE id = $1', [id]));
+}
 async function deleteFile(id) {
   const f = await getFile(id);
   if (!f) return false;
