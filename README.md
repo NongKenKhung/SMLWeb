@@ -41,13 +41,10 @@ docker compose logs -f app              # tail the main app
 
 ### Default logins (PIN: `1234`)
 
-| Name | Role |
-|---|---|
-| ดร. สมชาย ใจดี | admin |
-| ผศ. วิภาวี งามสง่า | admin |
-| ภาคิน ก้องเกียรติ | group leader (IoT, Lab Infra) |
-| นภาพร เอี่ยมศรี | group leader (Workshop) |
-| ปรีดา ทองคำ | member |
+The seed script (`seed.js`) creates a mix of **admin / group-leader / member**
+accounts for local development — open `seed.js` or `SELECT name, role FROM members`
+in pgAdmin to see the full list. The login screen no longer advertises specific
+demo names; type any seeded username plus PIN `1234` to sign in.
 
 ### Quick Start — without Docker
 
@@ -67,19 +64,39 @@ The DB layer auto-creates tables on first run (`init()` in `db.js`).
 - **Tasks**: multi-assignee, role per assignee (member/leader/supreme), point
   shares, deadline + extensions, status (pending/in_progress/done/on_hold).
 - **Calendar**: month view + per-day list, meeting kind, leaves overlay,
-  inline create.
+  inline create. Meetings take a start time **and** an explicit end time
+  (defaults to start + 1 hour). Past meetings show their time range only —
+  no "overdue" chip, since the meeting either happened or didn't.
 - **Groups**: leader + members, CSV export, color palette.
 - **Submissions**: drag-and-drop files **or** URL submissions (Drive, Notion,
-  GitHub …). In-app preview for images, PDFs, text, audio, video.
+  GitHub …). In-app preview for images, PDFs, text, audio, video, plus
+  Office formats: **.docx** rendered via **docx-preview** (preserves original
+  page layout, fonts, colours, headers, inline images); **.xlsx/.xls**
+  rendered as a tabbed spreadsheet via SheetJS — custom table builder that
+  keeps column widths, merged cells, number/date formatting from the
+  workbook, with row/column headers and a single sticky scrollbar like Excel.
+  Libraries lazy-loaded from cdnjs on first preview. **.pptx** still falls
+  back to a download prompt — render quality of available browser libraries
+  isn't there yet. The
+  submission sheet stages files first so you can pick a **different document
+  type (proposal / ปร4 / ใบเสนอราคา / รายงาน / …) per file** via a scrollable
+  bottom-sheet picker (full Thai labels), then send all at once — the client
+  groups by doc-type and fires one POST per type. On-disk filenames follow
+  `YYYYMMDD_<docType>_<taskTitle>.<ext>` (body is the **task name**, not the
+  user's local filename — files stay self-documenting in the file browser).
+  The original filename is preserved in `task_files.original_name` for
+  reference; multiple files of the same doc_type for one task get a 4-hex
+  collision suffix.
 - **Connections**: contact directory with kind (personal/department/external)
   and topic tags.
 - **Members**: profile, avatar, leave management, password change, point
   history (in scoreboard).
 - **Real-time**: Server-Sent Events broadcast every state change so all open
   clients re-fetch and re-render.
-- **Whiteboard** (currently hidden behind the *Site Layout* feature flag —
-  promote via /dev → 🎛️ Site Layout): real-time multi-user drawing with
-  Fabric.js + WebSocket rooms, sticky notes, image upload, inject task data.
+- **Whiteboard**: real-time multi-user drawing with Fabric.js + WebSocket
+  rooms, sticky notes, image upload, inject task data. **Removed from both
+  desktop top nav and mobile bottom tabbar** — page still rendered, reachable
+  only by hash deep-link `/#whiteboard` or programmatic `setTab('whiteboard')`.
 - **Layout customisation**: every page is a 12-col CSS-grid masonry — admin
   reorders / resizes / hides widgets via `/dev → 🎛️ Site Layout`. Mobile
   collapses to a single column.
@@ -103,7 +120,7 @@ logged in as admin (`🛠️ Dev & Test Tools`).
 | Panel | What it does |
 |---|---|
 | 🎨 **Whiteboard** | Real-time canvas (Fabric.js + WebSocket). Sub-tab below ↓ |
-| 🎙️ **Audio Recorder** | Record → upload → server stores blob + DB row → **Thai transcription via WhisperX** (word-level timestamps). Mobile-friendly with HTTPS hint, mic selector, live waveform, wake-lock. |
+| 🎙️ **Audio Recorder** | Record → upload → server stores blob + DB row → **Thai transcription via WhisperX** (word-level timestamps) + **AI summary via Ollama** (Typhoon 2). Mobile-friendly with HTTPS hint, mic selector, live waveform, wake-lock. **📁 Import** button accepts any audio file extension ffmpeg can decode (mp3/wav/flac/m4a/aac/ogg/opus/webm/wma/aiff/amr/…), up to 500 MB per file. |
 | 🔬 **Component Lab** | Live HTML/CSS/JS playground. |
 | 📐 **Room Designer** | 2D + 3D floor-plan editor. 12-col snap grid, drag-resize-rotate items, collision detection, layered items (laptop on desk), structures (column/wall) block layers, custom catalog, **Three.js 3D view** with select / drag / orbit / pan. Multi-room storage in localStorage. |
 | 📖 **About Editor** | Block-based CMS (h1/h2/h3, paragraph, image, list, quote, callout, link, code, video, columns) → preview rendered HTML, multi-page, JSON export/import, persisted in localStorage. |
@@ -139,6 +156,12 @@ postgres ←── app (Node, SSE, WS, REST) ──→ asr (Python Flask + PyTha
   [m-bain/whisperX](https://github.com/m-bain/whisperX) (faster-whisper +
   word-level alignment via wav2vec2). Model size configurable via
   `WHISPER_MODEL` env (default `small`, ~500 MB cached in volume `asr_cache`).
+- **ollama**: local LLM server for AI-summary of recordings. Default model
+  **`scb10x/llama3.2-typhoon2-3b-instruct`** — a Thai-tuned 3B model from
+  SCB10X (built on Llama 3.2). ~2 GB on first pull, cached in volume
+  `ollama_models`. Override via `OLLAMA_MODEL` env. Skip starting this
+  service to disable AI summaries cleanly — `asr` will mark
+  `summary_status='skipped'`.
 
 Set `ASR_URL=` empty in `app.environment` to disable transcription cleanly —
 clips stay in `transcript_status='pending'` and the UI shows a 🔄 retry
@@ -166,32 +189,74 @@ button.
   - `sml_dev_rooms_v1`, `sml_dev_room_custom_v1` (Room Designer)
   - `sml_dev_about_v1` (About Editor)
 
+### NAS storage (prepared, not active)
+
+`docker-compose.yml` ships with a pre-wired `sml_uploads` named volume that
+mounts a network share (NFS) instead of the local `./uploads/` directory —
+ready to flip on once the NAS is racked and configured. Tested target:
+**UGREEN NASync DH4300 Plus** over NFSv4.
+
+Currently inactive: the `app` and `asr` services still bind-mount `./uploads`.
+Defining the NFS volume in the compose file is harmless until a service
+actually references it — Docker resolves the mount lazily at container start.
+
+To activate:
+1. Set up the share on the NAS (UGOS Pro → Shared Folder `sml-uploads` →
+   File Services → enable NFSv4 → NFS Permissions: host IP, R/W, squash root)
+2. In `docker-compose.yml` swap the bind mounts on `app` and `asr` to
+   `sml_uploads:/app/uploads` (and `:ro` for asr), and edit `sml_uploads`
+   `driver_opts` (real NAS IP + export path)
+3. Migrate existing files: `rsync -aHAX ./uploads/ /mnt/<nas-mounted>/`
+4. `docker compose down && docker compose up -d`
+
+Do **not** put `pg_data`, `asr_cache`, or `ollama_models` on the NAS —
+Postgres needs low-latency `fsync` and the model caches are read-mostly hot
+files. Only the `uploads/` tree benefits from NAS-backed storage (snapshots,
+RAID, off-host backup).
+
 ---
 
 ## Project structure
 
 ```
 .
-├── server.js                 — Express app + REST + SSE + WS bridge
-├── db.js                     — pg pool + schema init + every CRUD helper
-├── auth.js                   — token store (file-backed, hot-reloaded)
-├── mailer.js                 — SMTP (invitations, deadline reminders)
-├── seed.js                   — sample data for fresh DBs
-├── docker-compose.yml        — postgres + pgadmin + app + asr
-├── Dockerfile                — Node 20 image for `app`
-├── public/
-│   ├── index.html            — main SPA shell
-│   ├── app.js                — main SPA logic (~6k lines)
-│   ├── style.css             — Tailwind + iOS-flavoured custom CSS
-│   └── dev.html              — /dev admin sandbox (~5k lines)
-├── asr-service/
-│   ├── Dockerfile            — Python 3.11 + ffmpeg + CPU-only torch 2.5
-│   ├── requirements.txt      — whisperx 3.1.5
-│   ├── app.py                — Flask /health · /transcribe (+ word timestamps)
+├── backend/                  ─ Node server code (kept self-contained)
+│   ├── server.js             — Express app + REST + SSE + WS bridge
+│   ├── db.js                 — pg pool + schema init + every CRUD helper
+│   ├── auth.js               — token store (file-backed, hot-reloaded)
+│   ├── mailer.js             — SMTP (invitations, deadline reminders)
+│   ├── seed.js               — sample data for fresh DBs
+│   ├── mock_files.js         — sample-file generator (dev only)
+│   ├── test_api.js           — smoke-test script for the REST API
+│   └── ecosystem.config.js   — PM2 config (bare-metal alt to Docker)
+├── frontend/
+│   └── public/               — Static SPA assets served by Express
+│       ├── index.html        — main SPA shell
+│       ├── app.js            — main SPA logic (~6k lines)
+│       ├── style.css         — Tailwind + iOS-flavoured custom CSS
+│       ├── dev.html          — /dev admin sandbox (~5k lines)
+│       ├── sw.js             — service worker (PWA cache strategy)
+│       ├── manifest.webmanifest
+│       └── icon.svg
+├── asr-service/              ─ WhisperX speech-to-text microservice
+│   ├── Dockerfile            — Python 3.11 + ffmpeg + CPU-only torch
+│   ├── requirements.txt      — whisperx 3.8.5
+│   ├── app.py                — Flask /health · /transcribe · /summarise
 │   └── README.md             — service-specific notes
-├── uploads/                  — file storage (host-mounted)
-└── pgadmin/servers.json      — pre-configured pgadmin connection
+├── uploads/                  — file storage (host-mounted, gitignored)
+├── pgadmin/servers.json      — pre-configured pgadmin connection
+├── docker-compose.yml        — postgres + pgadmin + app + asr + ollama
+├── Dockerfile                — Node 20 image; COPYs backend/ + frontend/
+├── package.json              — Node deps (lives at root, scripts use backend/)
+├── package-lock.json
+├── README.md, llms.txt       — this file + machine-readable summary
+└── .env, .gitignore, .dockerignore
 ```
+
+The container preserves the same `/app/backend/` + `/app/frontend/public/`
+split as the host so `__dirname/..` resolves identically in Docker and on a
+developer's laptop. `UPLOAD_DIR` can be overridden via env (defaults to
+`<repo-root>/uploads/`) — point it at a NAS mount without code changes.
 
 ---
 
