@@ -69,6 +69,14 @@ services:
     volumes:
       - app_state:/data
       - ./uploads:/app/uploads
+      # ── NAS storage (UGREEN DH4300 Plus via NFS) — prepared, NOT active ──
+      # To switch to NAS-backed storage:
+      #   1. Comment out the `./uploads:/app/uploads` line above
+      #   2. Uncomment the line below
+      #   3. Do the same on the `asr` service (read-only mount)
+      #   4. Edit `sml_uploads` driver_opts at the bottom (real NAS IP + path)
+      #   5. docker compose down && docker compose up -d
+      # - sml_uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,18 +108,22 @@ services:
       WHISPER_ALIGN_MODEL: ${WHISPER_ALIGN_MODEL:-airesearch/wav2vec2-large-xlsr-53-th}
       # Ollama is reached via compose DNS. Empty = AI summary disabled.
       OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-scb10x/llama3.2-typhoon2-3b-instruct}
     volumes:
       - ./uploads:/uploads:ro
+      # NAS counterpart of the app's bind mount — keep in sync with the `app` service:
+      # - sml_uploads:/uploads:ro
       - asr_cache:/cache
     # Uncomment to expose for direct curl tests (otherwise only `app` reaches it)
     # ports: ["8000:8000"]
 
   # ── Ollama (local LLM for AI summarisation) ─────────────────────────────
-  # Pulls llama3.2:3b on first run (~2 GB). Swap OLLAMA_MODEL for any model in
-  # the Ollama library — qwen2.5:3b, gemma2:2b, scb10x/llama3.2-typhoon2-3b
-  # (Thai-tuned), etc. Skip starting this service to disable AI summaries
-  # cleanly — ASR will mark `summary_status='skipped'`.
+  # Default model: scb10x/llama3.2-typhoon2-3b-instruct — Thai-tuned 3B by
+  # SCB10X (built on Llama 3.2). ~2 GB pull on first asr→ollama call. Swap
+  # OLLAMA_MODEL for any other model in the Ollama library —
+  # llama3.2:3b, qwen2.5:3b, gemma2:2b, llama3.1:8b, etc. Skip starting this
+  # service to disable AI summaries cleanly — ASR marks
+  # `summary_status='skipped'`.
   ollama:
     image: ollama/ollama:latest
     container_name: sml_ollama
@@ -135,3 +147,28 @@ volumes:
   app_state:
   asr_cache:
   ollama_models:
+
+  # ── NAS-backed uploads volume (UGREEN NASync DH4300 Plus, NFSv4) ────────
+  # Prepared for future cutover; currently unused (see commented-out mounts
+  # on `app` and `asr` services). Defining the volume here is safe — Docker
+  # only attempts the NFS mount when a container actually references it, so
+  # this block can sit dormant indefinitely without hitting the NAS.
+  #
+  # On the NAS (UGOS Pro):
+  #   Storage Manager → create RAID 1/5/6 pool → Btrfs volume
+  #   Shared Folder → create `sml-uploads` → enable Snapshot
+  #   File Services → NFS → enable NFSv4
+  #   Shared Folder → sml-uploads → NFS Permissions →
+  #     Hostname/IP = Docker host IP (or subnet)
+  #     Privilege   = Read/Write
+  #     Squash      = Map root to admin
+  #     Security    = sys
+  #
+  # Replace `192.168.1.50` and `/volume1/sml-uploads` with the values UGOS
+  # Pro shows in the NFS Permissions dialog before activating.
+  sml_uploads:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=192.168.1.50,nfsvers=4,rw,soft,timeo=30,nolock"
+      device: ":/volume1/sml-uploads"
