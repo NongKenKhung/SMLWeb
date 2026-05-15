@@ -27,13 +27,14 @@ logs
 .DS_Store
 Thumbs.db
 
-# Dev-only / unused-in-prod files
-test_api.js
-seed.js
-mock_files.js
+# Dev-only / unused-in-prod files (paths reflect the backend/ split)
+backend/test_api.js
+backend/seed.js
+backend/mock_files.js
+backend/ecosystem.config.js
 docker-compose.yml
 pgadmin
 README.md
+llms.txt
 Dockerfile
 .dockerignore
-ecosystem.config.js
