@@ -171,7 +171,12 @@ function buildIcs({ method, meeting, organizerName, sequence, recipients }) {
   const uid = `sml-meeting-${meeting.id}@${ORGANIZER_HOST}`;
   const status = method === 'CANCEL' ? 'CANCELLED' : 'CONFIRMED';
   const start = toIcsDateTime(meeting.deadline);
-  const end   = toIcsDateTime(meeting.deadline, 60);  // default 1-hour meeting
+  // Use explicit end_time if the organizer set one; otherwise default to +60 min
+  // so older meetings (created before the end_time column existed) still produce
+  // a valid VEVENT.
+  const end = meeting.end_time
+    ? toIcsDateTime(meeting.end_time)
+    : toIcsDateTime(meeting.deadline, 60);
 
   // TZID-formatted dates (Apple parses these more reliably than UTC Z form)
   const fmtDt = (d, prop) => {
@@ -338,6 +343,14 @@ async function sendCalendarMail({ method, meeting, organizer, sequence, recipien
   const html = buildHtmlBody({ method, meeting, organizerName });
   const text = buildTextBody({ method, meeting, organizerName });
 
+  // Send the ICS as a single multipart/alternative MIME part — NOT as a
+  // separate `application/ics` attachment. nodemailer's `icalEvent` option
+  // emits BOTH (inline + attachment) for legacy-client compatibility, which
+  // makes iOS / Apple Mail show two copies of the same event (one as the
+  // big "Add to Calendar" banner, another as a downloadable `invite.ics`
+  // file). Modern clients — Apple Mail, iOS Mail, Gmail, Outlook 365,
+  // Thunderbird — all parse the inline `text/calendar` part correctly, so
+  // sending just one copy is cleaner with no functional loss.
   const results = await Promise.allSettled(recipients.map(r =>
     t.sendMail({
       from: SMTP_FROM,
@@ -345,7 +358,10 @@ async function sendCalendarMail({ method, meeting, organizer, sequence, recipien
       subject,
       text,
       html,
-      icalEvent: { method, content: icsContent, filename: 'invite.ics' },
+      alternatives: [{
+        contentType: `text/calendar; method=${method}; charset=UTF-8`,
+        content: icsContent,
+      }],
     })
   ));
   const sent = results.filter(r => r.status === 'fulfilled').length;
@@ -371,6 +387,11 @@ function meaningfulChange(before, after) {
   if (before.title          !== after.title)          return true;
   if (before.description    !== after.description)    return true;
   if (before.deadline       !== after.deadline)       return true;
+  // end_time was added later; treat missing as null on both sides so legacy
+  // meetings (no end_time) still compare cleanly. Without this, editing JUST
+  // the meeting end-time would silently skip the ICS update and recipient
+  // calendars would keep the old DTEND.
+  if ((before.end_time||null) !== (after.end_time||null)) return true;
   if (before.location_type  !== after.location_type)  return true;
   if (before.location_detail!== after.location_detail)return true;
   // Status flip → cancellation handled by caller, but treat resurrection (cancelled→on_hold)
