@@ -15,6 +15,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
+  <!-- flatpickr — replaces native date / datetime inputs so the picker shows
+       dd/mm/yyyy + 24-hour time on every browser (native pickers follow OS
+       locale and would otherwise display mm/dd/yyyy or AM/PM on English OS). -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" crossorigin="anonymous"></script>
 </head>
 <body class="bg-slate-100">
@@ -30,7 +35,7 @@
       <form id="login-form" class="space-y-3">
         <div>
           <label class="ios-label">ชื่อผู้ใช้</label>
-          <input id="login-name" class="ios-input" autocomplete="username" placeholder="เช่น ดร. สมชาย ใจดี" required>
+          <input id="login-name" class="ios-input" autocomplete="username" placeholder="ชื่อ-นามสกุล" required>
         </div>
         <div>
           <label class="ios-label">รหัสผ่าน (PIN)</label>
@@ -39,11 +44,6 @@
         <div id="login-error" class="text-sm text-rose-600 hidden"></div>
         <button type="submit" class="ios-btn-primary w-full">เข้าสู่ระบบ</button>
       </form>
-      <div class="mt-5 pt-4 border-t border-slate-100 text-xs text-slate-500 leading-relaxed">
-        <div class="font-semibold text-slate-600 mb-1">บัญชีตัวอย่าง (PIN: 1234)</div>
-        <button type="button" class="text-indigo-600 underline" data-quicklogin="ดร. สมชาย ใจดี">ดร. สมชาย ใจดี (Admin)</button> ·
-        <button type="button" class="text-indigo-600 underline" data-quicklogin="ภาคิน ก้องเกียรติ">ภาคิน ก้องเกียรติ (Member)</button>
-      </div>
     </div>
   </div>
 
@@ -442,7 +442,6 @@
       <button data-tab="people"           ><span class="ico">👥</span><span>People</span></button>
       <button data-tab="summary"          ><span class="ico">📊</span><span>Summary</span></button>
       <button data-tab="profile"          ><span class="ico">👤</span><span>Profile</span></button>
-      <button data-tab="whiteboard"       ><span class="ico">🎨</span><span>Board</span></button>
     </nav>
   </div>
 
@@ -506,8 +505,54 @@
     </div>
   </div>
 
+  <!-- Doc-type picker — bottom-sheet style scrollable list. Opens when the
+       uploader clicks a doc-type chip on a staged file row. Returns the picked
+       id via `openDocTypePicker(current) → Promise<string|null>`. -->
+  <div id="doctype-picker-modal" class="fixed inset-0 bg-black/50 hidden items-end sm:items-center justify-center p-0 sm:p-4" style="z-index: 75">
+    <div class="bg-white w-full sm:max-w-sm sm:rounded-2xl rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col safe-bottom">
+      <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-10 shrink-0">
+        <button id="doctype-picker-cancel" class="text-indigo-600">ยกเลิก</button>
+        <h3 class="font-semibold">เลือกประเภทเอกสาร</h3>
+        <span class="text-transparent">ยกเลิก</span>
+      </div>
+      <div id="doctype-picker-list" class="overflow-y-auto flex-1 p-2"></div>
+    </div>
+  </div>
+
+  <!-- Prompt modal — drop-in replacement for window.prompt(). Returns the
+       entered string or null on cancel. Used via uiPrompt(message, opts). -->
+  <div id="prompt-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4" style="z-index: 72">
+    <div class="bg-white rounded-2xl ios-card w-full max-w-sm overflow-hidden">
+      <div class="p-5">
+        <h3 id="prompt-title" class="font-semibold text-base mb-2">ระบุข้อมูล</h3>
+        <p id="prompt-msg" class="text-sm text-slate-600 mb-3"></p>
+        <input id="prompt-input" type="text" class="ios-input w-full" placeholder="">
+      </div>
+      <div class="border-t border-slate-100 grid grid-cols-2 divide-x divide-slate-100">
+        <button type="button" id="prompt-cancel" class="py-3 text-slate-600 font-medium active:bg-slate-50">ยกเลิก</button>
+        <button type="button" id="prompt-ok"     class="py-3 text-indigo-600 font-semibold active:bg-indigo-50">ตกลง</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm modal — drop-in replacement for window.confirm().
+       Layered above #modal so confirmations work even inside form modals.
+       Used via uiConfirm(message, opts) which returns Promise<boolean>. -->
+  <div id="confirm-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4" style="z-index: 70">
+    <div class="bg-white rounded-2xl ios-card w-full max-w-sm overflow-hidden">
+      <div class="p-5">
+        <h3 id="confirm-title" class="font-semibold text-base mb-2">ยืนยัน</h3>
+        <p id="confirm-msg" class="text-sm text-slate-600 whitespace-pre-line"></p>
+      </div>
+      <div class="border-t border-slate-100 grid grid-cols-2 divide-x divide-slate-100">
+        <button type="button" id="confirm-cancel" class="py-3 text-slate-600 font-medium active:bg-slate-50">ยกเลิก</button>
+        <button type="button" id="confirm-ok" class="py-3 text-rose-600 font-semibold active:bg-rose-50">ยืนยัน</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Trash bin (only on Todo tab) — drag a task here to cancel it -->
-  <div id="trash-bin" title="ลากการ์ดงานมาวางที่นี่เพื่อยกเลิก">🗑</div>
+  <div id="trash-bin" title="ลากการ์ดงานมาวางที่นี่เพื่อย้ายไปถังขยะ (กู้คืนได้ใน 30 วัน)">🗑</div>
 
   <div id="toast" class="fixed bottom-24 md:bottom-6 left-0 right-0 flex flex-col items-center gap-2 pointer-events-none px-4" style="z-index: 70"></div>
 
