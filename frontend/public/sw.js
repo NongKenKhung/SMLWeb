@@ -1,14 +1,15 @@
 // SML service worker
 // ──────────────────
 // Strategy
-//   • Static SPA assets (HTML, JS, CSS, manifest, icons) → stale-while-revalidate
-//   • API requests (/api/...)                            → network-first w/ cache fallback
-//   • Audio streams (/api/recordings/<id>/stream)        → cache-first (immutable per-id URL)
-//   • Anything else (fonts, CDN)                         → network-first
+//   • HTML (index.html, /)                              → network-first  ← critical for fresh UI
+//   • JS / CSS / static assets                          → stale-while-revalidate
+//   • API requests (/api/...)                           → network-first w/ cache fallback
+//   • Audio streams (/api/recordings/<id>/stream)       → cache-first (immutable per-id URL)
+//   • Anything else (fonts, CDN)                        → network-first
 //
 // Bump CACHE_VERSION whenever you ship a breaking change so old SW gets evicted.
 
-const CACHE_VERSION = 'sml-v17-2026-05-11';
+const CACHE_VERSION = 'sml-v157-2026-05-21';
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const AUDIO_CACHE   = `${CACHE_VERSION}-audio`;
@@ -39,6 +40,12 @@ self.addEventListener('activate', e => {
       .filter(k => !k.startsWith(CACHE_VERSION))
       .map(k => caches.delete(k)));
     await self.clients.claim();
+    // ส่ง message ไปทุก client ที่ active เพื่อ trigger reload ได้ทันทีที่ SW ใหม่ active
+    // (กัน case ที่ผู้ใช้เปิดหน้าเดิมค้างจาก SW เก่า → role visibility ไม่ apply)
+    const clients = await self.clients.matchAll({ type: 'window' });
+    for (const client of clients) {
+      client.postMessage({ type: 'SW_UPDATED', version: CACHE_VERSION });
+    }
   })());
 });
 
@@ -52,6 +59,10 @@ self.addEventListener('fetch', e => {
   // SSE stream — never cache (long-running, push-only)
   if (url.pathname === '/api/events') return;
 
+  // Embed-mode iframe URLs — bypass SW entirely. We always want a fresh HTML
+  // shell so any change to the inline embed CSS / script applies immediately.
+  if (url.searchParams.has('embed')) return;
+
   // Audio stream — cache-first (URL changes on re-upload so it's safe to keep)
   if (url.pathname.startsWith('/api/recordings/') && url.pathname.endsWith('/stream')) {
     e.respondWith(cacheFirst(req, AUDIO_CACHE));
@@ -64,7 +75,15 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Static SPA shell — stale-while-revalidate so updates land on next reload
+  // HTML shell → network-first → ผู้ใช้ได้ UI ใหม่ทันที (กัน .hidden flag, role logic, etc. ค้าง cache)
+  //   - request.mode === 'navigate' จะตรงทั้ง / และ /index.html ที่ browser นำทาง
+  //   - /index.html ที่ fetch ตรง ๆ ก็จับด้วย pathname check
+  if (req.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {
+    e.respondWith(networkFirst(req, STATIC_CACHE));
+    return;
+  }
+
+  // Static assets (JS/CSS/icons/etc.) — stale-while-revalidate so updates land on next reload
   e.respondWith(staleWhileRevalidate(req, STATIC_CACHE));
 });
 
