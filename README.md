@@ -94,12 +94,27 @@ The DB layer auto-creates tables on first run (`init()` in `db.js`).
 - **Real-time**: Server-Sent Events broadcast every state change so all open
   clients re-fetch and re-render.
 - **Whiteboard**: real-time multi-user drawing with Fabric.js + WebSocket
-  rooms, sticky notes, image upload, inject task data. **Removed from both
-  desktop top nav and mobile bottom tabbar** — page still rendered, reachable
-  only by hash deep-link `/#whiteboard` or programmatic `setTab('whiteboard')`.
+  rooms, sticky notes, image upload. 📥 **Inject panel** with 5 tabs:
+  📋 Task / 📁 Group / 📅 Meeting (with search + "+ สร้างใหม่"),
+  🎙 Recording (embedded mini-recorder — record → upload → card on canvas →
+  SSE updates with transcript when ready), and ⭐ Points (list pending point
+  requests; ✅/❌ inline or click card on canvas for full prompt). **Double-
+  click** any card on the canvas to open its full edit form (task / group /
+  meeting) or the approve/reject prompt (point request). Cards auto-refresh
+  via `wbSyncCardsToState()` when SSE fires from edits elsewhere. **Removed
+  from desktop top nav** — page still rendered, reachable only by hash
+  deep-link `/#whiteboard` or via the mobile bottom tabbar.
 - **Layout customisation**: every page is a 12-col CSS-grid masonry — admin
   reorders / resizes / hides widgets via `/dev → 🎛️ Site Layout`. Mobile
   collapses to a single column.
+- **Mobile / iPad / Apple Pencil**: every UI surface — including the
+  whiteboard — must work on phone + iPad + Apple Pencil. Inputs are 16 px
+  (gates iOS auto-zoom-on-focus) and ≥ 44 × 44 px tap targets (Apple HIG).
+  Fabric canvases set `enableRetinaScaling: true` + `allowTouchScrolling:
+  false`, filter `pointerType` to drop `touch` events within 800 ms of a
+  `pen` event (palm rejection), and use `touch-action: none` so native
+  scroll/zoom can't hijack a stroke. Whiteboard toolbars switch to
+  horizontal scroll under 640 px so no button can hide.
 
 ---
 
@@ -152,15 +167,26 @@ postgres ←── app (Node, SSE, WS, REST) ──→ asr (Python Flask + PyTha
 - **pgadmin**: pgAdmin 4 on `:5050`.
 - **app**: Node 20 (Express + `pg` + `ws` + `multer`). Reaches `asr` via the
   compose network DNS.
-- **asr**: Python 3.11 + Flask + ffmpeg + WhisperX. Wraps
-  [m-bain/whisperX](https://github.com/m-bain/whisperX) (faster-whisper +
-  word-level alignment via wav2vec2). Model size configurable via
-  `WHISPER_MODEL` env (default `small`, ~500 MB cached in volume `asr_cache`).
-- **ollama**: local LLM server for AI-summary of recordings. Default model
+- **asr**: PyTorch 2.5.1 (CUDA 12.1 + cuDNN 9) + Flask + ffmpeg + WhisperX.
+  Wraps [m-bain/whisperX](https://github.com/m-bain/whisperX) (faster-whisper
+  + word-level alignment via wav2vec2). **Runs on NVIDIA GPU** —
+  docker-compose reserves a GPU on the `asr` service via
+  `deploy.resources.reservations.devices`. Default model **`large-v3`**
+  (~3 GB cached in volume `asr_cache`), `float16` compute. Override per
+  environment via `WHISPER_MODEL` / `WHISPER_DEVICE` / `WHISPER_COMPUTE_TYPE`
+  in `.env`. To fall back to CPU: switch base image in `asr-service/Dockerfile`
+  back to `python:3.11-slim` with CPU torch wheels + comment out the GPU
+  reservation in compose + set `WHISPER_DEVICE=cpu WHISPER_COMPUTE_TYPE=int8`.
+- **ollama**: local LLM server for **transcript organisation** (formerly
+  summarisation). Reads the transcript and emits a Markdown outline
+  (`## หัวข้อ` + `- bullets`) grouped by topic without paraphrasing, plus a
+  separate `action_items` array of explicit TODOs / decisions. Stored back
+  in the `recordings.summary` (Markdown string) + `recordings.action_items`
+  (JSON array) columns — same schema as before. Default model
   **`scb10x/llama3.2-typhoon2-3b-instruct`** — a Thai-tuned 3B model from
   SCB10X (built on Llama 3.2). ~2 GB on first pull, cached in volume
   `ollama_models`. Override via `OLLAMA_MODEL` env. Skip starting this
-  service to disable AI summaries cleanly — `asr` will mark
+  service to disable AI organisation cleanly — `asr` will mark
   `summary_status='skipped'`.
 
 Set `ASR_URL=` empty in `app.environment` to disable transcription cleanly —
@@ -239,7 +265,7 @@ RAID, off-host backup).
 │       ├── manifest.webmanifest
 │       └── icon.svg
 ├── asr-service/              ─ WhisperX speech-to-text microservice
-│   ├── Dockerfile            — Python 3.11 + ffmpeg + CPU-only torch
+│   ├── Dockerfile            — pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime + ffmpeg (GPU build)
 │   ├── requirements.txt      — whisperx 3.8.5
 │   ├── app.py                — Flask /health · /transcribe · /summarise
 │   └── README.md             — service-specific notes
