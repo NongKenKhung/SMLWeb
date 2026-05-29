@@ -1,20 +1,29 @@
 # WhisperX microservice — Flask wrapper around https://github.com/m-bain/whisperX.
-# Built on slim Python 3.11; ffmpeg installed for any-format audio decoding.
-# We install the CPU-only torch wheels first (much smaller than the default
-# bundled-CUDA wheels), then let pip resolve the rest.
-FROM python:3.11-slim
+#
+# GPU build — base image is the official pytorch/pytorch image with CUDA 12.1
+# + cuDNN 9 already wired into PATH/LD_LIBRARY_PATH. That avoids the cuDNN-
+# library-not-found dance that ctranslate2 (faster-whisper's runtime) hits
+# when you pip-install torch on top of python:slim.
+#
+# Host requirements:
+#   • NVIDIA driver + nvidia-container-toolkit on the host
+#   • `asr` service in docker-compose.yml must reserve a GPU
+#     (deploy.resources.reservations.devices with driver:nvidia)
+#
+# To revert to CPU-only: switch base back to `python:3.11-slim` and re-add the
+# `pip install --index-url https://download.pytorch.org/whl/cpu torch ...` line.
+FROM pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     HF_HOME=/cache/huggingface \
-    TORCH_HOME=/cache/torch \
-    OMP_NUM_THREADS=2
+    TORCH_HOME=/cache/torch
 
 # Runtime deps: ffmpeg (audio decode), libsndfile (soundfile backend), curl (healthcheck).
 # Build deps: build-essential + pkg-config + ffmpeg dev headers — PyAV (a
-# transitive dep of pyannote.audio) builds from source on slim-bookworm
-# because no matching manylinux wheel is available for the resolved version.
+# transitive dep of pyannote.audio) builds from source because no matching
+# manylinux wheel is available for the resolved version.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         libsndfile1 \
@@ -27,13 +36,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install CPU-only torch + torchaudio first so we don't pull the ~2 GB CUDA
-# variants. WhisperX requires torch >= 2.5.1.
-RUN pip install --no-cache-dir \
-    --index-url https://download.pytorch.org/whl/cpu \
-    torch==2.5.1 torchaudio==2.5.1
-
-# Now the rest. WhisperX picks up the existing torch instead of pulling its own.
+# torch/torchaudio come baked into the base image — skip the pip install.
+# Just install whisperx + Flask + soundfile from requirements.txt.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
