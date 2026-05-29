@@ -90,6 +90,33 @@
       background: #1e293b; border-right: 1px solid #334155;
       display: flex; flex-direction: column; overflow-y: auto;
     }
+    /* Mobile / iPad portrait — sidebar กลายเป็น horizontal scrollable chip bar
+     * บนหัวจอ + main panel ใช้ความสูงเต็มหน้าจอ. ใช้กฎ "ทุกอย่างต้องใช้บน
+     * phone/iPad" ของ user. Toggle hamburger ใน hdr-right ก็เปิด/ปิด sidebar
+     * ได้ ดูใน JS */
+    #sidebar-toggle {
+      display: none; background: transparent; border: 1px solid #334155;
+      color: #94a3b8; font-size: 1rem; padding: .25rem .5rem;
+      border-radius: .35rem; cursor: pointer;
+    }
+    @media (max-width: 900px) {
+      #sidebar-toggle { display: inline-flex; align-items: center; }
+      #layout { flex-direction: column; }
+      #sidebar {
+        width: 100%; max-height: 50vh; border-right: 0;
+        border-bottom: 1px solid #334155;
+      }
+      #sidebar.collapsed { display: none; }
+      .sec-lbl { padding: .5rem 1rem .25rem; }
+    }
+    @media (max-width: 640px) {
+      #sidebar { max-height: 60vh; }
+      .user-chip { display: none; }   /* ประหยัดพื้นที่ใน header */
+      #hdr-clock { display: none; }
+      #hdr { padding: 0 .6rem; gap: .4rem; }
+      .logo { font-size: .82rem; }
+      .back-link { padding: .2rem .4rem; font-size: .7rem; }
+    }
     .sec-lbl { font-size: .62rem; font-weight: 700; letter-spacing: .1em; color: #475569; text-transform: uppercase; padding: .9rem 1rem .35rem; }
     .nav-btn {
       display: flex; align-items: center; gap: .55rem;
@@ -254,6 +281,16 @@
       padding: .35rem .55rem; background: #fff; border-bottom: 1px solid #e2e8f0;
       flex-shrink: 0; flex-wrap: wrap; min-height: 2.75rem;
     }
+    /* บนจอแคบ phone: scroll แทน wrap */
+    @media (max-width: 640px) {
+      .wb-toolbar {
+        flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+        -webkit-overflow-scrolling: touch; scrollbar-width: none;
+      }
+      .wb-toolbar::-webkit-scrollbar { display: none; }
+      .wb-tool-group { flex-shrink: 0; }
+      .wb-tool { width: 2.5rem !important; height: 2.5rem !important; font-size: 1.05rem; }
+    }
     .wb-tool-group { display: flex; align-items: center; gap: .12rem; padding: 0 .3rem; border-left: 1px solid #e2e8f0; }
     .wb-tool-group:first-of-type { border-left: 0; padding-left: 0; }
     .wb-tool {
@@ -261,6 +298,7 @@
       width: 1.9rem; height: 1.9rem; border-radius: .45rem;
       font-size: .9rem; background: transparent; border: 1px solid transparent;
       cursor: pointer; transition: background .12s, border-color .12s; flex-shrink: 0; user-select: none;
+      -webkit-tap-highlight-color: transparent; touch-action: manipulation;
     }
     .wb-tool:hover { background: #f1f5f9; }
     .wb-tool.wb-active { background: #eef2ff !important; border-color: #6366f1 !important; color: #4f46e5; }
@@ -271,25 +309,149 @@
     }
     .wb-confirm-btn:hover { background: #4f46e5; }
     .wb-color-input { width: 1.9rem; height: 1.9rem; border-radius: .38rem; border: 1px solid #e2e8f0; padding: 0; cursor: pointer; flex-shrink: 0; background: transparent; }
+    /* Toolbar icon colors — เพิ่มสีให้ icon Unicode ที่เดิมสีเทาธรรมดา */
+    #wb-back            { color: #475569; font-size: 1.05rem; font-weight: 600; }
+    #wb-undo-btn,
+    #wb-redo-btn        { color: #6366f1; font-size: 1.1rem; font-weight: 700; }
+    #wb-zoom-out-btn,
+    #wb-zoom-in-btn,
+    #wb-zoom-fit-btn    { color: #0ea5e9; }
+    #wb-grid-btn        { color: #64748b; font-size: 1.05rem; }
+    #wb-fullscreen-btn  { color: #0284c7; font-size: 1.05rem; }
+    #wb-fill-toggle     { color: #475569; }
+    /* Quick color swatches */
+    .wb-color-swatches { display: flex; align-items: center; gap: 3px; padding-right: .25rem; margin-right: .25rem; border-right: 1px solid #e2e8f0; flex-shrink: 0; }
+    .wb-swatch { width: 1.2rem; height: 1.2rem; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px #cbd5e1; cursor: pointer; padding: 0; transition: transform .12s, box-shadow .12s; flex-shrink: 0; -webkit-tap-highlight-color: transparent; }
+    .wb-swatch:hover { transform: scale(1.18); }
+    .wb-swatch.active { box-shadow: 0 0 0 2px #6366f1; transform: scale(1.18); }
+    @media (max-width: 640px) { .wb-swatch { width: 1.6rem; height: 1.6rem; } }
     .wb-range { width: 5rem; accent-color: #6366f1; flex-shrink: 0; }
     .wb-zoom-label { display: inline-block; min-width: 2.8rem; text-align: center; font-size: .7rem; color: #64748b; font-variant-numeric: tabular-nums; }
     .wb-users-bar { display: flex; align-items: center; gap: .22rem; padding: .22rem .65rem; background: #f8fafc; border-bottom: 1px solid #e2e8f0; min-height: 1.8rem; flex-shrink: 0; }
     .wb-user-dot { width: 1.4rem; height: 1.4rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .65rem; font-weight: 700; color: #fff; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); cursor: default; }
-    .wb-canvas-wrap { flex: 1; overflow: hidden; position: relative; background: #f8fafc; min-height: 500px; }
-    .wb-canvas-wrap canvas { display: block; }
-    .wb-canvas-wrap.wb-grid-on::before {
-      content: ""; position: absolute; inset: 0;
-      background-image: linear-gradient(to right,rgba(148,163,184,.18) 1px,transparent 1px),linear-gradient(to bottom,rgba(148,163,184,.18) 1px,transparent 1px);
-      background-size: 20px 20px; pointer-events: none; z-index: 0;
+    .wb-canvas-wrap {
+      flex: 1; overflow: auto; position: relative; background: #0b1220; min-height: 500px;
+      touch-action: none; padding: 1rem;
+      -webkit-user-select: none; user-select: none;
     }
-    .wb-canvas-wrap > .canvas-container { position: relative; z-index: 1; }
+    @media (max-width: 1023px) {
+      .wb-canvas-wrap { min-height: calc(100dvh - 160px); }
+    }
+    .wb-canvas-wrap canvas { display: block; touch-action: none; }
+    .wb-canvas-wrap > .canvas-container {
+      margin: 0 auto; position: relative; z-index: 1;
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.4);
+    }
+    /* Paper templates */
+    .wb-canvas-wrap.wb-grid-on::before,
+    .wb-canvas-wrap.wb-paper-grid::before {
+      content: ""; position: absolute; inset: 0;
+      background-image: linear-gradient(to right,rgba(148,163,184,.10) 1px,transparent 1px),linear-gradient(to bottom,rgba(148,163,184,.10) 1px,transparent 1px);
+      background-size: 25px 25px; pointer-events: none; z-index: 0;
+    }
+    .wb-canvas-wrap.wb-paper-dot::before {
+      content: ""; position: absolute; inset: 0;
+      background-image: radial-gradient(circle, rgba(148,163,184,.20) 1px, transparent 1.5px);
+      background-size: 25px 25px; pointer-events: none; z-index: 0;
+    }
+    .wb-canvas-wrap.wb-paper-lined::before {
+      content: ""; position: absolute; inset: 0;
+      background-image: linear-gradient(to bottom, transparent 31px, rgba(148,163,184,.15) 32px);
+      background-size: 100% 32px; pointer-events: none; z-index: 0;
+    }
     .wb-canvas-wrap[data-tool="pan"] canvas { cursor: grab; }
     .wb-canvas-wrap[data-tool="pan"].wb-panning canvas { cursor: grabbing; }
-    .wb-canvas-wrap[data-tool="eraser"] canvas { cursor: crosshair; }
+    .wb-canvas-wrap[data-tool="eraser"] canvas { cursor: none; }
     .wb-canvas-wrap[data-tool="text"] canvas { cursor: text; }
+    /* Eraser radius cursor */
+    .wb-eraser-cursor {
+      position: absolute; pointer-events: none;
+      border: 2px dashed #f87171; background: rgba(248,113,113,.15);
+      border-radius: 50%; transform: translate(-50%, -50%);
+      z-index: 50; display: none;
+      box-shadow: 0 0 0 1px rgba(0,0,0,.4) inset;
+    }
+    .wb-canvas-wrap[data-tool="eraser"] .wb-eraser-cursor.active { display: block; }
+    /* Popover (paper size selector) */
+    .wb-popover-menu {
+      position: absolute; top: 3rem; right: 0.5rem;
+      background: #1e293b; border: 1px solid #475569;
+      border-radius: 0.5rem; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+      padding: 0.35rem; z-index: 60; min-width: 200px;
+      display: flex; flex-direction: column; gap: 1px;
+    }
+    .wb-popover-menu.hidden { display: none; }
+    .wb-popover-item {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem; padding: 0.5rem 0.7rem;
+      background: transparent; border: none; border-radius: 0.35rem;
+      font-size: 0.82rem; color: #e2e8f0; cursor: pointer;
+      text-align: left; width: 100%; font-family: inherit;
+    }
+    .wb-popover-item:hover { background: #334155; }
+    .wb-popover-item.active { background: rgba(99,102,241,.20); color: #a5b4fc; font-weight: 600; }
+    .wb-popover-hint { font-size: 0.7rem; color: #94a3b8; font-family: 'JetBrains Mono', monospace; }
+    /* Recent colors */
+    .wb-color-recent { display: flex; align-items: center; gap: 2px; padding: 0 .25rem; flex-shrink: 0; }
+    .wb-color-recent:empty { display: none; }
+    .wb-color-recent .wb-swatch { width: .85rem; height: .85rem; box-shadow: 0 0 0 1px #475569; border-width: 1px; }
+    @media (max-width: 640px) { .wb-color-recent .wb-swatch { width: 1.3rem; height: 1.3rem; } }
     .wb-inject-modal { position: absolute; inset: 0; background: rgba(0,0,0,.3); display: flex; align-items: flex-end; justify-content: center; z-index: 50; }
     .wb-inject-modal.hidden { display: none; }
-    .wb-inject-panel { background: #fff; width: 100%; max-width: 460px; border-radius: 1.1rem 1.1rem 0 0; padding: 1rem; max-height: 55vh; overflow-y: auto; }
+    .wb-inject-panel { background: #fff; width: 100%; max-width: 520px; border-radius: 1.1rem 1.1rem 0 0; padding: 1rem; max-height: 75vh; display: flex; flex-direction: column; overflow: hidden; }
+    .wb-inj-tabs { display: flex; gap: .2rem; overflow-x: auto; border-bottom: 1px solid #e2e8f0; margin-bottom: .55rem; flex-shrink: 0; }
+    .wb-inj-tab { padding: .4rem .7rem; font-size: .76rem; font-weight: 500; color: #64748b; background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; transition: all .12s; font-family: 'Prompt', sans-serif; }
+    .wb-inj-tab:hover { background: #f8fafc; color: #1e293b; }
+    .wb-inj-tab.active { color: #4f46e5; border-bottom-color: #4f46e5; font-weight: 600; }
+    .wb-inj-search { width: 100%; padding: .45rem .65rem; border: 1px solid #e2e8f0; border-radius: .55rem; font-size: .82rem; background: #f8fafc; margin-bottom: .55rem; flex-shrink: 0; font-family: 'Prompt', sans-serif; }
+    .wb-inj-search:focus { outline: none; border-color: #6366f1; background: #fff; }
+    .wb-inj-list { flex: 1; overflow-y: auto; min-height: 0; }
+    .wb-inj-row { width: 100%; text-align: left; display: flex; align-items: center; gap: .55rem; background: #f8fafc; border: 1px solid #e2e8f0; border-left: 3px solid var(--row-color, #cbd5e1); border-radius: .6rem; padding: .5rem .7rem; font-size: .82rem; font-family: 'Prompt', sans-serif; cursor: pointer; transition: background .1s, border-color .1s; }
+    .wb-inj-row:hover { background: #eef2ff; border-color: #6366f1; }
+    .wb-inj-row .ic { font-size: 1.05rem; flex-shrink: 0; }
+    .wb-inj-row .bd { flex: 1; min-width: 0; }
+    .wb-inj-row .ttl { font-weight: 500; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .wb-inj-row .mt  { font-size: .68rem; color: #64748b; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .wb-inj-row .ac  { display: flex; gap: .25rem; }
+    .wb-inj-row .ac button { width: 26px; height: 26px; border-radius: 50%; border: none; background: #fff; cursor: pointer; }
+    .wb-inj-row .ac button.ok:hover { background: #dcfce7; }
+    .wb-inj-row .ac button.no:hover { background: #fee2e2; }
+    /* Recorder mini */
+    .wb-rec-panel { display: flex; flex-direction: column; align-items: center; gap: .6rem; padding: 1.4rem 1rem; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: .8rem; }
+    .wb-rec-state { font-size: .92rem; font-weight: 600; color: #64748b; font-family: 'Prompt', sans-serif; }
+    .wb-rec-state.recording { color: #ef4444; animation: wb-rec-pulse 1.2s ease-in-out infinite; }
+    @keyframes wb-rec-pulse { 50% { opacity: .5; } }
+    .wb-rec-timer { font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; color: #1e293b; }
+    .wb-rec-btns { display: flex; gap: .4rem; }
+    .wb-rec-btns button { padding: .5rem 1.1rem; border-radius: .6rem; border: none; font-weight: 500; font-size: .82rem; cursor: pointer; font-family: 'Prompt', sans-serif; }
+    .wb-rec-start { background: #ef4444; color: #fff; }
+    .wb-rec-start:hover:not([disabled]) { background: #dc2626; }
+    .wb-rec-stop { background: #1e293b; color: #fff; }
+    .wb-rec-start[disabled], .wb-rec-stop[disabled] { opacity: .4; cursor: not-allowed; }
+    .wb-rec-hint { text-align: center; font-size: .68rem; color: #94a3b8; max-width: 320px; line-height: 1.4; font-family: 'Prompt', sans-serif; }
+    /* Floating recorder widget — sits in the canvas corner so the user can keep drawing while audio records. */
+    .wb-float-rec { position: absolute; top: .7rem; right: .7rem; z-index: 40; display: inline-flex; align-items: center; gap: .5rem; padding: .35rem .55rem .35rem .7rem; background: #1e293b; color: #fff; border-radius: 999px; box-shadow: 0 4px 12px rgba(15,23,42,.25); font-family: 'JetBrains Mono', monospace; font-size: .82rem; }
+    .wb-float-rec.hidden { display: none; }
+    .wb-float-rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #ef4444; animation: wb-float-rec-pulse 1.2s ease-in-out infinite; }
+    @keyframes wb-float-rec-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(.85); } }
+    .wb-float-rec-stop { margin-left: .3rem; width: 26px; height: 26px; border-radius: 50%; background: #ef4444; color: #fff; border: none; cursor: pointer; font-size: .82rem; }
+    .wb-float-rec-stop:hover { background: #dc2626; }
+    .wb-float-rec.uploading .wb-float-rec-dot { background: #10b981; animation: none; }
+    .wb-float-rec.uploading .wb-float-rec-stop { background: #475569; cursor: default; }
+    /* 🎙 record button — ตอน idle ปุ่มดูปกติ; .is-recording = pulse แดง */
+    #wb-rec-toggle { color: #dc2626; font-size: 1rem; }
+    .wb-tool.is-recording { background: #fee2e2 !important; border-color: #ef4444 !important; box-shadow: 0 0 0 2px rgba(239,68,68,.25); animation: wb-tool-rec-pulse 1.5s ease-in-out infinite; }
+    @keyframes wb-tool-rec-pulse {
+      0%, 100% { background: #fee2e2; box-shadow: 0 0 0 2px rgba(239,68,68,.25); }
+      50%      { background: #fecaca; box-shadow: 0 0 0 4px rgba(239,68,68,.45); }
+    }
+    /* Edit-in-iframe modal */
+    .wb-edit-frame-modal { position: fixed; inset: 0; background: rgba(15,23,42,.6); display: flex; align-items: center; justify-content: center; z-index: 60; padding: 2vh 2vw; }
+    .wb-edit-frame-modal.hidden { display: none; }
+    .wb-edit-frame-panel { background: #fff; border-radius: 1rem; box-shadow: 0 12px 40px rgba(15,23,42,.35); width: 100%; max-width: 720px; height: 96vh; display: flex; flex-direction: column; overflow: hidden; }
+    .wb-edit-frame-head { display: flex; align-items: center; justify-content: space-between; padding: .55rem .75rem; border-bottom: 1px solid #e2e8f0; background: #f8fafc; flex-shrink: 0; font-family: 'Prompt', sans-serif; }
+    .wb-edit-frame { flex: 1; border: none; width: 100%; background: #fff; }
     /* Dev fullscreen: hides sidebar+header */
     body.wb-fs #hdr, body.wb-fs #sidebar { display: none !important; }
     body.wb-fs #main { overflow: hidden; }
@@ -411,7 +573,13 @@
     }
     .aud-summary-row { display:flex; align-items:flex-start; gap:.5rem; }
     .aud-summary-text { flex:1; word-break: break-word; }
-    .aud-summary-text:empty::before { content:'— ยังไม่มีสรุป —'; color:#818cf8; }
+    .aud-summary-text:empty::before { content:'— ยังไม่มี outline —'; color:#818cf8; }
+    /* Markdown outline rendering ใน summary block */
+    .aud-outline .aud-outline-h { font-size:.82rem; font-weight:700; color:#c7d2fe; margin:.4rem 0 .15rem; }
+    .aud-outline .aud-outline-h:first-child { margin-top:0; }
+    .aud-outline .aud-outline-ul { margin:.1rem 0 .35rem; padding-left:1.1rem; }
+    .aud-outline .aud-outline-ul li { margin:.1rem 0; color:#e0e7ff; }
+    .aud-outline .aud-outline-p { margin:.25rem 0; }
     .aud-summary-status {
       flex-shrink:0; font-size:.6rem; font-family:'JetBrains Mono', monospace;
       padding:.1rem .4rem; border-radius:.2rem;
@@ -472,6 +640,106 @@
       font-family:'JetBrains Mono', monospace; margin-top:.15rem;
     }
     .pl-tile-date { font-size:.78rem; color:#cbd5e1; }
+
+    /* ── View toggle (table / gantt) ── */
+    .pl-view-toggle {
+      display:inline-flex; background:#020617; border:1px solid #1e293b;
+      border-radius:.4rem; padding:2px; gap:1px;
+    }
+    .pl-view-btn {
+      background:transparent; border:none; color:#94a3b8;
+      padding:.3rem .65rem; font-size:.72rem; font-family:inherit;
+      border-radius:.3rem; cursor:pointer; transition: background .12s, color .12s;
+    }
+    .pl-view-btn:hover { color:#e2e8f0; }
+    .pl-view-btn.active { background:#1e293b; color:#fbbf24; font-weight:600; }
+
+    /* ── Gantt timeline (SVG) ── */
+    .pl-gantt-wrap {
+      overflow-x:auto; overflow-y:hidden;
+      max-height: 70vh; overflow-y:auto;
+      padding: .5rem 0;
+      background:#020617; border:1px solid #1e293b; border-radius:.5rem;
+    }
+    .pl-gantt-svg { display:block; font-family: 'Prompt', sans-serif; }
+    .pl-gantt-axis-tick { stroke: #1e293b; stroke-width: 1; stroke-dasharray: 2 4; }
+    .pl-gantt-axis-label { fill: #64748b; font-size: 10px; }
+    .pl-gantt-month-label { fill: #cbd5e1; font-size: 11px; font-weight: 600; }
+    .pl-gantt-lane { fill: #0b1220; stroke: #1e293b; stroke-width: 1; rx: 4; }
+    .pl-gantt-lane-label { fill: #e2e8f0; font-size: 12px; font-weight: 600; }
+    .pl-gantt-lane-sub   { fill: #64748b; font-size: 10px; }
+    .pl-gantt-bar { stroke-width: 1; rx: 3; opacity: 0.85; }
+    .pl-gantt-pin {
+      cursor: pointer;
+      transition: r .12s, stroke-width .12s;
+    }
+    .pl-gantt-pin:hover { stroke-width: 3 !important; }
+    .pl-gantt-pin-label {
+      fill: #fff; font-size: 10px; font-weight: 700;
+      pointer-events: none; text-anchor: middle;
+    }
+    .pl-gantt-today { stroke: #f87171; stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .pl-gantt-today-label { fill: #f87171; font-size: 10px; font-weight: 600; }
+
+    /* ── Pin detail popup ── */
+    .pl-pin-popup {
+      position: fixed; inset: 0;
+      background: rgba(2, 6, 23, 0.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200;
+      padding: 1rem;
+    }
+    .pl-pin-popup.hidden { display: none; }
+    .pl-pin-popup-inner {
+      background: #1e293b; border: 1px solid #334155;
+      border-radius: .65rem;
+      min-width: 320px; max-width: 480px; width: 100%;
+      max-height: 80vh; overflow-y: auto;
+      padding: 1.2rem 1.4rem; position: relative;
+      box-shadow: 0 12px 40px rgba(0,0,0,.6);
+    }
+    .pl-pin-popup-close {
+      position: absolute; top: .55rem; right: .55rem;
+      background: transparent; border: none;
+      color: #64748b; cursor: pointer; font-size: 1.05rem;
+      padding: .2rem .45rem; border-radius: .3rem;
+    }
+    .pl-pin-popup-close:hover { color: #e2e8f0; background:#0f172a; }
+    .pl-pin-popup-body h4 {
+      font-size: 1rem; color: #e2e8f0; margin-bottom: .35rem;
+      font-weight: 600;
+    }
+    .pl-pin-popup-body .pl-pp-row {
+      display: flex; gap: .55rem; padding: .4rem 0;
+      border-bottom: 1px solid #334155;
+      font-size: .82rem; color: #cbd5e1;
+    }
+    .pl-pin-popup-body .pl-pp-row:last-of-type { border-bottom: 0; }
+    .pl-pin-popup-body .pl-pp-label {
+      flex: 0 0 5.5rem; color: #64748b; font-size: .7rem;
+      text-transform: uppercase; letter-spacing: .05em; padding-top: .15rem;
+    }
+    .pl-pin-popup-body .pl-pp-value { flex: 1; word-break: break-word; }
+    .pl-pin-popup-body .pl-pp-points {
+      font-size: 1.4rem; font-weight: 700; color: #fbbf24;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .pl-pin-popup-body .pl-pp-actions {
+      display: flex; gap: .5rem; margin-top: .9rem;
+    }
+    .pl-pin-popup-body .pl-pp-actions a,
+    .pl-pin-popup-body .pl-pp-actions button {
+      flex: 1; padding: .55rem .8rem;
+      background: #6366f1; color: #fff; border: none;
+      border-radius: .4rem; text-decoration: none; text-align: center;
+      font-size: .82rem; font-weight: 600; cursor: pointer;
+      font-family: inherit;
+    }
+    .pl-pin-popup-body .pl-pp-actions a:hover { background: #4f46e5; }
+    .pl-pin-popup-body .pl-pp-actions .pl-pp-ghost {
+      background: transparent; border: 1px solid #475569; color: #cbd5e1;
+    }
+    .pl-pin-popup-body .pl-pp-actions .pl-pp-ghost:hover { background: #0f172a; }
 
     .pl-table-wrap { overflow-x:auto; max-height: 60vh; overflow-y:auto; }
     .pl-table { width:100%; border-collapse:collapse; font-size:.78rem; }
@@ -940,6 +1208,8 @@
 
 <!-- Header -->
 <header id="hdr">
+  <button id="sidebar-toggle" title="แสดง/ซ่อนเมนู" aria-label="แสดง/ซ่อนเมนู"
+          onclick="document.getElementById('sidebar')?.classList.toggle('collapsed')">☰</button>
   <a href="/" class="logo">🏙️ SML <span class="badge">DEV</span></a>
   <span class="hdr-sep"></span>
   <a href="/" class="back-link">← Main App</a>
@@ -947,7 +1217,7 @@
     <div class="user-chip" id="hdr-chip" style="display:none">
       <div class="user-av" id="hdr-av">?</div>
       <span id="hdr-name">—</span>
-      <span class="adm-badge">ADMIN</span>
+      <span class="adm-badge" id="hdr-role">ADMIN</span>
     </div>
     <span id="hdr-rt" title="Real-time event stream">
       <span class="hdr-rt-dot"></span><span id="hdr-rt-label">offline</span>
@@ -983,7 +1253,7 @@
     <button class="nav-btn" data-pnl="members"><span class="nav-icon">👥</span>Members</button>
 
     <div style="flex:1"></div>
-    <div id="sidebar-foot">v dev · admin only</div>
+    <div id="sidebar-foot">v dev · admin/boss only</div>
   </nav>
 
   <!-- Main -->
@@ -1020,17 +1290,18 @@
       <!-- Canvas view -->
       <div id="wb-canvas-view">
         <div class="wb-toolbar">
-          <button id="wb-back" class="wb-tool" title="กลับ" onclick="wbClose()">←</button>
+          <button id="wb-back" class="wb-tool" title="กลับ" onclick="wbClose()">⬅</button>
           <span id="wb-board-name" style="font-weight:600;font-size:.82rem;padding:0 .35rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1e293b"></span>
 
           <div class="wb-tool-group">
             <button class="wb-tool wb-active" data-tool="select" title="เลือก (V)">👆</button>
+            <button class="wb-tool" data-tool="lasso" title="Lasso (Q)">🪢</button>
             <button class="wb-tool" data-tool="pan" title="เลื่อน (H)">✋</button>
           </div>
           <div class="wb-tool-group">
             <button class="wb-tool" data-tool="draw" title="วาด (P)">✏️</button>
             <button class="wb-tool" data-tool="highlight" title="ไฮไลต์">🖍️</button>
-            <button class="wb-tool" data-tool="eraser" title="ยางลบ (E)">🧹</button>
+            <button class="wb-tool" data-tool="eraser" title="ยางลบ (E)">🧽</button>
           </div>
           <div class="wb-tool-group">
             <button class="wb-tool" data-tool="line" title="เส้นตรง (L)">📏</button>
@@ -1046,7 +1317,20 @@
             <button class="wb-tool" id="wb-image-btn" title="เพิ่มรูป">🖼️</button>
           </div>
           <div class="wb-tool-group">
-            <input id="wb-color-pick" type="color" value="#1e293b" class="wb-color-input" title="สี">
+            <!-- Quick color swatches — กดเลือกสีเร็ว ไม่ต้องเปิด color dialog -->
+            <div class="wb-color-swatches" role="toolbar" aria-label="สีด่วน">
+              <button type="button" class="wb-swatch active" data-color="#1e293b" style="background:#1e293b" title="ดำ"></button>
+              <button type="button" class="wb-swatch" data-color="#ef4444" style="background:#ef4444" title="แดง"></button>
+              <button type="button" class="wb-swatch" data-color="#f97316" style="background:#f97316" title="ส้ม"></button>
+              <button type="button" class="wb-swatch" data-color="#facc15" style="background:#facc15" title="เหลือง"></button>
+              <button type="button" class="wb-swatch" data-color="#22c55e" style="background:#22c55e" title="เขียว"></button>
+              <button type="button" class="wb-swatch" data-color="#3b82f6" style="background:#3b82f6" title="ฟ้า"></button>
+              <button type="button" class="wb-swatch" data-color="#a855f7" style="background:#a855f7" title="ม่วง"></button>
+              <button type="button" class="wb-swatch" data-color="#ec4899" style="background:#ec4899" title="ชมพู"></button>
+            </div>
+            <!-- Recent colors — สีที่ใช้ล่าสุด เติมโดย JS -->
+            <div class="wb-color-recent" id="wb-color-recent" role="toolbar" aria-label="สีที่ใช้ล่าสุด"></div>
+            <input id="wb-color-pick" type="color" value="#1e293b" class="wb-color-input" title="สีกำหนดเอง">
             <input id="wb-stroke-size" type="range" min="1" max="30" value="3" class="wb-range" title="ขนาดเส้น">
             <button id="wb-fill-toggle" class="wb-tool" title="โปร่งใส/เติมสี">⬜</button>
           </div>
@@ -1061,27 +1345,72 @@
             <button id="wb-zoom-fit-btn" class="wb-tool" title="พอดีจอ">⊡</button>
           </div>
           <div class="wb-tool-group">
-            <button id="wb-grid-btn" class="wb-tool" title="Grid">▦</button>
+            <button id="wb-grid-btn" class="wb-tool" title="กระดาษ: เปล่า/Grid/Dot/Lined (กดเปลี่ยน)">📃</button>
+            <button id="wb-paper-size-btn" class="wb-tool" title="ขนาดกระดาษ">📐</button>
+            <div id="wb-paper-size-menu" class="wb-popover-menu hidden" role="menu" aria-label="ขนาดกระดาษ">
+              <button data-size="a4-p" class="wb-popover-item" role="menuitem">A4 ตั้ง <span class="wb-popover-hint">210 × 297mm</span></button>
+              <button data-size="a4-l" class="wb-popover-item" role="menuitem">A4 นอน <span class="wb-popover-hint">297 × 210mm</span></button>
+              <button data-size="a3-p" class="wb-popover-item" role="menuitem">A3 ตั้ง <span class="wb-popover-hint">297 × 420mm</span></button>
+              <button data-size="a3-l" class="wb-popover-item" role="menuitem">A3 นอน <span class="wb-popover-hint">420 × 297mm</span></button>
+              <button data-size="a5-p" class="wb-popover-item" role="menuitem">A5 ตั้ง <span class="wb-popover-hint">148 × 210mm</span></button>
+              <button data-size="letter" class="wb-popover-item" role="menuitem">Letter <span class="wb-popover-hint">8.5 × 11"</span></button>
+              <button data-size="tabloid" class="wb-popover-item" role="menuitem">Tabloid <span class="wb-popover-hint">11 × 17"</span></button>
+              <button data-size="infinite" class="wb-popover-item" role="menuitem">∞ ไม่จำกัด <span class="wb-popover-hint">3000 × 3000</span></button>
+            </div>
             <button id="wb-fullscreen-btn" class="wb-tool" title="Fullscreen (F)">⛶</button>
             <button id="wb-inject-btn" class="wb-tool" title="นำข้อมูลเข้า">📥</button>
+            <button id="wb-rec-toggle" class="wb-tool" title="🎙 อัดเสียง (ทำต่อขณะจด)">🎙</button>
             <button id="wb-export-btn" class="wb-tool" title="Export PNG">💾</button>
             <button id="wb-delete-btn" class="wb-tool" title="ลบ (Del)" style="color:#ef4444">🗑️</button>
             <button id="wb-clear-btn" class="wb-tool" title="ล้างทั้งหมด" style="color:#ef4444;display:none">🔄</button>
           </div>
-          <button id="wb-confirm-btn" class="wb-confirm-btn">💾 บันทึก</button>
+          <!-- "บันทึก" ถูกลบออก เพราะ canvas auto-save ผ่าน WS ทุก 1.5 วิ -->
         </div>
         <div id="wb-users" class="wb-users-bar"></div>
         <div id="wb-canvas-wrap" class="wb-canvas-wrap">
           <canvas id="wb-canvas"></canvas>
+          <!-- Eraser radius cursor overlay -->
+          <div id="wb-eraser-cursor" class="wb-eraser-cursor"></div>
+          <!-- Floating recorder widget — visible while audio records in the
+               background so user can keep drawing/writing on the canvas. -->
+          <div id="wb-float-rec" class="wb-float-rec hidden">
+            <span class="wb-float-rec-dot"></span>
+            <span id="wb-float-rec-timer" class="wb-float-rec-timer">00:00</span>
+            <button id="wb-float-rec-stop" class="wb-float-rec-stop" title="หยุดและส่ง">⏹</button>
+          </div>
         </div>
-        <!-- Inject modal -->
+        <!-- Edit-in-iframe modal — opens the main SPA inline so admins can
+             edit a task / meeting / group using the full form without leaving
+             the /dev whiteboard panel. Iframe is same-origin so the existing
+             auth token in localStorage Just Works. -->
+        <div id="wb-edit-frame-modal" class="wb-edit-frame-modal hidden">
+          <div class="wb-edit-frame-panel">
+            <div class="wb-edit-frame-head">
+              <span id="wb-edit-frame-title" class="font-semibold text-sm">แก้ไข</span>
+              <div style="display:flex;gap:.35rem;align-items:center">
+                <button id="wb-edit-frame-open"  class="btn btn-ghost btn-sm" title="เปิดในแท็บใหม่">↗ เปิดเต็มจอ</button>
+                <button id="wb-edit-frame-close" class="btn btn-ghost btn-sm">✕ ปิด</button>
+              </div>
+            </div>
+            <iframe id="wb-edit-frame" class="wb-edit-frame" src="about:blank"></iframe>
+          </div>
+        </div>
+
+        <!-- Inject modal — tabbed (task/group/meeting/recording/points) -->
         <div id="wb-inject-modal" class="wb-inject-modal hidden">
           <div class="wb-inject-panel">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
-              <span style="font-weight:600;font-size:.9rem">นำข้อมูลเข้า Whiteboard</span>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.55rem">
+              <span style="font-weight:600;font-size:.9rem">📥 นำข้อมูลเข้า Whiteboard</span>
               <button id="wb-inject-close" style="background:none;border:none;cursor:pointer;font-size:1.1rem;color:#94a3b8">✕</button>
             </div>
-            <div id="wb-inject-list" style="display:flex;flex-direction:column;gap:.4rem"></div>
+            <div class="wb-inj-tabs">
+              <button class="wb-inj-tab active" data-it="task"   >📋 งาน</button>
+              <button class="wb-inj-tab"        data-it="group"  >📁 โครงการ</button>
+              <button class="wb-inj-tab"        data-it="meeting">📅 ประชุม</button>
+              <button class="wb-inj-tab"        data-it="points" >⭐ Points</button>
+            </div>
+            <input id="wb-inj-search" type="text" class="wb-inj-search" placeholder="🔍 ค้นหา..." autocomplete="off">
+            <div id="wb-inject-list" class="wb-inj-list" style="display:flex;flex-direction:column;gap:.4rem"></div>
           </div>
         </div>
       </div>
@@ -1432,6 +1761,11 @@ console.log('Component loaded');</textarea>
             </label>
           </div>
           <div class="btn-row" style="gap:.35rem">
+            <!-- View toggle: Table (default) vs Gantt timeline -->
+            <div class="pl-view-toggle">
+              <button class="pl-view-btn active" data-view="table">📋 ตาราง</button>
+              <button class="pl-view-btn" data-view="gantt">📊 Gantt</button>
+            </div>
             <button class="btn btn-ghost btn-sm" onclick="plReload()">🔄 Reload</button>
             <button class="btn btn-ghost btn-sm" onclick="plExportCsv()">⬇ CSV</button>
           </div>
@@ -1451,8 +1785,8 @@ console.log('Component loaded');</textarea>
         </div>
       </div>
 
-      <!-- Ledger table -->
-      <div class="card">
+      <!-- Ledger table (default view) -->
+      <div class="card" id="pl-table-card">
         <div class="card-ttl">📜 Ledger entries</div>
         <div class="pl-table-wrap">
           <table class="pl-table" id="pl-table">
@@ -1472,6 +1806,25 @@ console.log('Component loaded');</textarea>
               <tr><td colspan="8" style="text-align:center;color:#64748b;padding:2rem">— ยังไม่มีข้อมูล —</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- Gantt timeline view (hidden by default) -->
+      <div class="card hidden" id="pl-gantt-card">
+        <div class="card-ttl" style="justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+          <span>📊 Project timeline — pin = วันที่ได้ point</span>
+          <div style="font-size:.7rem;color:#64748b">คลิก pin = รายละเอียด · drag = scroll</div>
+        </div>
+        <div class="pl-gantt-wrap" id="pl-gantt-wrap">
+          <div style="text-align:center;color:#64748b;padding:2rem;font-size:.78rem">— ยังไม่มีข้อมูล —</div>
+        </div>
+      </div>
+
+      <!-- Pin detail popup (Gantt only) -->
+      <div class="pl-pin-popup hidden" id="pl-pin-popup" role="dialog" aria-modal="true">
+        <div class="pl-pin-popup-inner">
+          <button class="pl-pin-popup-close" onclick="document.getElementById('pl-pin-popup').classList.add('hidden')" aria-label="ปิด">✕</button>
+          <div class="pl-pin-popup-body" id="pl-pin-popup-body"></div>
         </div>
       </div>
     </div>
@@ -1735,7 +2088,7 @@ async function initAuth() {
     const r = await fetch('/api/me', { headers:{ 'Authorization': `Bearer ${_token}` } });
     if (!r.ok) { msg.textContent = 'Token หมดอายุ — กรุณา Login ใหม่'; msg.style.color='#fca5a5'; return; }
     _user = await r.json();
-    if (_user.role !== 'admin') { msg.textContent = `บัญชี "${_user.name}" ไม่มีสิทธิ์ Admin`; msg.style.color='#fca5a5'; return; }
+    if (_user.role !== 'admin' && _user.role !== 'boss') { msg.textContent = `บัญชี "${_user.name}" ไม่มีสิทธิ์ Admin/Boss`; msg.style.color='#fca5a5'; return; }
     document.getElementById('auth-overlay').classList.add('gone');
 
     const av = document.getElementById('hdr-av');
@@ -1743,6 +2096,16 @@ async function initAuth() {
     av.textContent = ini;
     if (_user.color) av.style.background = _user.color;
     document.getElementById('hdr-name').textContent = _user.name;
+    // Header role badge — สะท้อน role จริงของ user (BOSS หรือ ADMIN)
+    const roleBadge = document.getElementById('hdr-role');
+    if (roleBadge) {
+      roleBadge.textContent = (_user.role || 'admin').toUpperCase();
+      if (_user.role === 'boss') {
+        // โทนทอง สำหรับ boss (สูงสุด) — ต่างจาก admin
+        roleBadge.style.background = 'linear-gradient(135deg,#fde047,#f59e0b)';
+        roleBadge.style.color = '#78350f';
+      }
+    }
     document.getElementById('hdr-chip').style.display = 'flex';
 
     // Each init wrapped so one failure doesn't break the rest of the page.
@@ -1807,8 +2170,20 @@ function startRtIndicator() {
         _rtRetryTimer = setTimeout(startRtIndicator, 5000);
       }
     };
-    // No onmessage handler — header indicator only cares about connection liveness.
-    // The SSE Log panel uses its own _sseSource for event payloads.
+    // Forward recording-change events → audio panel reload (real-time transcript
+    // + summary update โดยไม่ต้อง refresh เอง). SSE Log panel ใช้ _sseSource
+    // ของตัวเองคนละ source — handler นี้ไม่ทับ
+    _rtSource.onmessage = e => {
+      try {
+        const msg = JSON.parse(e.data || '{}');
+        if (msg.kind !== 'change') return;
+        const path = msg.path || '';
+        // Recording changed (transcript done, summary done, label edited) → reload
+        if (path.startsWith('/api/recordings') && typeof audLoadClips === 'function') {
+          audLoadClips();
+        }
+      } catch {}
+    };
   } catch (err) {
     console.warn('[dev] rt indicator failed', err);
     setRtState('dead', 'unavailable');
@@ -1820,27 +2195,72 @@ function stopRtIndicator() {
 }
 window.addEventListener('beforeunload', stopRtIndicator);
 
+/* ─── A11y shim — auto aria-label from title for emoji-only buttons ─── */
+function applyA11yLabels(root = document) {
+  const emojiOnly = /^[\s\u{1F000}-\u{1FFFF}\u{2000}-\u{2BFF}✂-➰　-〿Ⓜ-◿↶↷⊡⬜⬛⬅⬇⬆▦⛶✓✕×←→]+$/u;
+  root.querySelectorAll('button[title]:not([aria-label])').forEach(btn => {
+    const text = (btn.textContent || '').trim();
+    if (!text || emojiOnly.test(text)) btn.setAttribute('aria-label', btn.title);
+  });
+}
+if (document.readyState !== 'loading') applyA11yLabels();
+else document.addEventListener('DOMContentLoaded', () => applyA11yLabels());
+// Run again whenever a panel is activated (covers buttons that get mounted on demand)
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-pnl]')) setTimeout(applyA11yLabels, 50);
+});
+
 /* ─── Sidebar nav ─── */
+// Activate a panel by id without touching the URL. Used both by the click
+// handler (which then updates the hash) and by the initial load + hashchange
+// listener (which read the hash and only need to flip UI state).
+function activatePanel(id) {
+  const btn = document.querySelector(`[data-pnl="${id}"]`);
+  const panel = document.getElementById('panel-' + id);
+  if (!btn || !panel) return false;
+  document.querySelectorAll('[data-pnl]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  panel.classList.add('active');
+  document.getElementById('main').style.overflowY = id === 'whiteboard' ? 'hidden' : 'auto';
+  // Lazy-load on first open
+  if (id === 'room'   && !_rmInited) { _rmInited = true; rmInit(); }
+  if (id === 'about'  && !_abInited) { _abInited = true; abInit(); }
+  if (id === 'ledger' && !_plInited) { _plInited = true; plInit(); }
+  if (id === 'files'  && !_fbInited) { _fbInited = true; fbInit(); }
+  // Whiteboard: รีเฟรช list ทุกครั้งที่กลับเข้าแท็บ (ไม่ต้อง F5 เพื่อเห็น
+  // บอร์ดที่สร้างจากเครื่องอื่น) — call เฉพาะตอน list-view โผล่อยู่ ไม่
+  // กระทบ canvas ถ้ายังเปิดบอร์ดอยู่
+  if (id === 'whiteboard' && typeof wbLoad === 'function') {
+    const lv = document.getElementById('wb-list-view');
+    if (lv && lv.style.display !== 'none') wbLoad().catch(() => {});
+  }
+  // On phone/iPad — auto-collapse sidebar after picking a panel
+  if (window.matchMedia('(max-width: 900px)').matches) {
+    document.getElementById('sidebar')?.classList.add('collapsed');
+  }
+  return true;
+}
+
 function initSidebar() {
   document.querySelectorAll('[data-pnl]').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.pnl;
-      document.querySelectorAll('[data-pnl]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-      const panel = document.getElementById('panel-' + id);
-      if (panel) panel.classList.add('active');
-      // Set main overflow for whiteboard
-      document.getElementById('main').style.overflowY = id === 'whiteboard' ? 'hidden' : 'auto';
-      // Lazy-load Room Designer on first open
-      if (id === 'room' && !_rmInited) { _rmInited = true; rmInit(); }
-      // Lazy-load About Editor on first open
-      if (id === 'about' && !_abInited) { _abInited = true; abInit(); }
-      // Lazy-load Point Ledger on first open
-      if (id === 'ledger' && !_plInited) { _plInited = true; plInit(); }
-      // Lazy-load Files Browser on first open
-      if (id === 'files' && !_fbInited) { _fbInited = true; fbInit(); }
+      if (activatePanel(id)) {
+        // Persist via URL hash — survives refresh + bookmarkable + shareable.
+        // replaceState (not pushState) so the back button doesn't fill with
+        // every panel switch.
+        try { history.replaceState(null, '', '#' + id); } catch {}
+      }
     });
+  });
+  // Restore on initial load — hash first (bookmark/refresh), else default 'api'.
+  const initialId = (location.hash || '#api').slice(1) || 'api';
+  activatePanel(initialId);
+  // Sync if the user edits the hash manually or navigates back/forward.
+  window.addEventListener('hashchange', () => {
+    const id = (location.hash || '#api').slice(1) || 'api';
+    activatePanel(id);
   });
 }
 let _rmInited = false;
@@ -3063,6 +3483,7 @@ let _audInited = false;
 let _audMediaRec = null;
 let _audChunks = [];
 let _audClips = [];               // server rows: { id, label, mime, size_bytes, duration_ms, member_id, member_name, created_at }
+let _audSignedUrls = {};          // clipId → /stream?sig=...&exp=... — signed URL cache (1ชม TTL)
 let _audStream = null;
 let _audCtx = null;
 let _audAnalyser = null;
@@ -3448,20 +3869,49 @@ function audToggleShowAll(checked) {
   audLoadClips();
 }
 
+// renderer Markdown ขนาดเล็กสำหรับ outline ที่ Ollama ส่งมา (รองรับ `## heading`
+// + `- bullet` เท่านั้น — เกินกว่านี้ก็ตกเป็น <p> escape ทั้งหมด)
+function _renderOutline(md) {
+  const lines = (md || '').split(/\r?\n/);
+  let html = '';
+  let inList = false;
+  const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
+  for (const ln of lines) {
+    const t = ln.trim();
+    if (!t) { closeList(); continue; }
+    if (t.startsWith('## ')) {
+      closeList();
+      html += `<h4 class="aud-outline-h">${esc(t.slice(3).trim())}</h4>`;
+    } else if (t.startsWith('# ')) {
+      closeList();
+      html += `<h4 class="aud-outline-h">${esc(t.slice(2).trim())}</h4>`;
+    } else if (t.startsWith('- ') || t.startsWith('* ')) {
+      if (!inList) { html += '<ul class="aud-outline-ul">'; inList = true; }
+      html += `<li>${esc(t.slice(2).trim())}</li>`;
+    } else {
+      closeList();
+      html += `<p class="aud-outline-p">${esc(t)}</p>`;
+    }
+  }
+  closeList();
+  return html || `<div class="aud-summary-text">${esc(md || '')}</div>`;
+}
+
 function audSummaryHtml(c) {
-  const SUM_LBL = { pending: '⏳ รอ AI', processing: '🤖 AI กำลังสรุป', done: '✨ สรุปแล้ว', error: '❌ ผิดพลาด', skipped: '— ปิด AI' };
+  const SUM_LBL = { pending: '⏳ รอ AI', processing: '🤖 AI กำลังจัดข้อความ', done: '✨ จัดแล้ว', error: '❌ ผิดพลาด', skipped: '— ปิด AI' };
   const status = c.summary_status || 'pending';
   // Don't render the summary block if both transcript and summary are missing
   if (!c.transcript && status === 'pending') return '';
   let actions = [];
   try { actions = JSON.parse(c.action_items || '[]'); } catch {}
   const showRetry = status === 'error' || (status === 'pending' && c.transcript) || status === 'skipped';
+  const outlineHtml = c.summary ? _renderOutline(c.summary) : '';
   return `
     <div class="aud-summary">
       <div class="aud-summary-row">
         <span class="aud-summary-status ${esc(status)}" title="${esc(c.summary_error || '')}">${esc(SUM_LBL[status] || status)}</span>
-        <div class="aud-summary-text">${esc(c.summary || '')}</div>
-        ${showRetry ? `<button class="aud-transcript-retry" onclick="audRetrySummary('${esc(c.id)}')" title="สรุปใหม่ด้วย AI">🔄</button>` : ''}
+        <div class="aud-summary-text aud-outline">${outlineHtml}</div>
+        ${showRetry ? `<button class="aud-transcript-retry" onclick="audRetrySummary('${esc(c.id)}')" title="จัดข้อความใหม่ด้วย AI">🔄</button>` : ''}
       </div>
       ${actions.length ? `<ul class="aud-actions">${actions.map(a => `<li>☐ ${esc(a)}</li>`).join('')}</ul>` : ''}
     </div>`;
@@ -3510,17 +3960,27 @@ function audRenderClips() {
     const ts     = c.created_at ? new Date(c.created_at) : new Date();
     const owner  = c.member_name || ('#' + (c.member_id || '?'));
     // Stream via authenticated URL (token in query string for the <audio> tag).
+    // ใช้ ?token= (legacy, ยัง work) — server รับทั้ง 2 วิธี (signed sig+exp
+    // และ token query). อนาคต iterate ต่อให้ทุก clip pre-fetch signed URL
+    // (ตอนนี้ pattern เก่ามี hard dependency กับ audRenderClips re-entry, ขอ
+    // เลี่ยงไปก่อน). signed URL endpoint /api/recordings/:id/sign พร้อมใช้
+    // ถ้า frontend อยาก opt-in
     const streamUrl = c._uploading ? '' : `/api/recordings/${c.id}/stream?token=${encodeURIComponent(_token)}`;
     const downloadUrl = c._uploading ? '#' : streamUrl;
     const el = document.createElement('div');
     el.className = 'aud-clip' + (c._uploading ? ' aud-uploading' : '');
     const status = c.transcript_status || 'pending';
     const STATUS_LBL = { pending: '⏳ pending', processing: '🤖 processing', done: '✅ done', error: '❌ error', skipped: '— skipped' };
+    // Title = วันเวลาที่อัด (จาก created_at) แทน label เดิม — ผู้ใช้ขอ
+    // เพราะ "Recording <timestamp>" ที่ generate ตอน save ซ้ำซ้อนกับ meta ด้านล่าง
+    // ถ้า user เคย rename ผ่าน ✏️ → ใช้ label นั้น (เพื่อไม่ทับ user intent)
+    const isAutoLabel = !c.label || /^Recording\s+\d/.test(c.label) || c.label === 'Uploading...';
+    const titleText = isAutoLabel ? plFmt(ts.toISOString()) : c.label;
     el.innerHTML = `
       <div class="aud-clip-info">
-        <div class="aud-clip-label">${esc(c.label || 'Recording')}</div>
+        <div class="aud-clip-label">${esc(titleText)}</div>
         <div class="aud-clip-meta">
-          ${audFmtDur(dur)} · ${sizeKB} KB · ${plFmt(ts.toISOString())}
+          ${audFmtDur(dur)} · ${sizeKB} KB
           ${_audShowAll || (c.member_id && c.member_id !== _user?.id) ? ` · 👤 ${esc(owner)}` : ''}
         </div>
       </div>
@@ -3532,14 +3992,17 @@ function audRenderClips() {
         <a href="${downloadUrl}" download="${esc(safeLabel)}.${ext}" title="ดาวน์โหลด" ${c._uploading ? 'style="pointer-events:none;opacity:.4"' : ''}>⬇</a>
         <button class="ab-del" onclick="audDeleteClip('${esc(c.id)}')" title="ลบ">🗑</button>
       </div>
-      ${c._uploading ? '' : `
+      ${c._uploading ? '' :
+        // ซ่อน transcript/summary block ทั้งหมดถ้า AI ปิดอยู่ (status='skipped')
+        // และไม่มี transcript เก่า. ถ้ามี transcript เก่า → ยังโชว์ให้ดูเป็น read-only
+        (status === 'skipped' && !c.transcript ? '' : `
         <div class="aud-transcript">
           <span class="aud-transcript-status ${esc(status)}" title="${esc(c.transcript_error || '')}">${esc(STATUS_LBL[status] || status)}</span>
           <div class="aud-transcript-text">${esc(c.transcript || '')}</div>
           ${(status === 'error' || status === 'pending') ? `<button class="aud-transcript-retry" onclick="audRetryTranscribe('${esc(c.id)}')" title="ถอดเสียงใหม่">🔄</button>` : ''}
         </div>
         ${audSummaryHtml(c)}
-      `}`;
+      `)}`;
     list.appendChild(el);
   }
 }
@@ -4002,7 +4465,9 @@ function abImport() {
    Filter by member · text search · sort columns · CSV export.
 ════════════════════════════════════════════ */
 let _plRows = [];
+let _plGroups = [];       // /api/groups response (for project start/deadline)
 let _plSort = { key: 'earned_at', dir: -1 };
+let _plView = 'table';    // 'table' | 'gantt'
 
 async function plInit() {
   // Populate member filter from main app's member list
@@ -4027,6 +4492,22 @@ async function plInit() {
       plRender();
     });
   });
+  // View toggle (Table ↔ Gantt)
+  document.querySelectorAll('.pl-view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _plView = btn.dataset.view;
+      document.querySelectorAll('.pl-view-btn').forEach(b => b.classList.toggle('active', b === btn));
+      document.getElementById('pl-table-card').classList.toggle('hidden', _plView !== 'table');
+      document.getElementById('pl-gantt-card').classList.toggle('hidden', _plView !== 'gantt');
+      plRender();
+    });
+  });
+  // Click outside popup to close
+  document.getElementById('pl-pin-popup')?.addEventListener('click', e => {
+    if (e.target.id === 'pl-pin-popup') {
+      e.target.classList.add('hidden');
+    }
+  });
   plReload();
 }
 
@@ -4040,10 +4521,15 @@ async function plReload() {
     const qs = new URLSearchParams();
     if (memberId) qs.set('member_id', memberId);
     if (includeAll) qs.set('all', '1');
-    const r = await apiFetch('GET', '/api/point-ledger' + (qs.toString() ? '?' + qs : ''));
+    // Parallel fetch — ledger rows + groups (start/deadline for Gantt timeline)
+    const [r, gr] = await Promise.all([
+      apiFetch('GET', '/api/point-ledger' + (qs.toString() ? '?' + qs : '')),
+      apiFetch('GET', '/api/groups'),
+    ]);
     if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || 'request failed');
     const data = await r.json();
     _plRows = data.rows || [];
+    _plGroups = gr.ok ? (await gr.json()) || [] : [];
     status.textContent = `✅ โหลด ${data.count} rows · รวม ${data.total} points${includeAll ? ' (รวม unconfirmed)' : ''}`;
     status.style.color = '#86efac';
     plRender();
@@ -4066,7 +4552,7 @@ function plRender() {
       String(r.task_id || '').includes(search)
     );
   }
-  // Sort
+  // Sort (applies to table view; Gantt uses chronological per-group)
   const { key, dir } = _plSort;
   rows = [...rows].sort((a, b) => {
     let va = a[key], vb = b[key];
@@ -4077,7 +4563,7 @@ function plRender() {
     return String(va).localeCompare(String(vb), 'th') * dir;
   });
 
-  // Summary tiles
+  // Summary tiles (always rendered — same data for both views)
   const total = rows.reduce((s, r) => s + (r.points || 0), 0);
   const members = new Set(rows.map(r => r.member_id));
   const tasks   = new Set(rows.map(r => r.task_id));
@@ -4089,7 +4575,12 @@ function plRender() {
   document.getElementById('pl-sum-earliest').textContent = plFmt(dates[0]) || '—';
   document.getElementById('pl-sum-latest').textContent   = plFmt(dates[dates.length - 1]) || '—';
 
-  // Body
+  // Dispatch by view
+  if (_plView === 'gantt') plRenderGantt(rows);
+  else plRenderTable(rows);
+}
+
+function plRenderTable(rows) {
   const tb = document.getElementById('pl-tbody');
   if (!rows.length) {
     tb.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#64748b;padding:2rem">— ไม่มีรายการ —</td></tr>`;
@@ -4115,6 +4606,238 @@ function plRender() {
       <td><span class="pl-role">${esc(r.task_status || '—')}</span></td>
     </tr>
   `).join('');
+}
+
+// ═══ GANTT RENDERER (SVG) ═══════════════════════════════════════════════════
+// Layout:
+//   left column (180px): project name + leader
+//   right column (scroll-x): timeline bar + pins
+//   one row = one group/project
+//   pins clustered if 2+ on same day (offset Y stagger)
+function plRenderGantt(rows) {
+  const wrap = document.getElementById('pl-gantt-wrap');
+  if (!wrap) return;
+
+  // Group rows by group_id; rows without group → 'unassigned' bucket
+  const byGroup = new Map();
+  for (const r of rows) {
+    const gid = r.group_id || '_unassigned';
+    if (!byGroup.has(gid)) byGroup.set(gid, []);
+    byGroup.get(gid).push(r);
+  }
+  if (byGroup.size === 0) {
+    wrap.innerHTML = `<div style="text-align:center;color:#64748b;padding:2rem;font-size:.78rem">— ไม่มีข้อมูลให้แสดง —</div>`;
+    return;
+  }
+
+  // Determine timeline bounds — min start / max end of all involved projects
+  // + extra padding (1 week before/after)
+  const groupMap = new Map(_plGroups.map(g => [g.id, g]));
+  let minDate = null, maxDate = null;
+  const groupRows = [];   // array of { gid, group, rows }
+  for (const [gid, list] of byGroup) {
+    const g = groupMap.get(gid);
+    const rowDates = list.map(r => r.earned_at).filter(Boolean).map(d => new Date(d));
+    const starts = [], ends = [];
+    if (g) {
+      if (g.start_date) starts.push(new Date(g.start_date));
+      if (g.deadline)   ends.push(new Date(g.deadline));
+    }
+    starts.push(...rowDates);
+    ends.push(...rowDates);
+    const start = starts.length ? new Date(Math.min(...starts.map(d => d.getTime()))) : new Date();
+    const end   = ends.length   ? new Date(Math.max(...ends.map(d => d.getTime())))   : new Date();
+    groupRows.push({ gid, group: g, rows: list, start, end });
+    if (!minDate || start < minDate) minDate = start;
+    if (!maxDate || end   > maxDate) maxDate = end;
+  }
+  // Pad bounds by 7 days each side; ensure today is visible
+  const today = new Date();
+  if (today < minDate) minDate = today;
+  if (today > maxDate) maxDate = today;
+  minDate = new Date(minDate.getTime() - 7 * 86400000);
+  maxDate = new Date(maxDate.getTime() + 7 * 86400000);
+
+  // Sort group rows: groups with earlier start first
+  groupRows.sort((a, b) => a.start - b.start);
+
+  // Layout constants
+  const LABEL_W   = 180;          // left fixed column
+  const ROW_H     = 56;
+  const AXIS_H    = 36;
+  const PIN_R     = 9;
+  const dayMs     = 86400000;
+  const totalDays = Math.max(14, Math.ceil((maxDate - minDate) / dayMs));
+  // Pixel width per day — scale to fit at min 6px/day or 1200px content min
+  const PX_PER_DAY = Math.max(8, Math.min(40, 1400 / totalDays));
+  const timelineW = totalDays * PX_PER_DAY;
+  const totalW = LABEL_W + timelineW + 20;
+  const totalH = AXIS_H + groupRows.length * ROW_H + 20;
+
+  const dateToX = (d) => LABEL_W + ((new Date(d) - minDate) / dayMs) * PX_PER_DAY;
+
+  // Build month tick marks
+  const monthTicks = [];
+  let cursor = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+  while (cursor <= maxDate) {
+    monthTicks.push(new Date(cursor));
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  const monthName = m => ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][m];
+
+  // SVG content
+  let svg = `<svg class="pl-gantt-svg" width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}" xmlns="http://www.w3.org/2000/svg">`;
+
+  // Axis (month grid lines + labels)
+  for (const m of monthTicks) {
+    const x = dateToX(m);
+    svg += `<line class="pl-gantt-axis-tick" x1="${x}" y1="${AXIS_H}" x2="${x}" y2="${totalH - 10}" />`;
+    svg += `<text class="pl-gantt-month-label" x="${x + 4}" y="${AXIS_H - 18}">${monthName(m.getMonth())} ${(m.getFullYear() + 543) % 100}</text>`;
+  }
+  // Year ticks (top above month)
+  for (const m of monthTicks) {
+    if (m.getMonth() === 0 || m === monthTicks[0]) {
+      const x = dateToX(m);
+      svg += `<text class="pl-gantt-axis-label" x="${x + 4}" y="${AXIS_H - 4}" style="font-size:9px">${m.getFullYear() + 543}</text>`;
+    }
+  }
+
+  // Today line (red dashed)
+  const todayX = dateToX(today);
+  svg += `<line class="pl-gantt-today" x1="${todayX}" y1="${AXIS_H - 4}" x2="${todayX}" y2="${totalH - 10}" />`;
+  svg += `<text class="pl-gantt-today-label" x="${todayX + 4}" y="${AXIS_H - 22}">วันนี้</text>`;
+
+  // Rows
+  groupRows.forEach((gr, idx) => {
+    const yTop = AXIS_H + idx * ROW_H;
+    const yMid = yTop + ROW_H / 2;
+    const color = (gr.group && gr.group.color) || '#94a3b8';
+
+    // Left label column
+    const gname = (gr.group && gr.group.name) || (gr.gid === '_unassigned' ? '(ไม่มีโครงการ)' : `#${gr.gid}`);
+    const leader = (gr.group && gr.group.leader_name) ? '👤 ' + gr.group.leader_name : '';
+    svg += `<rect class="pl-gantt-lane" x="0" y="${yTop + 4}" width="${LABEL_W - 6}" height="${ROW_H - 8}" />`;
+    svg += `<text class="pl-gantt-lane-label" x="10" y="${yMid - 2}">${escXml(gname.slice(0, 22))}${gname.length > 22 ? '…' : ''}</text>`;
+    if (leader) svg += `<text class="pl-gantt-lane-sub" x="10" y="${yMid + 14}">${escXml(leader.slice(0, 24))}</text>`;
+    // Color accent stripe
+    svg += `<rect x="0" y="${yTop + 4}" width="3" height="${ROW_H - 8}" fill="${escXml(color)}" />`;
+
+    // Timeline bar (project duration if group exists)
+    if (gr.group && gr.group.start_date && gr.group.deadline) {
+      const bx = dateToX(gr.group.start_date);
+      const bw = Math.max(2, dateToX(gr.group.deadline) - bx);
+      svg += `<rect class="pl-gantt-bar" x="${bx}" y="${yMid - 8}" width="${bw}" height="16" fill="${escXml(color)}" stroke="${escXml(color)}" />`;
+    } else {
+      // No project bar — draw faint baseline
+      svg += `<line x1="${LABEL_W}" y1="${yMid}" x2="${totalW - 10}" y2="${yMid}" stroke="#1e293b" stroke-width="1" />`;
+    }
+
+    // Pins — group consecutive pins on same day to avoid overlap
+    const pinsByDay = new Map();
+    for (const r of gr.rows) {
+      if (!r.earned_at) continue;
+      const k = String(r.earned_at).slice(0, 10);   // ISO date YYYY-MM-DD
+      if (!pinsByDay.has(k)) pinsByDay.set(k, []);
+      pinsByDay.get(k).push(r);
+    }
+    for (const [day, list] of pinsByDay) {
+      list.forEach((r, i) => {
+        const px = dateToX(r.earned_at);
+        const py = yMid + (i - (list.length - 1) / 2) * (PIN_R * 2 + 2);
+        const fill = r.member_color || '#fbbf24';
+        const id = `pin-${idx}-${day}-${i}`;
+        svg += `<circle class="pl-gantt-pin" cx="${px}" cy="${py}" r="${PIN_R}" fill="${escXml(fill)}" stroke="#fff" stroke-width="1.5" data-pin-idx="${plPinIdx(r)}" />`;
+        // Points label inside pin
+        const lbl = String(r.points || 0);
+        const fs = lbl.length >= 3 ? 8 : 10;
+        svg += `<text class="pl-gantt-pin-label" x="${px}" y="${py + fs/3}" style="font-size:${fs}px">${escXml(lbl)}</text>`;
+      });
+    }
+  });
+
+  svg += `</svg>`;
+  wrap.innerHTML = svg;
+
+  // Auto-scroll ไปที่ "today" หลัง render
+  // (กัน pins อยู่ทางขวาแล้วผู้ใช้เปิดมาเห็นแต่ส่วนซ้ายของ chart นึกว่าไม่มี pin)
+  // เลื่อนให้ todayX อยู่ตรงกลาง viewport (หรือเลื่อนถึงสุดขวาถ้า todayX ใกล้ขอบ)
+  requestAnimationFrame(() => {
+    const visibleW = wrap.clientWidth;
+    const target = Math.max(0, todayX - visibleW * 0.5);
+    wrap.scrollLeft = target;
+  });
+
+  // Wire pin clicks
+  wrap.querySelectorAll('.pl-gantt-pin').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = +el.dataset.pinIdx;
+      const row = _plPinIdxMap[idx];
+      if (row) plShowPinDetail(row);
+    });
+  });
+}
+
+// Track row index → row obj for pin click handling
+const _plPinIdxMap = [];
+function plPinIdx(row) {
+  _plPinIdxMap.push(row);
+  return _plPinIdxMap.length - 1;
+}
+
+function escXml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function plShowPinDetail(r) {
+  const body = document.getElementById('pl-pin-popup-body');
+  const popup = document.getElementById('pl-pin-popup');
+  if (!body || !popup) return;
+  // Build detail rows
+  const groupBadge = r.group_name
+    ? `<span style="background:${esc(r.group_color || '#1e293b')}33;color:${esc(r.group_color || '#cbd5e1')};border:1px solid ${esc(r.group_color || '#1e293b')}66;padding:.15rem .55rem;border-radius:.35rem;font-size:.75rem">${esc(r.group_name)}</span>`
+    : '<span style="color:#64748b">— ไม่ระบุ —</span>';
+  body.innerHTML = `
+    <h4>${esc(r.task_title || '(no title)')}</h4>
+    <div style="font-size:.7rem;color:#64748b;font-family:'JetBrains Mono', monospace;margin-bottom:.65rem">#${esc(r.task_id || '')}</div>
+    <div class="pl-pp-row">
+      <div class="pl-pp-label">Points</div>
+      <div class="pl-pp-value"><span class="pl-pp-points">+${r.points || 0}</span></div>
+    </div>
+    <div class="pl-pp-row">
+      <div class="pl-pp-label">วันที่</div>
+      <div class="pl-pp-value">${esc(plFmt(r.earned_at))}</div>
+    </div>
+    <div class="pl-pp-row">
+      <div class="pl-pp-label">ผู้รับ</div>
+      <div class="pl-pp-value">
+        <span class="pl-member-chip">
+          <span class="dot" style="background:${esc(r.member_color || '#6366f1')}"></span>
+          ${esc(r.member_name || '#' + r.member_id)}
+        </span>
+      </div>
+    </div>
+    <div class="pl-pp-row">
+      <div class="pl-pp-label">โครงการ</div>
+      <div class="pl-pp-value">${groupBadge}</div>
+    </div>
+    <div class="pl-pp-row">
+      <div class="pl-pp-label">บทบาท</div>
+      <div class="pl-pp-value">${esc(r.task_role || 'member')}${r.is_supreme ? ' ⭐ supreme' : ''}</div>
+    </div>
+    <div class="pl-pp-row">
+      <div class="pl-pp-label">Phase</div>
+      <div class="pl-pp-value"><span class="pl-phase ${esc(r.phase || 'none')}">${esc(r.phase || 'none')}</span></div>
+    </div>
+    <div class="pl-pp-row">
+      <div class="pl-pp-label">Status</div>
+      <div class="pl-pp-value">${esc(r.task_status || '—')}</div>
+    </div>
+    <div class="pl-pp-actions">
+      <a href="/#tasks/${esc(r.task_id || '')}" target="_blank" rel="noopener">📋 ไปยัง task</a>
+      <button class="pl-pp-ghost" onclick="document.getElementById('pl-pin-popup').classList.add('hidden')">ปิด</button>
+    </div>
+  `;
+  popup.classList.remove('hidden');
 }
 
 function plFmt(iso) {
@@ -4625,7 +5348,7 @@ function renderMembers(data) {
           <span>${esc((m.prefix?m.prefix+' ':'')+m.name)}</span>
         </div>
       </td>
-      <td><span style="font-size:.7rem;padding:.1rem .38rem;border-radius:99px;background:${m.role==='admin'?'#451a03':'#1e293b'};color:${m.role==='admin'?'#fbbf24':'#94a3b8'}">${esc(m.role)}</span></td>
+      <td><span style="font-size:.7rem;padding:.1rem .38rem;border-radius:99px;background:${m.role==='boss'?'#713f12':m.role==='admin'?'#451a03':'#1e293b'};color:${m.role==='boss'?'#fde047':m.role==='admin'?'#fbbf24':'#94a3b8'}">${esc(m.role)}</span></td>
       <td style="font-family:'JetBrains Mono',monospace">${m.points_total||0}</td>
       <td><div style="display:flex;align-items:center;gap:.3rem"><div style="width:12px;height:12px;border-radius:3px;background:${esc(m.color||'#6366f1')}"></div><span style="font-size:.72rem;font-family:'JetBrains Mono',monospace;color:#64748b">${esc(m.color||'—')}</span></div></td>
       <td style="font-size:.72rem;color:#475569">${fmtDate(m.created_at)}</td>
@@ -4711,28 +5434,201 @@ async function wbOpen(id, name) {
 
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-  const wrap = document.getElementById('wb-canvas-wrap');
-  const rect = wrap?.getBoundingClientRect();
-  const W = Math.max(rect?.width  || window.innerWidth, 800);
-  const H = Math.max(rect?.height || (window.innerHeight - 180), 600);
+  // Paper-size aware init — default A4 portrait. Save key per-board.
+  const PAPER_SIZES_INIT = {
+    'a4-p': { w:794, h:1123 }, 'a4-l': { w:1123, h:794 },
+    'a3-p': { w:1123, h:1587 }, 'a3-l': { w:1587, h:1123 },
+    'a5-p': { w:559, h:794 }, 'letter': { w:816, h:1056 },
+    'tabloid': { w:1056, h:1632 }, 'infinite': { w:3000, h:3000 },
+  };
+  let _initSize = 'a4-p';
+  try { _initSize = localStorage.getItem('sml_wb_size_' + id) || 'a4-p'; } catch {}
+  const _paperPx = PAPER_SIZES_INIT[_initSize] || PAPER_SIZES_INIT['a4-p'];
+  const W = _paperPx.w;
+  const H = _paperPx.h;
 
   wbCanvas = new fabric.Canvas('wb-canvas', {
     width: W, height: H,
     backgroundColor: '#ffffff',
     selection: true,
     preserveObjectStacking: true,
+    enableRetinaScaling: true,
+    allowTouchScrolling: false,
   });
+  // Base paper dimensions — zoom math multiplies these by zoom factor
+  wbCanvas._paperW = W;
+  wbCanvas._paperH = H;
+  wbCanvas._cssZoom = 1;
   wbCanvas.freeDrawingBrush.color = '#1e293b';
   wbCanvas.freeDrawingBrush.width = 3;
+  if (typeof _wbApplyPaperSize === 'function') _wbApplyPaperSize(_initSize);
+  if (typeof _wbLoadPaper === 'function') _wbLoadPaper();
+
+  // Goodnote-style pointer handler — palm rejection + 2-finger gestures + pressure
+  const _upper = wbCanvas.upperCanvasEl;
+  if (_upper) {
+    const activePointers = new Map();
+    let _penDownAt = 0;
+    let gestureState = null;
+    const touchCount = () => Array.from(activePointers.values()).filter(p => p.type === 'touch').length;
+    const centroidAndDist = () => {
+      const touches = Array.from(activePointers.values()).filter(p => p.type === 'touch');
+      if (touches.length < 2) return null;
+      const cx = (touches[0].x + touches[1].x) / 2;
+      const cy = (touches[0].y + touches[1].y) / 2;
+      return { cx, cy, dist: Math.hypot(touches[0].x - touches[1].x, touches[0].y - touches[1].y) };
+    };
+    let _penStrokeBase = 3, _penStrokePressures = [];
+
+    _upper.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'pen') {
+        _penDownAt = performance.now();
+        if (wbCanvas.isDrawingMode) {
+          _penStrokeBase = parseInt(document.getElementById('wb-stroke-size')?.value || '3', 10);
+          _penStrokePressures = [];
+        }
+        return;
+      }
+      if (e.pointerType === 'touch') {
+        if (performance.now() - _penDownAt < 800) { e.preventDefault(); e.stopPropagation(); return; }
+        activePointers.set(e.pointerId, { type:'touch', x:e.clientX, y:e.clientY });
+        if (touchCount() === 2) {
+          const c = centroidAndDist();
+          gestureState = { startDist: c.dist, startZoom: wbCanvas.getZoom(), startCx: c.cx, startCy: c.cy, lastCx: c.cx, lastCy: c.cy };
+          e.preventDefault(); e.stopPropagation();
+        }
+      }
+    }, { passive:false, capture:true });
+    _upper.addEventListener('pointermove', e => {
+      if (e.pointerType === 'touch' && performance.now() - _penDownAt < 800) { e.preventDefault(); e.stopPropagation(); return; }
+      if (e.pointerType === 'pen' && wbCanvas.isDrawingMode && wbCanvas._isCurrentlyDrawing) {
+        const p = Math.max(0.1, Math.min(1, e.pressure || 0.5));
+        _penStrokePressures.push(p);
+        wbCanvas.freeDrawingBrush.width = _penStrokeBase * (0.4 + p * 1.2);
+      }
+      if (e.pointerType === 'touch' && activePointers.has(e.pointerId)) {
+        activePointers.set(e.pointerId, { type:'touch', x:e.clientX, y:e.clientY });
+        if (gestureState && touchCount() >= 2) {
+          const c = centroidAndDist();
+          if (c) {
+            const newZoom = Math.max(0.2, Math.min(5, gestureState.startZoom * (c.dist / gestureState.startDist)));
+            if (typeof _wbApplyZoomDev === 'function') _wbApplyZoomDev(newZoom);
+            else wbCanvas.setZoom(newZoom);
+            const wrap = document.getElementById('wb-canvas-wrap');
+            if (wrap) {
+              wrap.scrollLeft -= (c.cx - gestureState.lastCx);
+              wrap.scrollTop  -= (c.cy - gestureState.lastCy);
+            }
+            gestureState.lastCx = c.cx; gestureState.lastCy = c.cy;
+            e.preventDefault(); e.stopPropagation();
+          }
+        }
+      }
+    }, { passive:false, capture:true });
+    const endHandler = e => {
+      if (e.pointerType === 'pen') {
+        if (_penStrokePressures.length) {
+          const avg = _penStrokePressures.reduce((a,b)=>a+b,0) / _penStrokePressures.length;
+          wbCanvas.freeDrawingBrush.width = _penStrokeBase * (0.4 + avg * 1.2);
+        }
+        setTimeout(() => { wbCanvas.freeDrawingBrush.width = _penStrokeBase; }, 50);
+        _penStrokePressures = [];
+        return;
+      }
+      if (e.pointerType === 'touch') {
+        activePointers.delete(e.pointerId);
+        if (touchCount() < 2 && gestureState) { gestureState = null; e.preventDefault(); e.stopPropagation(); }
+      }
+    };
+    _upper.addEventListener('pointerup',     endHandler, { passive:false, capture:true });
+    _upper.addEventListener('pointercancel', endHandler, { passive:false, capture:true });
+    _upper.addEventListener('pointerleave',  endHandler, { passive:false, capture:true });
+    _upper.addEventListener('wheel', e => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const cur = wbCanvas._cssZoom || wbCanvas.getZoom() || 1;
+      const next = Math.max(0.2, Math.min(5, cur * (e.deltaY > 0 ? 0.92 : 1.08)));
+      if (typeof _wbApplyZoomDev === 'function') _wbApplyZoomDev(next);
+    }, { passive: false });
+  }
 
   wbCanvas.on('mouse:down', wbMouseDown);
   wbCanvas.on('mouse:move', wbMouseMove);
   wbCanvas.on('mouse:up',   wbMouseUp);
+  // Double-click an injected card → approve/reject for point_request,
+  // or open the right tab/page hint for task/group/meeting/recording
+  wbCanvas.on('mouse:dblclick', e => {
+    if (e.target?._injectKind) _wbCardDblClick(e.target);
+  });
 
   let _inPathCreate = false;
   wbCanvas.on('path:created', e => {
     _inPathCreate = true;
     if (e?.path) e.path._fpc = true;
+    // ── Lasso ── path = วงเลือก ไม่ใช่ stroke ปกติ
+    if (wbActiveTool === 'lasso' && e?.path) {
+      const path = e.path;
+      const ox = path.left + (path.pathOffset?.x || 0);
+      const oy = path.top + (path.pathOffset?.y || 0);
+      const poly = (path.path || []).map(seg => {
+        const last = seg.length;
+        return { x: ox + seg[last - 2], y: oy + seg[last - 1] };
+      }).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
+      wbSuppressHistory = true;
+      wbCanvas.remove(path);
+      wbSuppressHistory = false;
+      function inside(pt, polygon) {
+        let isIn = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+          const xi = polygon[i].x, yi = polygon[i].y;
+          const xj = polygon[j].x, yj = polygon[j].y;
+          const intersect = ((yi > pt.y) !== (yj > pt.y)) &&
+            (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi + 1e-9) + xi);
+          if (intersect) isIn = !isIn;
+        }
+        return isIn;
+      }
+      const selected = wbCanvas.getObjects().filter(obj => {
+        if (obj === path) return false;
+        const cx = obj.left + (obj.width || 0) / 2;
+        const cy = obj.top + (obj.height || 0) / 2;
+        return inside({ x: cx, y: cy }, poly);
+      });
+      if (selected.length === 0) { toast('ไม่มี object ในวง',''); return; }
+      wbSetTool('select');
+      if (selected.length === 1) wbCanvas.setActiveObject(selected[0]);
+      else wbCanvas.setActiveObject(new fabric.ActiveSelection(selected, { canvas: wbCanvas }));
+      wbCanvas.renderAll();
+      toast(`เลือก ${selected.length} object`, 'success');
+      return;
+    }
+    // ── Smart line straightener ──
+    const path = e?.path;
+    if (path && path.path && path.path.length >= 3) {
+      const pts = path.path.map(seg => {
+        const last = seg.length;
+        return { x: seg[last - 2], y: seg[last - 1] };
+      }).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
+      if (pts.length >= 3) {
+        let totalLen = 0;
+        for (let i = 1; i < pts.length; i++) totalLen += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+        const first = pts[0], last = pts[pts.length - 1];
+        const direct = Math.hypot(last.x - first.x, last.y - first.y);
+        const straight = totalLen > 0 ? direct / totalLen : 0;
+        if (straight > 0.985 && direct > 40) {
+          const ox = path.left + (path.pathOffset?.x || 0);
+          const oy = path.top + (path.pathOffset?.y || 0);
+          const line = new fabric.Line([ox + first.x, oy + first.y, ox + last.x, oy + last.y], {
+            stroke: path.stroke, strokeWidth: path.strokeWidth, strokeLineCap: 'round', selectable: true
+          });
+          wbSuppressHistory = true;
+          wbCanvas.remove(path);
+          wbCanvas.add(line);
+          wbSuppressHistory = false;
+          wbCanvas.renderAll();
+        }
+      }
+    }
   });
   wbCanvas.on('object:added', e => {
     if (e?.target?._fpc || _inPathCreate) {
@@ -4747,17 +5643,46 @@ async function wbOpen(id, name) {
   wbSetTool('select');
   wbUpdateZoom();
 
-  // WebSocket
+  // WebSocket — auto-reconnect on drop (iOS Safari ฆ่า WS ตอน background)
+  _wbWantConn = true;
+  _wbConnect(id);
+}
+
+let _wbWantConn = false;
+let _wbReconnectTimer = null;
+let _wbReconnectTries = 0;
+
+function _wbConnect(id) {
   wbCloseSocket();
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   wbSocket = new WebSocket(`${proto}://${location.host}/ws`);
-  wbSocket.onopen    = () => { wbSocket.send(JSON.stringify({ type:'join', token:_token, boardId:id })); };
+  wbSocket.onopen = () => {
+    _wbReconnectTries = 0;
+    wbSocket.send(JSON.stringify({ type:'join', token:_token, boardId:id }));
+  };
   wbSocket.onmessage = e => { try { wbHandleMsg(JSON.parse(e.data)); } catch {} };
-  wbSocket.onerror   = () => toast('WebSocket error','error');
-  wbSocket.onclose   = () => {};
+  wbSocket.onerror   = () => {/* onclose จะ trigger reconnect */};
+  wbSocket.onclose   = () => {
+    if (!_wbWantConn || wbBoardId !== id) return;
+    const delay = Math.min(8000, 500 * Math.pow(2, _wbReconnectTries++));
+    clearTimeout(_wbReconnectTimer);
+    _wbReconnectTimer = setTimeout(() => {
+      if (_wbWantConn && wbBoardId === id) _wbConnect(id);
+    }, delay);
+  };
 }
 
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (!wbBoardId || !_wbWantConn) return;
+  if (!wbSocket || wbSocket.readyState >= 2) {
+    _wbReconnectTries = 0;
+    _wbConnect(wbBoardId);
+  }
+});
+
 function wbClose() {
+  _wbWantConn = false;
   wbCloseSocket();
   if (wbCanvas) { wbCanvas.dispose(); wbCanvas = null; }
   wbBoardId = null;
@@ -4767,7 +5692,12 @@ function wbClose() {
 }
 
 function wbCloseSocket() {
-  if (wbSocket) { wbSocket.close(); wbSocket = null; }
+  clearTimeout(_wbReconnectTimer);
+  if (wbSocket) {
+    try { wbSocket.onclose = null; } catch {}
+    try { wbSocket.close(); } catch {}
+    wbSocket = null;
+  }
   const ub = document.getElementById('wb-users');
   if (ub) ub.innerHTML = '';
 }
@@ -4819,6 +5749,13 @@ function wbSetTool(tool) {
 
   if (tool === 'select') {
     wbCanvas.selection = true;
+  } else if (tool === 'lasso') {
+    wbCanvas.isDrawingMode = true;
+    const b = new fabric.PencilBrush(wbCanvas);
+    b.color = 'rgba(99,102,241,.6)';
+    b.width = 2;
+    wbCanvas.freeDrawingBrush = b;
+    wbCanvas.defaultCursor = 'crosshair';
   } else if (tool === 'pan') {
     wbCanvas.skipTargetFind = true;
     wbCanvas.defaultCursor = 'grab';
@@ -4836,9 +5773,45 @@ function wbSetTool(tool) {
     wbCanvas.freeDrawingBrush = b;
   } else if (tool === 'eraser') {
     wbCanvas.skipTargetFind = false;
-    wbCanvas.defaultCursor = 'crosshair';
+    wbCanvas.defaultCursor = 'none';
   }
+  const eraserCur = document.getElementById('wb-eraser-cursor');
+  if (eraserCur) eraserCur.classList.toggle('active', tool === 'eraser');
 }
+
+// Eraser radius helper + circle-intersects-rect
+function wbEraserRadius() {
+  const w = parseInt(document.getElementById('wb-stroke-size')?.value || '3', 10);
+  return Math.max(20, w * 6);
+}
+function _wbCircleIntersectsRect(cx, cy, r, rect) {
+  const nx = Math.max(rect.left, Math.min(cx, rect.left + rect.width));
+  const ny = Math.max(rect.top,  Math.min(cy, rect.top  + rect.height));
+  return Math.hypot(cx - nx, cy - ny) <= r;
+}
+
+// Eraser cursor overlay (initialize once)
+(function setupDevEraserCursor() {
+  const wrap = document.getElementById('wb-canvas-wrap');
+  const cur  = document.getElementById('wb-eraser-cursor');
+  if (!wrap || !cur || wrap._eraserCursorWired) return;
+  wrap._eraserCursorWired = true;
+  function updateSize() {
+    const r = wbEraserRadius();
+    const zoom = (typeof wbCanvas !== 'undefined' && wbCanvas) ? wbCanvas.getZoom() : 1;
+    const sr = r * zoom;
+    cur.style.width = (sr * 2) + 'px';
+    cur.style.height = (sr * 2) + 'px';
+  }
+  wrap.addEventListener('pointermove', e => {
+    if (wbActiveTool !== 'eraser') return;
+    const rect = wrap.getBoundingClientRect();
+    cur.style.left = (e.clientX - rect.left + wrap.scrollLeft) + 'px';
+    cur.style.top  = (e.clientY - rect.top  + wrap.scrollTop)  + 'px';
+    updateSize();
+  });
+  document.getElementById('wb-stroke-size')?.addEventListener('input', updateSize);
+})();
 
 function wbGetColor() { return document.getElementById('wb-color-pick')?.value || '#1e293b'; }
 function wbGetSW() { return parseInt(document.getElementById('wb-stroke-size')?.value || 2, 10); }
@@ -4932,8 +5905,16 @@ function wbMakeArrow(x1,y1,x2,y2,color) {
 
 function wbErase(p) {
   if (!wbCanvas || !p) return;
-  const target = wbCanvas.getObjects().find(o => !o._isLive && o.containsPoint && o.containsPoint(new fabric.Point(p.x,p.y)));
-  if (target) wbCanvas.remove(target);
+  const r = wbEraserRadius();
+  // Radius-based erase — ลบทุก object ที่ bounding rect intersect กับวง
+  // Protect injected cards (task/group/meeting) เพื่อกัน accidental delete
+  const toRemove = wbCanvas.getObjects().filter(o => {
+    if (o._isLive) return false;
+    if (o._injectKind) return false;
+    const br = o.getBoundingRect(true, true);
+    return _wbCircleIntersectsRect(p.x, p.y, r, br);
+  });
+  if (toRemove.length) toRemove.forEach(o => wbCanvas.remove(o));
 }
 
 function wbDeleteSel() {
@@ -4989,12 +5970,25 @@ function wbRedo() {
   wbCanvas.loadFromJSON(wbHistory[wbHistoryIdx], () => { wbCanvas.renderAll(); wbSuppressHistory=false; wbBroadcast(); });
 }
 
+// Combined zoom — resize canvas DOM + Fabric setZoom เพื่อให้ paper visually
+// scale (เดิม zoomToPoint แค่ scale content inside fixed canvas → user ไม่เห็น)
+function _wbApplyZoomDev(newZoom) {
+  if (!wbCanvas) return;
+  const z = Math.max(0.2, Math.min(newZoom, 5));
+  const baseW = wbCanvas._paperW || wbCanvas.getWidth() / (wbCanvas._cssZoom || 1);
+  const baseH = wbCanvas._paperH || wbCanvas.getHeight() / (wbCanvas._cssZoom || 1);
+  wbCanvas._cssZoom = z;
+  wbCanvas.setWidth(baseW * z);
+  wbCanvas.setHeight(baseH * z);
+  wbCanvas.setZoom(z);
+  wbCanvas.calcOffset();   // recompute cached offset for correct pointer math
+  wbCanvas.requestRenderAll();
+  wbUpdateZoom();
+}
 function wbZoom(f) {
   if (!wbCanvas) return;
-  let z = Math.max(0.2, Math.min(wbCanvas.getZoom()*f, 5));
-  const c = wbCanvas.getCenter();
-  wbCanvas.zoomToPoint({x:c.left,y:c.top}, z);
-  wbUpdateZoom();
+  const cur = wbCanvas._cssZoom || wbCanvas.getZoom() || 1;
+  _wbApplyZoomDev(cur * f);
 }
 
 function wbZoomFit() {
@@ -5033,58 +6027,441 @@ function wbHexRgba(hex, alpha) {
   return `rgba(${(big>>16)&255},${(big>>8)&255},${big&255},${alpha})`;
 }
 
+// ===== Inject modal state (per-tab) =====
+let _wbInjTab = 'task';   // task | group | meeting | recording | points
+let _wbInjQ = '';
+// Mini recorder state
+let _wbRec = null, _wbRecStream = null, _wbRecChunks = [], _wbRecStartedAt = 0, _wbRecTimerH = null;
+
+// cache groups + tasks list สำหรับ lookup ตอน render row (เช่น task → group_name,
+// group → task_count/done_count) — refresh ทุกครั้งที่เปิด inject modal
+let _wbGroupsCache = [];
+let _wbTasksCache = [];
+
 async function wbRenderInjectList() {
   const el = document.getElementById('wb-inject-list');
-  el.innerHTML = '<p style="color:#94a3b8;font-size:.82rem">กำลังโหลดงาน...</p>';
+  const search = document.getElementById('wb-inj-search');
+  if (search) search.style.display = (_wbInjTab === 'recording') ? 'none' : '';
+  const q = _wbInjQ;
+  const m = (s) => !q || String(s||'').toLowerCase().includes(q);
+  el.innerHTML = '<p style="color:#94a3b8;font-size:.82rem;padding:1rem">กำลังโหลด...</p>';
+
   try {
-    const r = await apiFetch('GET', '/api/tasks');
-    const tasks = await r.json();
-    if (!Array.isArray(tasks) || !tasks.length) { el.innerHTML='<p style="color:#94a3b8;font-size:.82rem">ไม่มีงาน</p>'; return; }
-    el.innerHTML = tasks.slice(0,15).map(t => {
-      const kind = t.kind === 'meeting' ? 'meeting' : 'task';
-      const data = JSON.stringify({id:t.id,title:t.title,status:t.status,deadline:t.deadline,assignees:(t.assignees||[]).map(a=>({name:a.name}))});
-      return `<button style="width:100%;text-align:left;background:#f8fafc;border:1px solid #e2e8f0;border-radius:.65rem;padding:.55rem .75rem;font-size:.82rem;cursor:pointer;display:flex;gap:.5rem;align-items:baseline;font-family:'Prompt',sans-serif;"
-                       onmouseover="this.style.background='#eef2ff'" onmouseout="this.style.background='#f8fafc'"
-                       data-ik="${esc(kind)}" data-id="${esc(JSON.stringify(data))}">
-        <span>${kind==='meeting'?'📅':'📋'}</span>
-        <span style="font-weight:500;flex:1">${esc(t.title)}</span>
-        <span style="font-size:.72rem;color:#64748b">${esc(t.status||'')}</span>
-      </button>`;
-    }).join('');
-    el.querySelectorAll('[data-ik]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (!wbBoardId) return;
-        try {
-          const data = JSON.parse(JSON.parse(btn.dataset.id));
-          await apiFetch('POST', `/api/whiteboards/${wbBoardId}/inject`, {kind:btn.dataset.ik, data});
-          document.getElementById('wb-inject-modal')?.classList.add('hidden');
-          toast('นำข้อมูลเข้าแล้ว ✓','success');
-        } catch(e) { toast('Error: '+e.message,'error'); }
-      });
-    });
-  } catch(e) { el.innerHTML=`<p style="color:#ef4444;font-size:.82rem">${esc(e.message)}</p>`; }
+    if (_wbInjTab === 'task' || _wbInjTab === 'meeting') {
+      // โหลด tasks + groups คู่กัน เพื่อ enrich group_name ลงใน inject payload
+      const [tr, gr] = await Promise.all([
+        apiFetch('GET', '/api/tasks'),
+        apiFetch('GET', '/api/groups'),
+      ]);
+      const tasks = await tr.json();
+      _wbGroupsCache = (await gr.json()) || [];
+      _wbTasksCache = tasks || [];
+      const isMeet = _wbInjTab === 'meeting';
+      const items = (tasks || []).filter(t => (t.kind === 'meeting') === isMeet && t.status !== 'cancelled' && m(t.title));
+      if (!items.length) { el.innerHTML = `<p style="color:#94a3b8;font-size:.82rem;padding:1rem;text-align:center">— ไม่มีรายการ —</p>`; return; }
+      el.innerHTML = items.map(t => _wbRowTask(t, isMeet)).join('');
+    } else if (_wbInjTab === 'group') {
+      // โหลด groups + tasks คู่กัน เพื่อ compute task_count/done_count
+      const [gr, tr] = await Promise.all([
+        apiFetch('GET', '/api/groups'),
+        apiFetch('GET', '/api/tasks'),
+      ]);
+      _wbGroupsCache = (await gr.json()) || [];
+      _wbTasksCache = (await tr.json()) || [];
+      const groups = _wbGroupsCache.filter(g => m(g.name));
+      if (!groups.length) { el.innerHTML = `<p style="color:#94a3b8;font-size:.82rem;padding:1rem;text-align:center">— ไม่มีโครงการ —</p>`; return; }
+      el.innerHTML = groups.map(_wbRowGroup).join('');
+    } else if (_wbInjTab === 'recording') {
+      el.innerHTML = _wbRecPanelHtml();
+      _wbWireRec();
+      return;
+    } else if (_wbInjTab === 'points') {
+      const r = await apiFetch('GET', '/api/point-requests');
+      const reqs = (await r.json()).filter(p => p.status === 'pending');
+      if (!reqs.length) { el.innerHTML = `<p style="color:#94a3b8;font-size:.82rem;padding:1rem;text-align:center">— ไม่มีคำขอ pending —</p>`; return; }
+      el.innerHTML = reqs.map(_wbRowPoints).join('');
+    }
+    _wbWireRows();
+  } catch(e) {
+    el.innerHTML = `<p style="color:#ef4444;font-size:.82rem;padding:1rem">${esc(e.message)}</p>`;
+  }
 }
 
+function _wbRowTask(t, isMeet) {
+  const c = isMeet ? '#7c3aed' : '#0ea5e9';
+  const meta = `${esc(t.status||'')}${t.deadline ? ' · ⏰ ' + fmtDate(t.deadline) : ''}`;
+  // lookup group_name จาก cache ที่ wbRenderInjectList โหลดไว้
+  const grp = t.group_id ? _wbGroupsCache.find(g => g.id === t.group_id) : null;
+  // payload ที่ inject — ใส่รายละเอียดให้ครบ (description / points / group_name)
+  // เพื่อให้ card บน whiteboard แสดงข้อมูลเต็ม ไม่ต้อง re-fetch
+  const data = JSON.stringify({
+    id: t.id, title: t.title,
+    description: t.description || '',
+    status: t.status, deadline: t.deadline, end_time: t.end_time,
+    points: t.points,
+    group_id: t.group_id, group_name: grp?.name || t.group_name || '',
+    location_type: t.location_type, location_detail: t.location_detail,
+    assignees: (t.assignees || []).map(a => ({ name: a.name })),
+  });
+  return `<div class="wb-inj-row" style="--row-color:${c}" data-ik="${isMeet?'meeting':'task'}" data-id="${esc(t.id)}" data-data='${esc(data)}'>
+    <span class="ic">${isMeet?'📅':'📋'}</span>
+    <div class="bd"><div class="ttl">${esc(t.title)}</div><div class="mt">${meta}</div></div>
+  </div>`;
+}
+function _wbRowGroup(g) {
+  // member_count มาจาก backend อยู่แล้ว — ไม่ต้อง map members[]
+  const mem = g.member_count ?? (g.members || []).length;
+  const meta = `${g.leader_name ? '👤 ' + esc(g.leader_name) : 'ไม่มีหัวหน้า'} · ${mem} คน${g.deadline ? ' · ⏰ ' + fmtDate(g.deadline) : ''}`;
+  // compute progress จาก _wbTasksCache (โหลดคู่กับ groups)
+  const groupTasks = _wbTasksCache.filter(t => t.group_id === g.id && t.kind !== 'meeting');
+  const taskCount = groupTasks.length;
+  const doneCount = groupTasks.filter(t => t.status === 'done').length;
+  const data = JSON.stringify({
+    id: g.id, name: g.name,
+    description: g.description || '',
+    target: g.target || '',
+    leader_name: g.leader_name || '',
+    member_count: mem,
+    task_count: taskCount, done_count: doneCount,
+    status: g.status,
+    start_date: g.start_date, deadline: g.deadline,
+    color: g.color || '#94a3b8',
+  });
+  return `<div class="wb-inj-row" style="--row-color:${g.color||'#10b981'}" data-ik="group" data-id="${esc(g.id)}" data-data='${esc(data)}'>
+    <span class="ic">📁</span>
+    <div class="bd"><div class="ttl">${esc(g.name)}</div><div class="mt">${meta}</div></div>
+  </div>`;
+}
+function _wbRowPoints(p) {
+  const meta = `📋 ${esc(p.task_title||'?')} · ⭐ ${p.requested_points||0} · 👤 ${esc(p.requester_name||'?')}`;
+  const data = JSON.stringify({ id: p.id, task_title: p.task_title, requested_points: p.requested_points, requester_name: p.requester_name, reason: p.reason||'' });
+  return `<div class="wb-inj-row" style="--row-color:#facc15" data-ik="point_request" data-id="${esc(p.id)}" data-data='${esc(data)}'>
+    <span class="ic">⭐</span>
+    <div class="bd"><div class="ttl">ขอเพิ่ม points</div><div class="mt">${meta}</div></div>
+    <div class="ac">
+      <button class="ok" data-act="approve" title="อนุมัติ">✅</button>
+      <button class="no" data-act="reject"  title="ปฏิเสธ">❌</button>
+    </div>
+  </div>`;
+}
+function _wbWireRows() {
+  document.querySelectorAll('#wb-inject-list .wb-inj-row').forEach(row => {
+    const ik = row.dataset.ik;
+    const id = row.dataset.id;
+    const data = JSON.parse(row.dataset.data || '{}');
+    // Approve/Reject buttons
+    row.querySelectorAll('button[data-act]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const status = btn.dataset.act === 'approve' ? 'approved' : 'rejected';
+        try {
+          await apiFetch('POST', `/api/point-requests/${id}/decide`, { status });
+          await apiFetch('POST', `/api/whiteboards/${wbBoardId}/inject`, {
+            kind: 'point_decision',
+            data: { status, task_title: data.task_title, requested_points: data.requested_points, requester_name: data.requester_name, decided_by: _user?.name },
+          });
+          toast(status === 'approved' ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว', 'success');
+          wbRenderInjectList();
+        } catch(e) { toast(e.message, 'error'); }
+      });
+    });
+    // Normal row click → inject
+    row.addEventListener('click', async () => {
+      if (!wbBoardId) return;
+      try {
+        await apiFetch('POST', `/api/whiteboards/${wbBoardId}/inject`, { kind: ik, data });
+        document.getElementById('wb-inject-modal')?.classList.add('hidden');
+        toast('นำข้อมูลเข้าแล้ว ✓', 'success');
+      } catch(e) { toast('Error: '+e.message, 'error'); }
+    });
+  });
+}
+
+// ===== Mini recorder (recording tab) =====
+function _wbRecPanelHtml() {
+  return `<div class="wb-rec-panel">
+    <div id="wb-rec-state" class="wb-rec-state">⚪ พร้อมอัด</div>
+    <div id="wb-rec-timer" class="wb-rec-timer">00:00</div>
+    <div class="wb-rec-btns">
+      <button id="wb-rec-start" class="wb-rec-start">🔴 อัด</button>
+      <button id="wb-rec-stop"  class="wb-rec-stop" disabled>⏹ หยุดและส่ง</button>
+    </div>
+    <div class="wb-rec-hint">กดอัด → พูด → กดหยุด → อัปโหลด + วางการ์ดบน whiteboard. ระบบจะถอดเสียงต่อใน background</div>
+  </div>`;
+}
+function _wbWireRec() {
+  document.getElementById('wb-rec-start').onclick = _wbRecStart;
+  document.getElementById('wb-rec-stop').onclick  = _wbRecStopUpload;
+}
+async function _wbRecStart() {
+  if (_wbRec && _wbRec.state === 'recording') return;
+  try { _wbRecStream = await navigator.mediaDevices.getUserMedia({audio:true}); }
+  catch (e) { toast('เข้าถึงไมค์ไม่ได้: ' + e.message, 'error'); return; }
+  _wbRecChunks = [];
+  const cands = ['audio/webm;codecs=opus','audio/webm','audio/mp4;codecs=mp4a.40.2','audio/mp4'];
+  const mime = cands.find(m => window.MediaRecorder?.isTypeSupported?.(m)) || '';
+  _wbRec = new MediaRecorder(_wbRecStream, mime ? {mimeType:mime} : undefined);
+  _wbRec.ondataavailable = e => { if (e.data?.size) _wbRecChunks.push(e.data); };
+  _wbRec.start();
+  _wbRecStartedAt = performance.now();
+  _wbRecUI('recording');
+  _wbShowFloatRec();
+  _wbRecTimerH = setInterval(() => {
+    if (!_wbRecStartedAt) return;
+    const s = Math.floor((performance.now() - _wbRecStartedAt) / 1000);
+    const label = `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+    const t  = document.getElementById('wb-rec-timer');
+    const ft = document.getElementById('wb-float-rec-timer');
+    if (t)  t.textContent  = label;
+    if (ft) ft.textContent = label;
+  }, 250);
+}
+function _wbShowFloatRec() {
+  const w = document.getElementById('wb-float-rec');
+  const t = document.getElementById('wb-rec-toggle');
+  if (w) { w.classList.remove('hidden', 'uploading'); }
+  if (t) t.classList.add('is-recording');
+}
+function _wbHideFloatRec() {
+  const w = document.getElementById('wb-float-rec');
+  const t = document.getElementById('wb-rec-toggle');
+  if (w) { w.classList.add('hidden'); w.classList.remove('uploading'); }
+  if (t) t.classList.remove('is-recording');
+}
+function _wbMarkFloatUploading() {
+  const w = document.getElementById('wb-float-rec');
+  if (w) w.classList.add('uploading');
+}
+async function _wbRecStopUpload() {
+  if (!_wbRec || _wbRec.state !== 'recording') return;
+  const mime = _wbRec.mimeType || 'audio/webm';
+  await new Promise(r => { _wbRec.onstop = r; _wbRec.stop(); });
+  const dur = performance.now() - _wbRecStartedAt;
+  if (_wbRecTimerH) { clearInterval(_wbRecTimerH); _wbRecTimerH = null; }
+  if (_wbRecStream) { _wbRecStream.getTracks().forEach(t => t.stop()); _wbRecStream = null; }
+  _wbRecUI('uploading');
+  _wbMarkFloatUploading();
+  const blob = new Blob(_wbRecChunks, {type:mime});
+  const ext = mime.includes('webm')?'webm':mime.includes('ogg')?'ogg':mime.includes('mp4')?'m4a':'bin';
+  const fd = new FormData();
+  fd.append('audio', blob, `recording.${ext}`);
+  fd.append('label', 'Whiteboard ' + now());
+  fd.append('duration_ms', String(Math.round(dur)));
+  try {
+    const r = await fetch('/api/recordings', { method:'POST', headers:{Authorization:'Bearer '+_token}, body: fd });
+    if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || 'upload failed');
+    const saved = await r.json();
+    await apiFetch('POST', `/api/whiteboards/${wbBoardId}/inject`, {
+      kind: 'recording',
+      data: { id: saved.id, label: saved.label, duration_ms: saved.duration_ms, transcript_status: saved.transcript_status || 'pending' },
+    });
+    toast('อัปโหลด + วางการ์ดแล้ว', 'success');
+    document.getElementById('wb-inject-modal')?.classList.add('hidden');
+  } catch (e) { toast(e.message, 'error'); }
+  finally { _wbRecUI('idle'); _wbHideFloatRec(); _wbRecChunks = []; _wbRec = null; }
+}
+function _wbStopRec() {
+  if (_wbRec && _wbRec.state === 'recording') { try { _wbRec.stop(); } catch {} }
+  if (_wbRecTimerH) { clearInterval(_wbRecTimerH); _wbRecTimerH = null; }
+  if (_wbRecStream) { _wbRecStream.getTracks().forEach(t => t.stop()); _wbRecStream = null; }
+  _wbRec = null;
+}
+function _wbRecUI(state) {
+  const s = document.getElementById('wb-rec-state');
+  const start = document.getElementById('wb-rec-start');
+  const stop  = document.getElementById('wb-rec-stop');
+  if (!s) return;
+  s.classList.remove('recording');
+  if (state === 'recording') { s.textContent = '🔴 กำลังอัด...'; s.classList.add('recording'); start.disabled = true;  stop.disabled = false; }
+  else if (state === 'uploading') { s.textContent = '⬆ กำลังอัปโหลด...';                       start.disabled = true;  stop.disabled = true;  }
+  else                           { s.textContent = '⚪ พร้อมอัด';                              start.disabled = false; stop.disabled = true;  }
+  if (state === 'idle') { const t = document.getElementById('wb-rec-timer'); if (t) t.textContent = '00:00'; _wbRecStartedAt = 0; }
+}
+
+// ===== Card rendering =====
+const WB_CARD_STYLE = {
+  task:           { color: '#0ea5e9', icon: '📋', title: d => d.title || 'task' },
+  meeting:        { color: '#7c3aed', icon: '📅', title: d => d.title || 'meeting' },
+  group:          { color: '#10b981', icon: '📁', title: d => d.name || 'group' },
+  recording:      { color: '#f59e0b', icon: '🎙', title: d => d.label || 'recording' },
+  point_request:  { color: '#eab308', icon: '⭐', title: d => `ขอเพิ่ม ${d.requested_points||0} pts` },
+  point_decision: { color: '#22c55e', icon: '✅', title: d => d.status === 'approved' ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว' },
+};
+function _wbCardLines(kind, d) {
+  if (kind === 'task') {
+    const out = [];
+    // group/project ใต้นี้ (ถ้า payload เก็บ group_name ส่งมา)
+    if (d.group_name) out.push(`📁 ${d.group_name}`);
+    if (d.status) out.push(`สถานะ: ${d.status === 'done' ? '✅ เสร็จ' : d.status === 'in_progress' ? '🟡 กำลังทำ' : '⚪ ยังไม่เริ่ม'}`);
+    if (d.deadline) out.push(`⏰ Deadline: ${String(d.deadline).slice(0,10)}`);
+    if (d.points != null && d.points > 0) out.push(`⭐ ${d.points} pts`);
+    if (Array.isArray(d.assignees) && d.assignees.length) {
+      out.push(`👥 มอบหมาย (${d.assignees.length}):`);
+      out.push(`   ${d.assignees.map(a => a.name).join(', ')}`);
+    }
+    if (d.description && String(d.description).trim()) {
+      out.push('');
+      out.push(`📝 ${String(d.description).trim()}`);
+    }
+    return out;
+  }
+  if (kind === 'meeting') {
+    const out = [];
+    if (d.group_name) out.push(`📁 ${d.group_name}`);
+    if (d.deadline) out.push(`📅 ${String(d.deadline).slice(0,16).replace('T',' ')}${d.end_time ? ' - ' + String(d.end_time).slice(11,16) : ''}`);
+    if (d.location_type) out.push(`📍 ${d.location_type}${d.location_detail && d.location_detail !== 'Lab @ECC-504' ? ' · ' + d.location_detail : ''}`);
+    if (Array.isArray(d.assignees) && d.assignees.length) {
+      out.push(`👥 ผู้เข้าร่วม (${d.assignees.length}):`);
+      out.push(`   ${d.assignees.map(a => a.name).join(', ')}`);
+    }
+    if (d.description && String(d.description).trim()) {
+      out.push('');
+      out.push(`📝 ${String(d.description).trim()}`);
+    }
+    return out;
+  }
+  if (kind === 'group') {
+    const out = [];
+    if (d.leader_name) out.push(`👤 หัวหน้า: ${d.leader_name}`);
+    if (d.member_count != null) out.push(`👥 สมาชิก: ${d.member_count} คน`);
+    if (d.status) out.push(`สถานะ: ${d.status === 'done' ? '✅ เสร็จ' : d.status === 'in_progress' ? '🟡 กำลังทำ' : '⚪ ยังไม่เริ่ม'}`);
+    if (d.task_count != null && d.task_count > 0) {
+      const done = d.done_count || 0;
+      out.push(`📊 ความคืบหน้า: ${done}/${d.task_count} งาน (${Math.round(done * 100 / d.task_count)}%)`);
+    }
+    if (d.start_date && d.deadline) out.push(`⏰ ${String(d.start_date).slice(0,10)} → ${String(d.deadline).slice(0,10)}`);
+    else if (d.deadline) out.push(`⏰ ${String(d.deadline).slice(0,10)}`);
+    if (d.target && String(d.target).trim()) {
+      out.push('');
+      out.push(`🎯 ${String(d.target).trim()}`);
+    }
+    if (d.description && String(d.description).trim()) {
+      out.push('');
+      out.push(`📝 ${String(d.description).trim()}`);
+    }
+    return out;
+  }
+  if (kind === 'recording') {
+    const out = [];
+    if (d.duration_ms) {
+      const s = Math.floor(d.duration_ms / 1000);
+      out.push(`⏱ ${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`);
+    }
+    if (d.transcript_status === 'pending' || d.transcript_status === 'processing') out.push('⏳ กำลังถอดเสียง...');
+    else if (d.transcript_excerpt) out.push(`📝 ${String(d.transcript_excerpt).slice(0,80)}...`);
+    else if (d.transcript_status === 'done') out.push('✅ ถอดเสียงเสร็จแล้ว');
+    return out;
+  }
+  if (kind === 'point_request') {
+    const out = [];
+    if (d.task_title) out.push(`📋 ${d.task_title}`);
+    if (d.requester_name) out.push(`👤 ${d.requester_name}`);
+    out.push('— ดับเบิลคลิก: อนุมัติ/ปฏิเสธ —');
+    return out;
+  }
+  if (kind === 'point_decision') {
+    const out = [];
+    if (d.task_title) out.push(`📋 ${d.task_title}`);
+    if (d.requested_points != null) out.push(`⭐ ${d.requested_points} pts`);
+    if (d.requester_name) out.push(`ผู้ขอ: ${d.requester_name}`);
+    if (d.decided_by) out.push(`โดย: ${d.decided_by}`);
+    return out;
+  }
+  return [];
+}
 function wbAddCard(op) {
   if (!wbCanvas || !op?.data) return;
   const d = op.data;
-  const hc = op.kind==='meeting' ? '#6366f1' : '#0ea5e9';
-  const title = `${op.kind==='meeting'?'📅':'📋'} ${d.title||d.id||'item'}`;
-  const lines = [];
-  if (d.status)   lines.push(`สถานะ: ${d.status}`);
-  if (d.deadline) lines.push(`Deadline: ${String(d.deadline).slice(0,10)}`);
-  if (Array.isArray(d.assignees)&&d.assignees.length) lines.push(`มอบหมาย: ${d.assignees.map(a=>a.name).join(', ').slice(0,40)}`);
-  const cw=220, lh=18, ch=36+lines.length*lh+8;
+  const kind = op.kind || 'task';
+  const style = WB_CARD_STYLE[kind] || WB_CARD_STYLE.task;
+  const hc = (kind === 'point_decision' && d.status === 'rejected') ? '#ef4444' : style.color;
+  const icon = (kind === 'point_decision' && d.status === 'rejected') ? '❌' : style.icon;
+  const title = `${icon} ${style.title(d)}`;
+  const lines = _wbCardLines(kind, d);
+
+  // กว้างกว่าเดิม + auto-resize ตามเนื้อหา (Fabric Textbox wrap ด้วย width)
+  // font size ใหญ่ขึ้น + objectCaching:false ทุก text/group กันตัวอักษรแตก
+  // บน Retina/iPad (Fabric raster-cache ที่ DPR=1 แล้วสเกล = blur)
+  const cw = 300, padX = 10, padY = 8, titleH = 32;
+  const detailTexts = lines.map(l => {
+    if (l === '') return { _spacer: true, calcTextHeight: () => 6 };
+    return new fabric.Textbox(l, {
+      left: padX, width: cw - padX * 2,
+      fontSize: 12, fill: '#334155',
+      fontFamily: 'Sarabun,sans-serif', lineHeight: 1.35,
+      objectCaching: false,
+    });
+  });
+  let cursor = titleH + padY;
+  for (const tb of detailTexts) {
+    if (!tb._spacer) tb.set('top', cursor);
+    cursor += (tb.calcTextHeight?.() ?? 16) + 2;
+  }
+  const ch = cursor + padY;
+  const real = detailTexts.filter(t => !t._spacer);
+
   const grp = new fabric.Group([
-    new fabric.Rect({top:30,width:cw,height:ch-30,fill:'#f8fafc'}),
-    new fabric.Rect({width:cw,height:30,fill:hc,rx:8,ry:8}),
-    new fabric.Rect({top:14,width:cw,height:16,fill:hc}),
-    new fabric.Rect({width:cw,height:ch,fill:'transparent',stroke:hc,strokeWidth:1,rx:8,ry:8}),
-    new fabric.Textbox(title,{left:8,top:6,width:cw-16,fontSize:12,fill:'#fff',fontWeight:'bold',fontFamily:'Sarabun,sans-serif'}),
-    ...lines.map((l,i)=>new fabric.Textbox(l,{left:8,top:36+i*lh,width:cw-16,fontSize:11,fill:'#475569',fontFamily:'Sarabun,sans-serif'})),
-  ],{left:60+Math.random()*200, top:60+Math.random()*150});
+    new fabric.Rect({ top: titleH, width: cw, height: ch - titleH, fill: '#f8fafc' }),
+    new fabric.Rect({ width: cw, height: titleH, fill: hc, rx: 8, ry: 8 }),
+    new fabric.Rect({ top: 16, width: cw, height: titleH - 16, fill: hc }),
+    new fabric.Rect({ width: cw, height: ch, fill: 'transparent', stroke: hc, strokeWidth: 1, rx: 8, ry: 8 }),
+    new fabric.Textbox(title, { left: padX, top: 7, width: cw - padX * 2, fontSize: 14, fill: '#fff', fontWeight: 'bold', fontFamily: 'Sarabun,sans-serif', objectCaching: false }),
+    ...real,
+  ], { left: 60 + Math.random()*200, top: 60 + Math.random()*150, objectCaching: false });
+  grp._injectKind = kind;
+  grp._injectId   = d.id || null;
+  grp._injectData = d;
   wbCanvas.add(grp);
   wbCanvas.renderAll();
+}
+// ===== Inline iframe edit modal (loads main SPA at a deep link) =====
+function _wbOpenEditFrame(url, title) {
+  const m = document.getElementById('wb-edit-frame-modal');
+  const f = document.getElementById('wb-edit-frame');
+  const t = document.getElementById('wb-edit-frame-title');
+  if (!m || !f) return;
+  if (t) t.textContent = title || 'แก้ไข';
+  f.src = url;
+  m.classList.remove('hidden');
+}
+function _wbCloseEditFrame() {
+  const m = document.getElementById('wb-edit-frame-modal');
+  const f = document.getElementById('wb-edit-frame');
+  if (m) m.classList.add('hidden');
+  if (f) f.src = 'about:blank';   // free memory + stop any audio/video
+}
+
+// Double-click handler — show contextual info / approval prompt
+async function _wbCardDblClick(target) {
+  if (!target || !target._injectKind) return;
+  const kind = target._injectKind;
+  const id = target._injectId;
+  const d = target._injectData || {};
+  if (kind === 'point_request' && id) {
+    const status = confirm(`อนุมัติคำขอ?\n${d.task_title||''} — ${d.requested_points||0} pts จาก ${d.requester_name||''}\nกด OK = อนุมัติ, Cancel = ปฏิเสธ`) ? 'approved' : 'rejected';
+    try {
+      await apiFetch('POST', `/api/point-requests/${id}/decide`, { status });
+      await apiFetch('POST', `/api/whiteboards/${wbBoardId}/inject`, {
+        kind: 'point_decision',
+        data: { status, task_title: d.task_title, requested_points: d.requested_points, requester_name: d.requester_name, decided_by: _user?.name },
+      });
+      toast(status === 'approved' ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว', 'success');
+    } catch(e) { toast(e.message, 'error'); }
+    return;
+  }
+  // Open the main app in EMBED MODE — chrome (topbar/tabbar/etc.) is hidden,
+  // only the edit form is visible. We pass the auth token via URL param
+  // because Edge's tracking prevention often blocks iframe localStorage AND
+  // postMessage. Token stays same-origin so no cross-site leak risk.
+  const tokenParam = `&_t=${encodeURIComponent(_token || localStorage.getItem('sml_token') || '')}`;
+  if (kind === 'task' && id)    return _wbOpenEditFrame(`/?embed=task&id=${encodeURIComponent(id)}${tokenParam}`,    `📋 แก้ไขงาน — ${d.title || ''}`);
+  if (kind === 'meeting' && id) return _wbOpenEditFrame(`/?embed=meeting&id=${encodeURIComponent(id)}${tokenParam}`, `📅 แก้ไขประชุม — ${d.title || ''}`);
+  if (kind === 'group' && id)   return _wbOpenEditFrame(`/?embed=group&id=${encodeURIComponent(id)}${tokenParam}`,   `📁 แก้ไขโครงการ — ${d.name || ''}`);
+  if (kind === 'recording' && id) {
+    // Switch to audio panel and load
+    document.querySelector('[data-pnl="audio"]')?.click();
+    toast('เปิด Audio Recorder panel เพื่อดู transcript', '');
+  }
 }
 
 function initWbEvents() {
@@ -5105,9 +6482,42 @@ function initWbEvents() {
     toast('บันทึก & sync แล้ว ✅','success');
   });
 
+  // Recent colors palette
+  const PRESET_HEXES_DEV = new Set(['#1e293b','#ef4444','#f97316','#facc15','#22c55e','#3b82f6','#a855f7','#ec4899']);
+  function _wbLoadRecentDev() { try { return JSON.parse(localStorage.getItem('sml_wb_recent_colors') || '[]'); } catch { return []; } }
+  function _wbSaveRecentDev(arr) { try { localStorage.setItem('sml_wb_recent_colors', JSON.stringify(arr.slice(0, 6))); } catch {} }
+  function _wbRenderRecentDev() {
+    const wrap = document.getElementById('wb-color-recent');
+    if (!wrap) return;
+    wrap.innerHTML = _wbLoadRecentDev().map(c =>
+      `<button type="button" class="wb-swatch" data-color="${c}" style="background:${c}" title="${c}"></button>`).join('');
+  }
+  function _wbAddRecentDev(hex) {
+    if (!hex) return;
+    hex = String(hex).toLowerCase();
+    if (PRESET_HEXES_DEV.has(hex)) return;
+    let recent = _wbLoadRecentDev().filter(c => c !== hex);
+    recent.unshift(hex);
+    _wbSaveRecentDev(recent);
+    _wbRenderRecentDev();
+  }
+  _wbRenderRecentDev();
+
   document.getElementById('wb-color-pick')?.addEventListener('input', e => {
     if (!wbCanvas) return;
     if (wbCanvas.freeDrawingBrush) wbCanvas.freeDrawingBrush.color = wbActiveTool==='highlight' ? wbHexRgba(e.target.value,0.35) : e.target.value;
+    document.querySelectorAll('.wb-swatch').forEach(s => {
+      s.classList.toggle('active', s.dataset.color?.toLowerCase() === String(e.target.value).toLowerCase());
+    });
+  });
+  document.getElementById('wb-color-pick')?.addEventListener('change', e => _wbAddRecentDev(e.target.value));
+  // Color swatches via delegation (รวม preset + recent)
+  document.addEventListener('click', e => {
+    const sw = e.target.closest('#wb-canvas-view .wb-swatch, #wb-canvas-view .wb-color-recent .wb-swatch');
+    if (!sw) return;
+    const c = sw.dataset.color; if (!c) return;
+    const inp = document.getElementById('wb-color-pick');
+    if (inp) { inp.value = c; inp.dispatchEvent(new Event('input', { bubbles: true })); }
   });
   document.getElementById('wb-stroke-size')?.addEventListener('input', e => {
     if (!wbCanvas || !wbCanvas.freeDrawingBrush) return;
@@ -5125,9 +6535,95 @@ function initWbEvents() {
   document.getElementById('wb-zoom-out-btn')?.addEventListener('click', () => wbZoom(0.8));
   document.getElementById('wb-zoom-fit-btn')?.addEventListener('click', wbZoomFit);
 
+  // Paper templates — cycle blank → grid → dot → lined
+  const PAPER_MODES = ['blank','grid','dot','lined'];
+  const PAPER_LABELS = { blank: '📃 เปล่า', grid: '⊞ Grid', dot: '⋮⋮ Dot', lined: '☰ Lined' };
+  function _wbApplyPaper(mode) {
+    const wrap = document.getElementById('wb-canvas-wrap');
+    if (!wrap) return;
+    PAPER_MODES.forEach(m => wrap.classList.remove('wb-paper-' + m));
+    wrap.classList.remove('wb-grid-on');
+    if (mode && mode !== 'blank') wrap.classList.add('wb-paper-' + mode);
+    const btn = document.getElementById('wb-grid-btn');
+    if (btn) btn.title = `กระดาษ: ${PAPER_LABELS[mode] || PAPER_LABELS.blank} (กดเปลี่ยน)`;
+  }
+  function _wbPaperKey() { return 'sml_wb_paper_' + (wbBoardId || 'default'); }
+  function _wbLoadPaper() {
+    let mode = 'blank';
+    try { mode = localStorage.getItem(_wbPaperKey()) || 'blank'; } catch {}
+    _wbApplyPaper(mode);
+  }
+  window._wbLoadPaper = _wbLoadPaper;
   document.getElementById('wb-grid-btn')?.addEventListener('click', () => {
-    wbGridOn = !wbGridOn;
-    document.getElementById('wb-canvas-wrap')?.classList.toggle('wb-grid-on', wbGridOn);
+    let cur = 'blank';
+    try { cur = localStorage.getItem(_wbPaperKey()) || 'blank'; } catch {}
+    const next = PAPER_MODES[(PAPER_MODES.indexOf(cur) + 1) % PAPER_MODES.length];
+    try { localStorage.setItem(_wbPaperKey(), next); } catch {}
+    _wbApplyPaper(next);
+    toast(`กระดาษ: ${PAPER_LABELS[next]}`, '');
+  });
+
+  // Paper size popover (A4 / A3 / A5 / Letter / Tabloid / ∞)
+  const PAPER_SIZES = {
+    'a4-p': { w:794, h:1123, label:'A4 ตั้ง' },
+    'a4-l': { w:1123, h:794, label:'A4 นอน' },
+    'a3-p': { w:1123, h:1587, label:'A3 ตั้ง' },
+    'a3-l': { w:1587, h:1123, label:'A3 นอน' },
+    'a5-p': { w:559, h:794, label:'A5 ตั้ง' },
+    'letter': { w:816, h:1056, label:'Letter' },
+    'tabloid': { w:1056, h:1632, label:'Tabloid' },
+    'infinite': { w:3000, h:3000, label:'∞ ไม่จำกัด' },
+  };
+  function _wbPaperSizeKey() { return 'sml_wb_size_' + (wbBoardId || 'default'); }
+  function _wbGetSavedSize() {
+    let s = 'a4-p'; try { s = localStorage.getItem(_wbPaperSizeKey()) || 'a4-p'; } catch {}
+    return PAPER_SIZES[s] ? s : 'a4-p';
+  }
+  function _wbApplyPaperSize(sizeKey) {
+    if (!wbCanvas) return;
+    const sz = PAPER_SIZES[sizeKey] || PAPER_SIZES['a4-p'];
+    wbCanvas._paperW = sz.w;
+    wbCanvas._paperH = sz.h;
+    wbCanvas._cssZoom = 1;
+    wbCanvas.setWidth(sz.w);
+    wbCanvas.setHeight(sz.h);
+    wbCanvas.setZoom(1);
+    wbCanvas.viewportTransform[4] = 0;
+    wbCanvas.viewportTransform[5] = 0;
+    wbCanvas.calcOffset();
+    wbCanvas.renderAll();
+    wbUpdateZoom();
+    document.querySelectorAll('#wb-paper-size-menu .wb-popover-item').forEach(b => {
+      b.classList.toggle('active', b.dataset.size === sizeKey);
+    });
+    const btn = document.getElementById('wb-paper-size-btn');
+    if (btn) btn.title = `ขนาดกระดาษ: ${sz.label} (กดเปลี่ยน)`;
+  }
+  window._wbApplyPaperSize = _wbApplyPaperSize;
+  document.getElementById('wb-paper-size-btn')?.addEventListener('click', e => {
+    e.stopPropagation();
+    const menu = document.getElementById('wb-paper-size-menu');
+    if (!menu) return;
+    menu.classList.toggle('hidden');
+    const cur = _wbGetSavedSize();
+    menu.querySelectorAll('.wb-popover-item').forEach(b => b.classList.toggle('active', b.dataset.size === cur));
+  });
+  document.getElementById('wb-paper-size-menu')?.addEventListener('click', e => {
+    const item = e.target.closest('.wb-popover-item');
+    if (!item) return;
+    const size = item.dataset.size;
+    if (!size || !PAPER_SIZES[size]) return;
+    try { localStorage.setItem(_wbPaperSizeKey(), size); } catch {}
+    _wbApplyPaperSize(size);
+    document.getElementById('wb-paper-size-menu')?.classList.add('hidden');
+    toast(`ขนาดกระดาษ: ${PAPER_SIZES[size].label}`, '');
+    if (wbCanvas) { wbCanvas.renderAll(); wbScheduleBroadcast(); }
+  });
+  document.addEventListener('click', e => {
+    const menu = document.getElementById('wb-paper-size-menu');
+    if (!menu || menu.classList.contains('hidden')) return;
+    if (e.target.closest('#wb-paper-size-btn') || e.target.closest('#wb-paper-size-menu')) return;
+    menu.classList.add('hidden');
   });
   document.getElementById('wb-fullscreen-btn')?.addEventListener('click', wbToggleFS);
 
@@ -5159,12 +6655,70 @@ function initWbEvents() {
   });
 
   document.getElementById('wb-inject-btn')?.addEventListener('click', () => {
-    wbRenderInjectList();
     document.getElementById('wb-inject-modal')?.classList.remove('hidden');
+    wbRenderInjectList();
   });
   document.getElementById('wb-inject-close')?.addEventListener('click', () => {
     document.getElementById('wb-inject-modal')?.classList.add('hidden');
+    // Note: do NOT stop the recorder — it lives in the toolbar/floating widget now
   });
+  // Tabs
+  document.querySelectorAll('[data-it]').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('[data-it]').forEach(x => x.classList.toggle('active', x === b));
+      _wbInjTab = b.dataset.it;
+      wbRenderInjectList();
+    });
+  });
+  // Toolbar 🎙 toggle — start/stop without opening the modal at all
+  document.getElementById('wb-rec-toggle')?.addEventListener('click', () => {
+    if (_wbRec && _wbRec.state === 'recording') _wbRecStopUpload();
+    else _wbRecStart();
+  });
+  // Floating widget stop
+  document.getElementById('wb-float-rec-stop')?.addEventListener('click', () => {
+    if (_wbRec && _wbRec.state === 'recording') _wbRecStopUpload();
+  });
+  // Edit-in-iframe modal — close + open-in-new-tab + backdrop click + Esc
+  document.getElementById('wb-edit-frame-close')?.addEventListener('click', _wbCloseEditFrame);
+  document.getElementById('wb-edit-frame-modal')?.addEventListener('click', e => {
+    if (e.target.id === 'wb-edit-frame-modal') _wbCloseEditFrame();
+  });
+  document.getElementById('wb-edit-frame-open')?.addEventListener('click', () => {
+    const f = document.getElementById('wb-edit-frame');
+    if (f?.src && f.src !== 'about:blank') {
+      window.open(f.src, '_blank', 'noopener');
+      _wbCloseEditFrame();
+    }
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !document.getElementById('wb-edit-frame-modal')?.classList.contains('hidden')) {
+      _wbCloseEditFrame();
+    }
+  });
+  // Handle messages from the embedded main app:
+  //   • sml-embed-need-token → iframe couldn't read localStorage (Edge / Brave
+  //     tracking prevention is aggressive on iframe storage). We have the
+  //     same-origin token here, so send it back via postMessage.
+  //   • sml-embed-closed      → user saved or cancelled the form → close overlay.
+  window.addEventListener('message', e => {
+    if (e.origin !== location.origin) return;
+    if (e.data?.type === 'sml-embed-need-token') {
+      const t = localStorage.getItem('sml_token') || _token || '';
+      if (t && e.source) {
+        try { e.source.postMessage({ type: 'sml-embed-token', token: t }, location.origin); } catch {}
+      }
+      return;
+    }
+    if (e.data?.type === 'sml-embed-closed') _wbCloseEditFrame();
+  });
+  // Live search
+  document.getElementById('wb-inj-search')?.addEventListener('input', e => {
+    _wbInjQ = (e.target.value || '').trim().toLowerCase();
+    wbRenderInjectList();
+  });
+  // (mouse:dblclick is wired inside the canvas init block — initWbEvents only
+  // runs once before any canvas exists, so this can't reference wbCanvas here.)
 
   // Ctrl+wheel zoom
   const canvasEl = document.getElementById('wb-canvas');
@@ -5174,10 +6728,16 @@ function initWbEvents() {
     wbZoom(e.deltaY < 0 ? 1.1 : 0.9);
   }, { passive: false });
 
-  // Resize
+  // Resize + scroll → recompute Fabric offset (pointer math)
   window.addEventListener('resize', () => {
-    if (wbCanvas && document.getElementById('wb-canvas-view').classList.contains('wb-on')) wbResize();
+    if (wbCanvas && document.getElementById('wb-canvas-view').classList.contains('wb-on')) {
+      wbResize();
+      wbCanvas.calcOffset();
+    }
   });
+  document.getElementById('wb-canvas-wrap')?.addEventListener('scroll', () => {
+    if (wbCanvas) wbCanvas.calcOffset();
+  }, { passive: true });
 
   // Keyboard shortcuts
   document.addEventListener('keydown', e => {
