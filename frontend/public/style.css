@@ -1,9 +1,394 @@
 * { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+
+/* ── Modal/sheet open → lock body scroll ──
+ * `overflow:hidden` is enough — กัน scroll พื้นหลัง.
+ * เคยเพิ่ม `touch-action: none` ด้วย แต่มัน cascade ไปทุก child →
+ * block touch interaction (select dropdown, click ฯลฯ) ในทุก modal บน iPad.
+ * ตัด touch-action ออก. */
+body.modal-open {
+  overflow: hidden !important;
+}
+html.modal-open { overflow: hidden; }
 html, body { font-family: 'Prompt', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif; }
-body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-y: contain; }
+body { color: var(--text, #0f172a); -webkit-font-smoothing: antialiased; overscroll-behavior-y: contain; background: var(--bg, #fff); }
+
+/* ========================================================================
+ * Dark mode — opt-in via prefers-color-scheme หรือ <html data-theme="dark">
+ * (user สามารถ toggle ได้จาก Profile → ในอนาคต). ใช้ CSS variables เพื่อให้
+ * ทุก component อ้างจากตัวเดียวกัน
+ * ======================================================================== */
+:root {
+  --bg: #fff;
+  --bg-soft: #f8fafc;
+  --bg-elevated: #fff;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --border: #e2e8f0;
+  --accent: #4f46e5;
+}
+/* ── Dark mode 3-layer hierarchy ──
+ *   --bg          page background (เข้มที่สุด)        — body, page-container
+ *   --bg-elevated card / sheet / modal (กลาง)          — .bg-white, .ios-card
+ *   --bg-soft     input / inset inside card (เข้มกว่า card) — .ios-input, .bg-slate-50
+ *   --bg-hover    hover state (สว่างขึ้น)              — :hover, :active
+ * ทุก surface ต้องเลือก 1 layer ที่ต่างกัน เพื่อให้ตามองออกว่าอะไร elevated */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    /* Deep dark + contrast พอแยก surface (step ใหญ่ขึ้น 6-8%)
+     * Border ชัดมากพอเห็นขอบ card / Text muted อ่านได้ */
+    --bg:          #060a15;   /* page bg */
+    --bg-elevated: #1a2336;   /* card — visibly lighter */
+    --bg-soft:     #0d1320;   /* inset */
+    --bg-hover:    #283449;   /* hover (visible feedback) */
+    --text:        #e2e8f0;   /* readable main text */
+    --text-muted:  #94a3b8;   /* slate-400 — easy on eyes */
+    --border:      #334155;   /* visible edge */
+    --accent:      #818cf8;
+  }
+}
+.theme-dark {
+  --bg:          #060a15;
+  --bg-elevated: #1a2336;
+  --bg-soft:     #0d1320;
+  --bg-hover:    #283449;
+  --text:        #e2e8f0;
+  --text-muted:  #94a3b8;
+  --border:      #334155;
+  --accent:      #818cf8;
+}
+.theme-dark .ios-card { box-shadow: 0 1px 2px rgba(0,0,0,.2), 0 4px 12px rgba(0,0,0,.3); background: var(--bg-elevated); }
+.theme-dark .ios-topbar { background: rgba(15,23,42,.85); border-bottom-color: rgba(255,255,255,.06); }
+.theme-dark .ios-input, .theme-dark .ios-select, .theme-dark .ios-textarea { background: var(--bg-soft); color: var(--text); border-color: var(--border); }
+.theme-dark .ios-input::placeholder, .theme-dark .ios-textarea::placeholder { color: var(--text-muted); }
+.theme-dark .ios-input:focus, .theme-dark .ios-select:focus, .theme-dark .ios-textarea:focus { border-color: var(--accent); background: var(--bg-elevated); }
+.theme-dark .dt-tab { color: #94a3b8; }
+.theme-dark .dt-tab:hover { background: #1e293b; color: #e2e8f0; }
+.theme-dark .empty-hero { color: #94a3b8; }
+.theme-dark .empty-hero-title { color: #e2e8f0; }
+.theme-dark .skeleton { background: linear-gradient(90deg, #1e293b 0%, #334155 50%, #1e293b 100%); }
+
+/* ── Override Tailwind utility classes in dark mode ──
+ * Tailwind classes are hardcoded throughout markup. ใช้ specificity สูง +
+ * !important เพื่อกินทับ Tailwind ในเฉพาะ dark mode.
+ * Layer mapping:
+ *   bg-slate-100 (body wrapper) → deepest    → --bg
+ *   bg-slate-50  (page sections / inputs)   → inset   → --bg-soft
+ *   bg-white     (cards)                     → elevated → --bg-elevated
+ * Cards ได้ border + box-shadow ที่ทำให้แยกจากพื้นหลังได้ชัดบน dark */
+.theme-dark body { background: var(--bg) !important; color: var(--text); }
+.theme-dark .bg-slate-100,
+.theme-dark .bg-gray-100   { background-color: var(--bg) !important; }
+.theme-dark .bg-slate-50,
+.theme-dark .bg-gray-50    { background-color: var(--bg-soft) !important; }
+.theme-dark .bg-white {
+  background-color: var(--bg-elevated) !important;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0,0,0,.5);
+}
+/* ── Soft colored backgrounds — dim ลงเหลือ flat dark + tiny hue tint ──
+ * ใช้สี OPAQUE (ไม่ rgba) เพื่อ overlap parent surface อะไรก็ตาม.
+ * ทุกสีคำนวณจาก var(--bg-elevated) #131a26 + tiny color shift ของแต่ละ hue */
+.theme-dark .bg-slate-50,
+.theme-dark .bg-slate-100,
+.theme-dark .bg-gray-50,
+.theme-dark .bg-gray-100    { background-color: #0f1622 !important; }
+.theme-dark .bg-indigo-50,
+.theme-dark .bg-indigo-100  { background-color: #161a2a !important; }
+.theme-dark .bg-amber-50,
+.theme-dark .bg-amber-100   { background-color: #1a1810 !important; }
+.theme-dark .bg-yellow-50,
+.theme-dark .bg-yellow-100  { background-color: #1a190f !important; }
+.theme-dark .bg-orange-50,
+.theme-dark .bg-orange-100  { background-color: #1c1611 !important; }
+.theme-dark .bg-red-50,
+.theme-dark .bg-red-100,
+.theme-dark .bg-rose-50,
+.theme-dark .bg-rose-100    { background-color: #1c1115 !important; }
+.theme-dark .bg-pink-50,
+.theme-dark .bg-pink-100    { background-color: #1c1118 !important; }
+.theme-dark .bg-purple-50,
+.theme-dark .bg-purple-100,
+.theme-dark .bg-violet-50,
+.theme-dark .bg-violet-100  { background-color: #18121e !important; }
+.theme-dark .bg-blue-50,
+.theme-dark .bg-blue-100    { background-color: #111522 !important; }
+.theme-dark .bg-sky-50,
+.theme-dark .bg-sky-100     { background-color: #0f161e !important; }
+.theme-dark .bg-cyan-50,
+.theme-dark .bg-cyan-100    { background-color: #0f181c !important; }
+.theme-dark .bg-teal-50,
+.theme-dark .bg-teal-100    { background-color: #0f1a1a !important; }
+.theme-dark .bg-emerald-50,
+.theme-dark .bg-emerald-100 { background-color: #0f1a16 !important; }
+.theme-dark .bg-green-50,
+.theme-dark .bg-green-100   { background-color: #101c14 !important; }
+.theme-dark .bg-lime-50,
+.theme-dark .bg-lime-100    { background-color: #131c10 !important; }
+/* -200 / -300 series (slightly bolder) — keep โทนเดิม intensity ~ 12% */
+.theme-dark .bg-slate-200   { background-color: var(--bg-hover) !important; }
+.theme-dark .bg-slate-300   { background-color: var(--bg-hover) !important; }
+.theme-dark .bg-gray-200    { background-color: var(--bg-hover) !important; }
+.theme-dark .bg-gray-300    { background-color: var(--bg-hover) !important; }
+/* -500 / -600 (solid colored buttons like emerald primary) — dim 25-30%
+ * ใน dark mode เพราะสี saturated เต็มจะแสบตาบนจอมืด */
+.theme-dark .bg-emerald-500 { background-color: #047857 !important; }
+.theme-dark .bg-emerald-600 { background-color: #065f46 !important; }
+.theme-dark .bg-indigo-500  { background-color: #3730a3 !important; }
+.theme-dark .bg-indigo-600  { background-color: #312e81 !important; }
+.theme-dark .bg-blue-500    { background-color: #1d4ed8 !important; }
+.theme-dark .bg-blue-600    { background-color: #1e40af !important; }
+.theme-dark .bg-amber-500   { background-color: #b45309 !important; }
+.theme-dark .bg-amber-600   { background-color: #92400e !important; }
+.theme-dark .bg-rose-500,
+.theme-dark .bg-red-500     { background-color: #b91c1c !important; }
+.theme-dark .bg-rose-600,
+.theme-dark .bg-red-600     { background-color: #991b1b !important; }
+/* Status badges should remain readable — text color override for dim bg */
+.theme-dark .text-amber-800 { color: #fbbf24 !important; }
+.theme-dark .text-emerald-800 { color: #34d399 !important; }
+.theme-dark .text-indigo-800 { color: #a5b4fc !important; }
+.theme-dark .text-rose-800  { color: #fb7185 !important; }
+.theme-dark .text-red-800   { color: #f87171 !important; }
+.theme-dark .text-blue-800  { color: #60a5fa !important; }
+.theme-dark .text-sky-800   { color: #38bdf8 !important; }
+.theme-dark .text-purple-800 { color: #c4b5fd !important; }
+.theme-dark .text-orange-800 { color: #fb923c !important; }
+.theme-dark .text-yellow-800 { color: #fcd34d !important; }
+.theme-dark .text-green-800 { color: #4ade80 !important; }
+.theme-dark .text-pink-800  { color: #f472b6 !important; }
+/* Text muted */
+.theme-dark .text-slate-400 { color: #94a3b8 !important; }
+.theme-dark .text-slate-500 { color: #cbd5e1 !important; }
+.theme-dark .text-slate-600 { color: #cbd5e1 !important; }
+.theme-dark .text-slate-700 { color: #e2e8f0 !important; }
+.theme-dark .text-slate-900,
+.theme-dark .text-black     { color: #f1f5f9 !important; }
+/* Accent text colors — keep but ปรับให้สว่างขึ้นเล็กน้อยสำหรับ contrast */
+.theme-dark .text-indigo-600 { color: #a5b4fc !important; }
+.theme-dark .text-blue-600   { color: #93c5fd !important; }
+.theme-dark .text-emerald-600 { color: #6ee7b7 !important; }
+.theme-dark .text-rose-600   { color: #fda4af !important; }
+.theme-dark .text-amber-700  { color: #fcd34d !important; }
+.theme-dark .text-red-500    { color: #fca5a5 !important; }
+/* Borders */
+.theme-dark .border-slate-200 { border-color: #334155 !important; }
+.theme-dark .border-slate-300 { border-color: #475569 !important; }
+.theme-dark .border           { border-color: #334155; }
+/* Hover */
+.theme-dark .hover\:bg-slate-50:hover,
+.theme-dark .hover\:bg-slate-100:hover,
+.theme-dark .hover\:bg-gray-50:hover,
+.theme-dark .hover\:bg-gray-100:hover { background-color: #334155 !important; }
+/* Tabbar bottom (mobile) */
+.theme-dark #tabbar { background: rgba(15,23,42,.9) !important; border-top: 1px solid #334155; }
+.theme-dark #tabbar button { color: #94a3b8; }
+.theme-dark #tabbar button.active { color: #a5b4fc; }
+/* Bottom of body — gradient/login screen ไม่ override (มันเป็น brand color) */
+
+/* ── Custom CSS class overrides for dark mode ──
+ * Comprehensive override สำหรับทุก surface class ที่มี hardcoded white/light
+ * background ใน base CSS. ไล่ตามไฟล์ style.css ทั้งหมด.
+ * Pattern: surface → #1e293b, soft surface → #0f172a, hover → #334155
+ * Text/border default ถูกจัดการที่ Tailwind overrides ด้านบนแล้ว */
+.theme-dark {
+  /* Calendar grid cells — ใช้ layer system ของ root variable, ไม่ hardcode */
+  --cal-cell-bg: var(--bg-elevated);
+  --cal-cell-bg-hover: var(--bg-hover);
+  --cal-cell-bg-active: #243044;
+  --cal-cell-bg-today: rgba(99,102,241,.10);
+  --cal-cell-border: var(--border);
+  --cal-cell-color: var(--text);
+  /* Kanban + cards */
+  --kanban-col-bg: var(--bg-soft);
+  --kanban-card-bg: var(--bg-elevated);
+  --kanban-admin-card-bg: var(--bg-elevated);
+  /* Generic light surfaces */
+  --surface: var(--bg-elevated);
+  --surface-2: var(--bg-soft);
+  --surface-hover: var(--bg-hover);
+}
+.theme-dark .cal-cell                { background: var(--cal-cell-bg) !important; border: 1px solid var(--border) !important; color: var(--cal-cell-color); }
+.theme-dark .cal-cell:hover          { background: var(--cal-cell-bg-hover) !important; border-color: #64748b !important; }
+.theme-dark .cal-cell:active         { background: var(--cal-cell-bg-active); }
+.theme-dark .cal-cell.muted          { background: transparent; color: #475569; }
+.theme-dark .cal-cell.today          { background: var(--cal-cell-bg-today); border-color: #6366f1; color: #c7d2fe; }
+.theme-dark .cal-cell.today .cal-cell-num { color: #c7d2fe; }
+.theme-dark .cal-cell-num            { color: var(--cal-cell-color); }
+.theme-dark .cal-cell.selected       { background: #4338ca; border-color: #6366f1; }
+.theme-dark .kanban-col              { background: var(--bg-soft) !important; border: 1px solid var(--border); }
+.theme-dark .kanban-cards .task-card { background: var(--bg-elevated) !important; border: 1px solid var(--border) !important; }
+.theme-dark .kanban-cards .admin-card { background: rgba(245,158,11,.10) !important; border: 1px solid rgba(245,158,11,.30) !important; }
+.theme-dark .kanban-board::-webkit-scrollbar-thumb { background: #475569; }
+.theme-dark .confirmed-group         { background: var(--surface-2); border-color: #334155; }
+.theme-dark .confirmed-group-summary:hover { background: #334155; }
+.theme-dark .confirmed-group-meta    { color: #94a3b8; }
+.theme-dark .ios-list-row            { background: var(--bg-elevated) !important; border-color: var(--border); color: var(--text); }
+.theme-dark .ios-list-row:hover      { background: var(--bg-hover) !important; }
+.theme-dark .ios-list-row:active     { background: #475569 !important; }
+/* Main card surfaces — .task-card/.group-card/.member-card/.conn-card
+ * เป็น shared rule ใน base CSS ที่ใช้ background: #fff ตรง ๆ.
+ * Override ที่นี่ + ใส่ border + shadow ให้ pop จาก page bg */
+.theme-dark .task-card,
+.theme-dark .group-card,
+.theme-dark .member-card,
+.theme-dark .conn-card {
+  background: var(--bg-elevated) !important;
+  /* แยก border ทีละด้าน — ไม่ใช้ shorthand `border: 1px solid X`
+   * เพราะจะไป override `border-left: 6px solid var(--group-color)`
+   * ของ .task-card / .group-card ที่ถูกตั้งไว้นอก dark scope
+   * → ขอบสี group color หายไป (เห็นเป็นแถบเทา 1px แทน) */
+  border-top:    1px solid var(--border);
+  border-right:  1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0,0,0,.5);
+  color: var(--text);
+}
+/* รักษา colored stripe ทางซ้ายใน dark — fallback เป็น --border ถ้าไม่มี group color */
+.theme-dark .task-card,
+.theme-dark .group-card { border-left: 6px solid var(--group-color, transparent); }
+/* is-mine ใน dark — ใช้แค่ border หนาขึ้น + override inset white จาก light mode
+   (rgba(255,255,255,.6) จะกลายเป็นแถบขาวบนการ์ดเข้ม → ดูแปลก) */
+.theme-dark .task-card.is-mine {
+  border-left-width: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.5);
+}
+.theme-dark .member-card,
+.theme-dark .conn-card { border-left: 1px solid var(--border); }
+.theme-dark .member-card-actions   { border-top-color: var(--border); }
+.theme-dark .conn-section-header   { color: var(--text-muted); border-bottom-color: var(--border); }
+/* member-card-main = clickable header ภายใน .member-card ไม่ใช่ card ของตัวเอง
+   → ห้าม set bg+border ตรง ๆ (จะกลายเป็น "ช่องซ้อนในช่อง") ปล่อยให้โปร่งใส
+   ใช้แค่ hover state สำหรับ feedback */
+.theme-dark .member-card-main        { background: transparent; border: 0; }
+.theme-dark .member-card-main:hover  { background: var(--bg-hover) !important; }
+.theme-dark .member-chip              { background: var(--bg-soft); border: 1px solid var(--border); color: var(--text); }
+.theme-dark .member-chip:hover       { background: var(--bg-hover) !important; border-color: #64748b; }
+.theme-dark .notif-row              { background: var(--bg-elevated); }
+.theme-dark .notif-row:hover         { background: var(--bg-hover) !important; }
+/* Segmented control (mine/lead/all) — Todo page tab pills */
+.theme-dark .ios-segmented           { background: var(--bg-soft); border: 1px solid var(--border); }
+.theme-dark .ios-segmented button    { color: var(--text-muted); }
+.theme-dark .ios-segmented button.active { background: var(--bg-elevated); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+/* Chip row (filter chips) */
+.theme-dark .ios-chip                { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-muted); }
+.theme-dark .ios-chip.active         { background: var(--accent); color: #fff; border-color: var(--accent); }
+.theme-dark .ios-chip:hover          { background: var(--bg-hover); }
+/* Search input wrap (task-search container) */
+.theme-dark #task-search             { background: var(--bg-elevated); border-color: var(--border); color: var(--text); }
+.theme-dark #task-search::placeholder { color: var(--text-muted); }
+/* Task card (in kanban + assignment views) */
+.theme-dark .task-card               { background: var(--bg-elevated); border: 1px solid var(--border); }
+/* Confirmed-group nested children inherit too */
+.theme-dark .confirmed-group         { background: var(--bg-elevated) !important; border-color: var(--border); }
+.theme-dark .confirmed-group-cards   { background: transparent; }
+.theme-dark .confirmed-group-name    { color: var(--text); }
+/* Soft-coloured notification pills (overdue / soon / info / success) — boost text contrast */
+.theme-dark .notif-overdue { background: rgba(239,68,68,.20); color: #fca5a5; }
+.theme-dark .notif-soon    { background: rgba(245,158,11,.20); color: #fcd34d; }
+.theme-dark .notif-info    { background: rgba(59,130,246,.22); color: #93c5fd; }
+.theme-dark .notif-success { background: rgba(16,185,129,.22); color: #6ee7b7; }
+/* Status badges (used in task cards everywhere) */
+.theme-dark .status-pending     { background: #334155; color: #cbd5e1; }
+.theme-dark .status-idea             { background: rgba(217,70,239,.22); color: #f0abfc; }
+.theme-dark .status-proposal         { background: rgba(234,179,8,.22);  color: #fde047; }
+.theme-dark .status-pending_approval { background: rgba(249,115,22,.22); color: #fdba74; }
+.theme-dark .status-in_progress      { background: rgba(59,130,246,.22); color: #93c5fd; }
+.theme-dark .status-delivery         { background: rgba(34,197,94,.22);  color: #86efac; }
+.theme-dark .status-maintenance      { background: rgba(6,182,212,.22);  color: #67e8f9; }
+.theme-dark .status-completed        { background: rgba(16,185,129,.22); color: #6ee7b7; }
+.theme-dark .status-on_hold          { background: rgba(245,158,11,.22); color: #fcd34d; }
+.theme-dark .status-cancelled        { background: rgba(239,68,68,.22);  color: #fca5a5; }
+.theme-dark .status-archived         { background: rgba(99,102,241,.22); color: #a5b4fc; }
+.theme-dark .role-badge.boss    { background: linear-gradient(135deg,rgba(253,224,71,.35),rgba(245,158,11,.40)); color: #fde047; box-shadow: 0 0 0 1px rgba(245,158,11,0.5); }
+.theme-dark .role-badge.admin   { background: rgba(139,92,246,.20); color: #c4b5fd; }
+.theme-dark .role-badge.member  { background: rgba(14,165,233,.20); color: #7dd3fc; }
+.theme-dark .task-role-leader   { background: rgba(245,158,11,.20); color: #fcd34d; }
+.theme-dark .task-role-member   { background: #334155; color: #cbd5e1; }
+/* Icon buttons (topbar +, bell, etc) */
+.theme-dark .ios-btn-icon         { background: #334155; color: #e2e8f0; }
+.theme-dark .ios-btn-icon:active  { background: #475569; }
+.theme-dark .ios-btn-icon.danger  { background: rgba(239,68,68,.20); color: #fca5a5; }
+.theme-dark .ios-btn-ghost        { background: #334155; color: #cbd5e1; }
+/* Avatar placeholders / member-av background fallback */
+.theme-dark .ios-stat-card        { background: var(--surface); color: var(--text); }
+/* Modal + drawer surfaces */
+.theme-dark #modal > div,
+.theme-dark .sheet > .sheet-inner  { background: var(--surface); color: var(--text); }
+.theme-dark .ios-form-section      { background: var(--surface-2); }
+/* Form actions row at bottom of modals */
+.theme-dark .form-actions-grid             { background: var(--bg-elevated); }
+.theme-dark .form-actions-grid .ios-btn-ghost { background: var(--bg-hover); color: var(--text); }
+.theme-dark .form-actions-grid .ios-btn-ghost:hover { background: var(--bg-hover); filter: brightness(1.15); }
+/* Form section boxes (โครงการ, ส่งให้ใคร, Deadline ใน task modal) — เคย bg: #fff */
+.theme-dark .form-section,
+.theme-dark .form-title-input {
+  background: var(--bg-soft) !important;
+  border-color: var(--border) !important;
+  color: var(--text);
+}
+.theme-dark .form-section-title { color: var(--text-muted); }
+/* Native select + dropdown options — ใช้ color-scheme บอก browser ให้ใช้
+ * dark UA widgets (scrollbar, dropdown picker, calendar picker, etc) */
+.theme-dark select,
+.theme-dark input,
+.theme-dark textarea { color-scheme: dark; }
+.theme-dark select option { background: var(--bg-elevated); color: var(--text); }
+/* Confirm modal + toast */
+.theme-dark #confirm-modal > div   { background: var(--surface); color: var(--text); }
+.theme-dark #toast > div           { background: #0f172a; color: #f1f5f9; border: 1px solid #334155; }
+/* Range/progress bars */
+.theme-dark .ios-progress-track    { background: #334155; }
+/* Calendar +งาน / +ประชุม pill buttons (have inline ios-list-row style) */
+.theme-dark [class*="bg-white"] .text-slate-600,
+.theme-dark [class*="bg-white"] .text-slate-700 { color: var(--text) !important; }
 
 .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem); }
 .ios-card { box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.04); }
+
+/* Modal / sheet sticky header — เผื่อ notch / status bar ของมือถือ
+ * บนหน้าจอที่ modal/sheet สูงเต็ม viewport (เช่นเนื้อหายาว + items-end)
+ * sticky header จะอยู่ใกล้ขอบบนของ viewport มาก ปุ่ม "ยกเลิก / บันทึก" ที่อยู่
+ * ตรงนั้นกดไม่สะดวก (โดน notch บัง หรือ tap area ติดขอบจอ)
+ * → เพิ่ม padding-top: max(safe-area-inset-top, 0.75rem) ให้ tap area ขยายลงมา */
+#sheet > div > .sticky,
+#modal > div > .sticky,
+#confirm-modal > div > .sticky,
+#preview-sheet > div > .sticky,
+#submit-sheet > div > .sticky,
+#filter-sheet > div > .sticky,
+#notif-sheet > div > .sticky,
+#doctype-picker-modal > div > .sticky {
+  padding-top: max(env(safe-area-inset-top, 0px), 0.75rem) !important;
+}
+/* Mobile (no sm: breakpoint) — modal form / sheet body มี horizontal padding
+ * เพิ่มเพื่อกัน input/select ไปติดขอบจอ (ที่ p-4 = 16px อาจน้อยไปบนมือถือเล็ก)
+ * และจำกัด max-width ของ input/select ให้ไม่กว้างเกินกรอบ → กัน native dropdown
+ * overflow ขอบจอเวลาเปิด */
+@media (max-width: 639px) {
+  #modal-form, #sheet-body, #confirm-msg,
+  #modal > div > .sticky, #sheet > div > .sticky {
+    padding-left: 1.15rem !important;   /* 16px → 18px */
+    padding-right: 1.15rem !important;
+  }
+  /* All form inputs/selects/textareas have explicit max-width = parent width
+   * minus 2px so even browser-positioned dropdown popups stay inside viewport */
+  #modal-form .ios-input, #modal-form .ios-select, #modal-form .ios-textarea,
+  #sheet-body .ios-input, #sheet-body .ios-select, #sheet-body .ios-textarea {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+}
+/* บน mobile (no sm) modal/sheet sticky จากขอบจอบนสุด ให้ขยับลงด้วย margin-top
+ * ของ outer modal box เพื่อกัน notch + กัน sticky ติดขอบบนทันที
+ * (เฉพาะ viewport เล็ก เพราะ desktop เป็น items-center อยู่แล้ว มีกรอบรอบรอบ) */
+@media (max-width: 639px) {
+  #sheet > div, #modal > div, #confirm-modal > div, #notif-sheet > div,
+  #preview-sheet > div, #submit-sheet > div, #filter-sheet > div,
+  #doctype-picker-modal > div {
+    /* ใช้ max-h ใหม่ที่หัก safe-area ออก เพื่อให้ modal ไม่ extend ไปแตะ notch */
+    max-height: calc(92vh - env(safe-area-inset-top, 0px)) !important;
+  }
+}
 
 /* ===== Top bar ===== */
 .ios-topbar {
@@ -55,8 +440,11 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   backdrop-filter: saturate(180%) blur(14px);
   -webkit-backdrop-filter: saturate(180%) blur(14px);
   border-top: 1px solid rgba(15,23,42,0.08);
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  /* Flex space-around → กระจายปุ่มเท่า ๆ ตามจำนวน visible
+     (เคยใช้ grid repeat(7,1fr) → เมื่อ hide 1 ปุ่ม จะมี cell ว่างค้าง ปุ่มเลื่อนชิดซ้าย) */
+  display: flex;
+  justify-content: space-around;
+  align-items: stretch;
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .ios-tabbar button {
@@ -64,10 +452,16 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   padding: 0.5rem 0.15rem 0.4rem;
   font-size: 0.6rem; font-weight: 500;
   color: #94a3b8;
+  flex: 1 1 0;  /* แต่ละปุ่มกินพื้นที่เท่ากัน (เหมือนกริด 1fr) */
+  min-width: 0;
 }
 .ios-tabbar button .ico { font-size: 1.25rem; line-height: 1; }
 .ios-tabbar button.active { color: #4f46e5; }
 .ios-tabbar button:active { transform: scale(0.97); }
+/* Override Tailwind .hidden — `.ios-tabbar button` (specificity 0,1,1) + `display: flex`
+   ชนะ `.hidden` (specificity 0,1,0) → ปุ่มไม่ถูกซ่อน. แก้โดย selector ที่ specific กว่า + !important */
+.ios-tabbar button.hidden,
+.dt-tab.hidden { display: none !important; }
 
 /* Bell button + badge */
 .bell-badge {
@@ -141,20 +535,89 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   display: inline-flex; align-items: center; justify-content: center;
 }
 
-/* ===== Inputs ===== */
+/* ===== Theme selector (segmented control) ===== */
+.theme-seg {
+  display: flex; gap: 4px;
+  background: #f1f5f9;
+  border-radius: 0.625rem;
+  padding: 3px;
+}
+.theme-opt {
+  flex: 1;
+  padding: 0.5rem 0.4rem;
+  border: none;
+  background: transparent;
+  border-radius: 0.45rem;
+  font-size: 0.82rem;
+  color: #64748b;
+  cursor: pointer;
+  transition: background .15s, color .15s, box-shadow .15s;
+  font-family: inherit;
+}
+.theme-opt:hover { color: #334155; }
+.theme-opt.active {
+  background: #fff;
+  color: #1e293b;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15,23,42,.08), 0 0 0 1px rgba(15,23,42,.04);
+}
+.theme-dark .theme-seg { background: #1e293b; }
+.theme-dark .theme-opt { color: #94a3b8; }
+.theme-dark .theme-opt:hover { color: #e2e8f0; }
+.theme-dark .theme-opt.active { background: #0f172a; color: #e2e8f0; box-shadow: 0 1px 2px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.06); }
+
+/* ===== Empty state hero (ใช้ใน tasks/people/calendar เมื่อ list ว่าง) ===== */
+.empty-hero {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; padding: 3rem 1.25rem;
+  color: #475569;
+}
+.empty-hero-icon { font-size: 3rem; line-height: 1; margin-bottom: 0.5rem; opacity: 0.55; }
+.empty-hero-title { font-size: 1.05rem; font-weight: 700; color: #1e293b; margin-bottom: 0.3rem; }
+.empty-hero-sub { font-size: 0.875rem; color: #64748b; max-width: 28rem; line-height: 1.55; }
+
+/* Skeleton loader (gray shimmer block ระหว่างรอข้อมูล) */
+.skeleton {
+  background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+  background-size: 200% 100%;
+  animation: skel-shimmer 1.4s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+@keyframes skel-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.skeleton-row { height: 3.5rem; margin-bottom: 0.5rem; }
+.skeleton-card { height: 8rem; margin-bottom: 0.65rem; }
+
+/* ===== Inputs =====
+ * font-size: 16px ขั้นต่ำเพื่อกันiOS auto-zoom-on-focus (Safari จะซูมถ้า <16px)
+ * min-height: 44px ตาม Apple HIG touch target
+ * + global fallback: ทุก input/select/textarea ต้อง >= 16px กัน iOS zoom-on-focus
+ *   ถึงแม้ไม่ได้ใช้ class .ios-input */
+@media (max-width: 767px) {
+  input[type="text"], input[type="email"], input[type="password"],
+  input[type="number"], input[type="tel"], input[type="url"],
+  input[type="search"], input[type="date"], input[type="datetime-local"],
+  input[type="time"], input:not([type]), select, textarea {
+    font-size: 16px !important;
+  }
+}
 .ios-input, .ios-select, .ios-textarea {
   width: 100%;
   border: 1px solid #e2e8f0;
   border-radius: 0.75rem;
   padding: 0.7rem 0.875rem;
-  font-size: 0.95rem;
+  font-size: 16px;
   background: #f8fafc;
-  min-height: 42px;
+  min-height: 44px;
 }
 .ios-input:focus, .ios-select:focus, .ios-textarea:focus {
   outline: none; border-color: #6366f1; background: #fff;
   box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
 }
+.ios-input.input-invalid {
+  border-color: #f43f5e !important;
+  box-shadow: 0 0 0 3px rgba(244,63,94,0.18) !important;
+}
+.theme-dark .ios-input.input-invalid { background: rgba(244,63,94,0.08); }
 .ios-textarea { resize: vertical; min-height: 70px; }
 .ios-label {
   display: block; font-size: 0.75rem; font-weight: 600;
@@ -179,8 +642,8 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   display: flex; align-items: center; justify-content: center;
   font-size: 1.15rem;
 }
-.ios-stat-label { font-size: 0.7rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 500; }
-.ios-stat-value { font-size: 1.4rem; font-weight: 700; line-height: 1.1; }
+.ios-stat-label { font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 500; }
+.ios-stat-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
 
 /* ===== List rows ===== */
 .ios-list-row {
@@ -193,6 +656,61 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
 }
 .ios-list-row:last-child { border-bottom: none; }
 .ios-list-row:active { background: #f1f5f9; }
+
+/* Calendar: ปุ่ม "ดูทั้งเดือน" — เด่น มีพื้นหลัง indigo อ่อน เห็นชัด */
+.cal-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  border-radius: 9999px;
+  background: rgba(99,102,241,0.12);
+  color: #4338ca;
+  border: 1px solid rgba(99,102,241,0.3);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .12s ease, transform .08s ease;
+  width: fit-content;
+}
+.cal-clear-btn:hover { background: rgba(99,102,241,0.2); }
+.cal-clear-btn:active { transform: scale(0.97); }
+.cal-clear-btn.hidden { display: none; }
+.theme-dark .cal-clear-btn { background: rgba(129,140,248,0.2); color: #c7d2fe; border-color: rgba(129,140,248,0.4); }
+.theme-dark .cal-clear-btn:hover { background: rgba(129,140,248,0.3); }
+
+/* Calendar: รายการ tasks/meetings/leaves ในแต่ละวัน — จำกัดความสูง + scroll
+   (ตอน selected day มี items เยอะ เช่น 10+ tasks หน้าจะยาวลงไปเรื่อย) */
+.cal-scroll-list {
+  max-height: 500px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99,102,241,0.3) transparent;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 0.25rem;
+}
+.cal-scroll-list::-webkit-scrollbar { width: 6px; }
+.cal-scroll-list::-webkit-scrollbar-track { background: transparent; }
+.cal-scroll-list::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.25); border-radius: 9999px; }
+.cal-scroll-list::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.5); }
+.theme-dark .cal-scroll-list { scrollbar-color: rgba(129,140,248,0.4) transparent; }
+.theme-dark .cal-scroll-list::-webkit-scrollbar-thumb { background: rgba(129,140,248,0.4); }
+
+/* Home: รายการ deadline/meetings/open-groups — จำกัดความสูง + scroll
+   max-height ~420px (~5-6 rows) ก่อนเริ่ม scroll → ไม่กิน vertical space เกินไป */
+.home-scroll-list {
+  max-height: 420px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99,102,241,0.3) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+.home-scroll-list::-webkit-scrollbar { width: 6px; }
+.home-scroll-list::-webkit-scrollbar-track { background: transparent; }
+.home-scroll-list::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.25); border-radius: 9999px; }
+.home-scroll-list::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.5); }
+.theme-dark .home-scroll-list { scrollbar-color: rgba(129,140,248,0.4) transparent; }
+.theme-dark .home-scroll-list::-webkit-scrollbar-thumb { background: rgba(129,140,248,0.4); }
 
 /* Home: upcoming-deadline rows get a left stripe matching the task's group color
    (consistent with Kanban cards on the Todo page so users can see at a glance which group it's in).
@@ -208,13 +726,13 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   position: absolute;
   left: 0; top: 0; bottom: 0;
   width: 4px;
-  background: var(--group-color, #cbd5e1);
+  background: var(--group-color, transparent);
   border-radius: 0 2px 2px 0;
   /* Keep the stripe visible even when divide-y borders sit on top */
   z-index: 1;
 }
 .home-task-row:hover {
-  background: color-mix(in srgb, var(--group-color, #cbd5e1) 8%, transparent);
+  background: color-mix(in srgb, var(--group-color, transparent) 8%, transparent);
 }
 
 /* ===== Avatars ===== */
@@ -263,11 +781,52 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   text-transform: uppercase; letter-spacing: 0.03em;
   white-space: nowrap;
 }
-.status-pending     { background:#f1f5f9; color:#475569; }
-.status-in_progress { background:#dbeafe; color:#1d4ed8; }
-.status-completed   { background:#dcfce7; color:#15803d; }
-.status-on_hold     { background:#fef3c7; color:#a16207; }
-.status-cancelled   { background:#fee2e2; color:#b91c1c; }
+.status-pending          { background:#f1f5f9; color:#475569; }
+.status-idea             { background:#fae8ff; color:#86198f; }
+.status-proposal         { background:#fef3c7; color:#92400e; }
+.status-pending_approval { background:#ffedd5; color:#9a3412; }
+.status-in_progress      { background:#dbeafe; color:#1d4ed8; }
+.status-delivery         { background:#dcfce7; color:#166534; }
+.status-maintenance      { background:#cffafe; color:#155e75; }
+.status-completed        { background:#dcfce7; color:#15803d; }
+.status-on_hold          { background:#fef3c7; color:#a16207; }
+.status-cancelled        { background:#fee2e2; color:#b91c1c; }
+.status-archived         { background:#e0e7ff; color:#4338ca; }
+
+/* ── Summary page: group card action buttons (edit/archive/delete) ── */
+.group-card-actions { font-size: 0.78rem; }
+.group-act-btn {
+  padding: 0.35rem 0.65rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  font-size: 0.78rem;
+  color: #475569;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.group-act-btn:hover { background: #f1f5f9; color: #1e293b; }
+.group-act-btn.group-act-danger { color: #b91c1c; }
+.group-act-btn.group-act-danger:hover { background: #fee2e2; color: #7f1d1d; }
+.group-card-faded { opacity: 0.7; filter: grayscale(0.2); }
+.group-card-faded:hover { opacity: 1; filter: none; }
+.theme-dark .group-act-btn { background: var(--bg-soft); border-color: var(--border); color: var(--text-muted); }
+.theme-dark .group-act-btn:hover { background: var(--bg-hover); color: var(--text); }
+.theme-dark .group-act-btn.group-act-danger { color: #fca5a5; }
+.theme-dark .group-act-btn.group-act-danger:hover { background: rgba(239,68,68,.18); color: #fecaca; }
+
+/* Summary collapsible sections (archived / completed) — header style เดียวกับ
+ * 3 sections ด้านบน (icon + ชื่อ + count) แต่กดยุบ/ขยายได้ */
+.summary-collapsible > summary {
+  cursor: pointer; list-style: none; user-select: none;
+}
+.summary-collapsible > summary::-webkit-details-marker { display: none; }
+.summary-collapsible-caret {
+  display: inline-block;
+  font-size: 0.7rem; color: #94a3b8;
+  transition: transform .15s ease;
+}
+.summary-collapsible[open] > summary .summary-collapsible-caret { transform: rotate(90deg); }
 /* Meeting status — single badge replacing regular status for kind='meeting'.
    Picks up the meeting's group color via --m-color (set inline by JS). Fallback purple. */
 .status-meeting {
@@ -276,8 +835,11 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   border: 1px solid color-mix(in srgb, var(--m-color, #d8b4fe) 50%, white);
 }
 
+.role-badge.boss   { background: linear-gradient(135deg,#fde047,#f59e0b); color:#78350f; box-shadow: 0 0 0 1px rgba(245,158,11,0.4); }
 .role-badge.admin  { background:#ede9fe; color:#6d28d9; }
 .role-badge.member { background:#e0f2fe; color:#0369a1; }
+/* profile role badge — when state.user.role === 'boss', JS toggles .role-badge-boss */
+.role-badge-boss   { background: linear-gradient(135deg,#fde047,#f59e0b) !important; color:#78350f !important; box-shadow: 0 0 0 1px rgba(245,158,11,0.4); }
 
 /* leader/supreme badges */
 .task-role-badge {
@@ -305,6 +867,421 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   padding: 0.1rem 0.55rem; border-radius: 9999px;
   font-size: 0.7rem; font-weight: 600;
   white-space: nowrap;
+}
+.budget-chip {
+  display: inline-flex; align-items: center; gap: 0.2rem;
+  background: #f0fdf4; color: #15803d;
+  padding: 0.1rem 0.55rem; border-radius: 9999px;
+  font-size: 0.7rem; font-weight: 600;
+  white-space: nowrap;
+}
+.theme-dark .budget-chip { background: rgba(34,197,94,0.18); color: #86efac; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .budget-chip { background: rgba(34,197,94,0.18); color: #86efac; }
+}
+
+/* ===== Overview page — manage all entities table view ===== */
+.overview-root { padding-bottom: 1rem; }
+/* Overview ใช้ตารางหลายคอลัมน์ → ขยาย max-width ของ page-container + เพิ่ม side padding
+   เมื่ออยู่หน้านี้ เพื่อให้คอลัมน์ห่างกันได้พอ + ลด horizontal scroll */
+@media (min-width: 1024px) {
+  .page-container:has(#page-overview:not(.hidden)) {
+    max-width: none;
+    padding-left: 10rem;
+    padding-right: 10rem;
+    padding-top: 1.25rem;
+  }
+}
+.overview-toolbar {
+  display: flex; flex-direction: column; gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.overview-search-wrap {
+  position: relative;
+}
+.overview-search-icon {
+  position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%);
+  font-size: 0.95rem; opacity: 0.5; pointer-events: none;
+}
+.overview-search-input {
+  padding-left: 2.4rem !important;
+  padding-right: 2.4rem !important;
+}
+.overview-search-clear {
+  position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%);
+  width: 1.7rem; height: 1.7rem;
+  border-radius: 50%;
+  background: rgba(15,23,42,0.08);
+  color: #475569;
+  font-size: 0.95rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  border: none;
+}
+.overview-tabs {
+  display: flex; flex-wrap: wrap; gap: 0.35rem;
+}
+.overview-tab {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 9999px;
+  background: rgba(15,23,42,0.06);
+  color: #475569;
+  font-size: 0.88rem; font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.overview-tab:hover { background: rgba(15,23,42,0.1); }
+.overview-tab.active {
+  background: #6366f1;
+  color: #fff;
+}
+.overview-tab-count {
+  background: rgba(255,255,255,0.2);
+  padding: 0.1rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem; font-weight: 700;
+}
+.overview-tab:not(.active) .overview-tab-count {
+  background: rgba(15,23,42,0.1);
+}
+.theme-dark .overview-tab { background: var(--bg-soft); color: var(--text-muted); }
+.theme-dark .overview-tab:hover { background: var(--bg-hover); }
+.theme-dark .overview-tab.active { background: var(--accent); color: #fff; }
+
+.overview-content { display: flex; flex-direction: column; gap: 2rem; }
+.overview-section {
+  background: var(--bg-elevated, #fff);
+  border-radius: 1rem;
+  padding: 1.1rem 0.75rem 0.85rem;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.04);
+  overflow-x: auto;
+  /* flex column + gap → rows ภายใน section มีระยะห่างระหว่างกัน (ก่อนหน้าชิดกัน) */
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.overview-section-header {
+  display: flex; align-items: center; gap: 0.55rem;
+  padding: 0 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.overview-section-header h3 { font-size: 1rem !important; }
+/* Sort + Filter controls ใน section header */
+.overview-section-controls {
+  margin-left: auto;
+  display: flex; flex-wrap: wrap; gap: 0.45rem;
+}
+/* Multi-filter dropdown (checkbox popover) — Overview filter ที่ tick ได้หลายค่า */
+.ov-multifilter { position: relative; display: inline-block; }
+.ov-mf-trigger {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  cursor: pointer;
+}
+.ov-mf-trigger b { font-weight: 700; color: #4f46e5; }
+.theme-dark .ov-mf-trigger b { color: #c7d2fe; }
+.ov-mf-caret { font-size: 0.7rem; opacity: 0.6; }
+.ov-mf-menu {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  right: 0;
+  z-index: 50;
+  min-width: 180px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.6rem;
+  box-shadow: 0 4px 16px rgba(15,23,42,0.12);
+  padding: 0.35rem;
+  display: flex; flex-direction: column;
+  gap: 0.05rem;
+  max-height: 320px; overflow-y: auto;
+}
+.theme-dark .ov-mf-menu { background: var(--bg-elevated); border-color: var(--border); box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+.ov-mf-menu.hidden { display: none; }
+.ov-mf-item {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.82rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background .1s ease;
+}
+.ov-mf-item:hover { background: rgba(99,102,241,0.08); }
+.theme-dark .ov-mf-item:hover { background: rgba(129,140,248,0.15); }
+.ov-mf-item input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: #6366f1; }
+.ov-mf-actions {
+  display: flex; justify-content: flex-end;
+  padding: 0.2rem 0.4rem 0.35rem;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 0.25rem;
+}
+.theme-dark .ov-mf-actions { border-bottom-color: var(--border); }
+.ov-mf-action {
+  font-size: 0.72rem;
+  color: #6366f1;
+  cursor: pointer;
+  background: transparent; border: none; padding: 0.2rem 0.4rem;
+  border-radius: 0.35rem;
+}
+.ov-mf-action:hover { background: rgba(99,102,241,0.08); }
+.theme-dark .ov-mf-action { color: #818cf8; }
+
+/* People page toolbar — search + sort + filter (combination อิสระ) */
+.people-toolbar {
+  display: flex; flex-wrap: wrap; gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.6rem;
+}
+.ov-control {
+  font-size: 0.78rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.5rem;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  outline: none;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.ov-control:hover { border-color: #94a3b8; }
+.ov-control:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+.theme-dark .ov-control { background: var(--bg-soft); border-color: var(--border); color: var(--text); }
+.theme-dark .ov-control:hover { border-color: #64748b; }
+.theme-dark .ov-control:focus { border-color: #818cf8; box-shadow: 0 0 0 3px rgba(129,140,248,0.2); }
+.overview-section-header > .text-base { font-size: 1.2rem !important; }
+.overview-section-header > .text-\[11px\] { font-size: 0.78rem !important; }
+/* Table-like row layout — grid columns สามารถ flex ตาม content
+ * เพิ่ม min-width ของแต่ละ column + bump font-size ของ overview ทั้งหมด
+ * ให้อ่านชัดบน desktop และ readable บน mobile */
+.ov-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 2.5fr) minmax(110px, 1fr) minmax(110px, 1fr) minmax(140px, 1.5fr) minmax(100px, 1fr) 100px;
+  align-items: center;
+  gap: 1.4rem;
+  padding: 0.8rem 1.1rem;
+  border-radius: 0.6rem;
+  border-left: 3px solid var(--group-color, transparent);
+  transition: background .12s ease, box-shadow .12s ease;
+  font-size: 0.9rem;
+  /* Row card elevation — แต่ละแถวดูเป็นการ์ดแยกชัด (เน้นบน mobile ที่ stack เป็น column) */
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.04);
+  background: var(--bg-elevated, #fff);
+}
+.ov-row:not(.ov-row-head):hover { background: rgba(15,23,42,0.04); }
+.theme-dark .ov-row { box-shadow: 0 1px 3px rgba(0,0,0,.5); background: var(--bg-elevated); }
+.theme-dark .ov-row:not(.ov-row-head):hover { background: var(--bg-hover); }
+/* Header row ไม่ต้องมี shadow — เป็นแถบ label เฉย ๆ */
+.ov-row-head { box-shadow: none !important; }
+.ov-row-head {
+  background: rgba(15,23,42,0.05);
+  font-size: 0.78rem; font-weight: 700;
+  color: #475569;
+  text-transform: uppercase; letter-spacing: 0.03em;
+  border-left-color: transparent;
+  padding: 0.5rem 0.85rem;
+}
+.theme-dark .ov-row-head { background: var(--bg-soft); color: var(--text); }
+.ov-cell { min-width: 0; overflow: hidden; }
+/* Bump font sizes ภายใน row — text-xs / text-[11px] ที่ใช้ใน inline classes
+ * จะถูก override ให้ใหญ่ขึ้นด้วย CSS selector ใน .ov-row */
+.ov-row .text-xs { font-size: 0.8rem !important; }
+.ov-row .text-\[10px\], .ov-row .text-\[11px\] { font-size: 0.72rem !important; }
+.ov-row .text-sm { font-size: 0.88rem !important; }
+.ov-row .text-base { font-size: 0.95rem !important; }
+.ov-row .status-badge { font-size: 0.72rem; padding: 0.18rem 0.55rem; }
+.ov-row .font-medium { font-weight: 600; }
+.ov-title {
+  display: flex; align-items: center; gap: 0.6rem;
+  cursor: default;
+}
+.ov-task-row .ov-title { cursor: pointer; }
+.ov-avatar {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff;
+  font-size: 0.78rem; font-weight: 700;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+.ov-actions {
+  display: flex; gap: 0.2rem;
+  justify-content: flex-end;
+}
+.ov-act-btn {
+  width: 36px; height: 36px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 0.55rem;
+  background: rgba(99,102,241,0.1);
+  color: #4f46e5;
+  border: none;
+  cursor: pointer;
+  font-size: 1.05rem;
+  transition: background .12s;
+}
+.ov-act-btn:hover { background: rgba(99,102,241,0.18); }
+.ov-act-btn.ov-act-danger { background: rgba(244,63,94,0.1); color: #e11d48; }
+.ov-act-btn.ov-act-danger:hover { background: rgba(244,63,94,0.18); }
+.theme-dark .ov-act-btn { background: rgba(129,140,248,0.18); color: #c7d2fe; }
+.theme-dark .ov-act-btn:hover { background: rgba(129,140,248,0.28); }
+.theme-dark .ov-act-btn.ov-act-danger { background: rgba(244,63,94,0.18); color: #fb7185; }
+.theme-dark .ov-act-btn.ov-act-danger:hover { background: rgba(244,63,94,0.28); }
+
+/* Mobile: stack columns vertically — desktop: keep table.
+   ใช้ flexbox column แทน CSS Grid → cells stack เป็นแถวแยกตรง ๆ ไม่ซ้อนทับ
+   Actions ใช้ absolute positioning เพื่ออยู่มุมขวาบนของ row */
+@media (max-width: 767px) {
+  .ov-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
+    padding: 0.85rem 0.95rem;
+    font-size: 1rem;
+    position: relative;
+  }
+  .ov-row .ov-title {
+    /* เผื่อที่ให้ปุ่ม actions ที่ position: absolute มุมขวา */
+    padding-right: 5.5rem;
+    min-height: 1.5rem;
+  }
+  .ov-row .ov-actions {
+    position: absolute;
+    top: 0.85rem;
+    right: 0.95rem;
+    display: flex;
+    gap: 0.35rem;
+  }
+  .ov-row .ov-cell:not(.ov-title):not(.ov-actions):not(.ov-status) {
+    font-size: 0.85rem !important;
+    color: #64748b;
+  }
+  .ov-row-head { display: none; }
+  /* Mobile tabs ขนาดกะทัดรัดขึ้น */
+  .overview-tab { font-size: 0.85rem; padding: 0.45rem 0.85rem; }
+  /* Section padding ลดลงบน mobile */
+  .overview-section { padding: 0.85rem 0.5rem; }
+}
+/* Tablet (768-1023px): table layout มี horizontal scroll ใน .overview-section
+   (overflow-x: auto + min column widths) — แต่ไม่ขยาย page-container เพราะอยู่นอก min-width: 1024 ของ override
+   → ลด gap คอลัมน์เล็กน้อยเพื่อให้พอดีในกรอบ 1200px max */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .ov-row { gap: 0.9rem; padding: 0.85rem 1rem; }
+}
+
+/* ===== Trash modal — categorized by kind (task / meeting), grouped by project ===== */
+.trash-category { padding: 0; }
+.trash-category > summary,
+.trash-subgroup > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.4rem 0.3rem;
+}
+.trash-category > summary::-webkit-details-marker,
+.trash-subgroup > summary::-webkit-details-marker { display: none; }
+.trash-category-caret,
+.trash-subgroup-caret {
+  display: inline-block;
+  font-size: 0.7rem; color: #94a3b8;
+  transition: transform .15s ease;
+}
+.trash-category[open] > summary .trash-category-caret,
+.trash-subgroup[open] > summary .trash-subgroup-caret { transform: rotate(90deg); }
+.trash-category-body { padding-left: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.trash-subgroup { background: rgba(15,23,42,0.03); border-radius: 0.5rem; padding: 0.25rem 0.4rem; }
+.theme-dark .trash-subgroup { background: var(--bg-soft); }
+.trash-subgroup-body { display: flex; flex-direction: column; gap: 0.4rem; padding-top: 0.2rem; padding-bottom: 0.2rem; }
+.trash-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--bg-elevated, #fff);
+}
+.theme-dark .trash-item { border-color: var(--border); }
+
+/* ===== Comment @mention — popup + chip ===== */
+.mention-popup {
+  background: var(--bg-elevated, #fff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 0.75rem;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.18), 0 2px 6px rgba(15,23,42,0.08);
+  padding: 0.25rem;
+  font-size: 0.85rem;
+}
+.mention-item {
+  display: flex; align-items: center; gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.5rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text, #0f172a);
+}
+.mention-item:hover, .mention-item.active {
+  background: rgba(99,102,241,0.12);
+}
+.theme-dark .mention-item:hover, .theme-dark .mention-item.active {
+  background: rgba(129,140,248,0.18);
+}
+.mention-avatar {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff;
+  font-size: 0.65rem; font-weight: 700;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+.mention-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mention-role {
+  font-size: 0.6rem; font-weight: 700;
+  background: rgba(245,158,11,0.18); color: #b45309;
+  padding: 0.1rem 0.35rem; border-radius: 9999px;
+  text-transform: uppercase;
+}
+.mention-role-boss { background: linear-gradient(135deg,#fde047,#f59e0b); color: #78350f; }
+.theme-dark .mention-role { background: rgba(245,158,11,0.25); color: #fbbf24; }
+.theme-dark .mention-role-boss { background: linear-gradient(135deg,rgba(253,224,71,.40),rgba(245,158,11,.50)); color: #fde047; }
+.mention-empty {
+  padding: 0.5rem 0.55rem;
+  font-size: 0.75rem;
+  color: var(--text-muted, #94a3b8);
+  font-style: italic;
+}
+/* Mention chip ในเนื้อหา comment ที่ render แล้ว */
+.mention-chip {
+  display: inline-block;
+  background: rgba(99,102,241,0.15);
+  color: #4338ca;
+  padding: 0.05rem 0.45rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+.theme-dark .mention-chip { background: rgba(129,140,248,0.22); color: #c7d2fe; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .mention-chip { background: rgba(129,140,248,0.22); color: #c7d2fe; }
+}
+
+/* ===== Comment body — dark mode contrast =====
+ * Comment body ใช้ inline Tailwind: bg-slate-50 (พื้นอ่อน) + text-slate-800 (ตัวอักษรเข้ม)
+ * บน dark mode พื้นจะถูก override โดย global .theme-dark .bg-* แต่ text-slate-800 ยัง
+ * เข้มอยู่ → อ่านไม่ออก. override ตัวอักษรให้สว่างใน dark
+ * นอกจากนี้ author name (text-slate-700) ก็โดนปัญหาเดียวกัน */
+.theme-dark #tc-list .text-slate-800,
+.theme-dark #tc-list .text-slate-700 { color: var(--text) !important; }
+.theme-dark #tc-list .text-slate-400 { color: var(--text-muted) !important; }
+.theme-dark #tc-list .bg-slate-50 { background: var(--bg-soft) !important; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) #tc-list .text-slate-800,
+  :root:not([data-theme="light"]) #tc-list .text-slate-700 { color: var(--text) !important; }
+  :root:not([data-theme="light"]) #tc-list .text-slate-400 { color: var(--text-muted) !important; }
+  :root:not([data-theme="light"]) #tc-list .bg-slate-50 { background: var(--bg-soft) !important; }
 }
 /* Points workflow phase badge */
 .phase-badge {
@@ -334,20 +1311,112 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   border-bottom: 1px solid #e2e8f0;
   margin-bottom: 0.25rem;
 }
-/* People page: members grid — 1 col on phone/tablet, 2 cols on lg+ */
-#people-members:not(.hidden) {
+/* ===== Connections page — collapsible sections + sub-groups ===== */
+/* Top-level section (บริษัท / Lobbyist / หน่วยงาน) — flat, no card container */
+.conn-section { display: block; }
+.conn-section + .conn-section { margin-top: 0.4rem; border-top: 1px solid #e2e8f0; padding-top: 0.4rem; }
+.theme-dark .conn-section + .conn-section { border-top-color: var(--border); }
+.conn-section-summary {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.55rem 0.4rem;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  font-size: 0.95rem;
+  border-radius: 0.5rem;
+  transition: background .12s ease;
+}
+.conn-section-summary::-webkit-details-marker { display: none; }
+.conn-section-summary::marker { display: none; content: ''; }
+.conn-section-summary:hover { background: rgba(15,23,42,0.04); }
+.theme-dark .conn-section-summary:hover { background: rgba(255,255,255,0.04); }
+.conn-section-caret {
+  margin-left: auto;
+  font-size: 1rem;
+  color: #94a3b8;
+  transition: transform .2s ease;
+  transform: rotate(180deg);
+  display: inline-block;
+}
+.conn-section:not([open]) .conn-section-caret { transform: rotate(90deg); }
+.conn-section-body {
+  padding: 0.3rem 0 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  animation: conn-fade-in .15s ease;
+}
+
+/* Sub-group (member/company within a section) — flat, no container frame
+   เหมือน design เดิม: แค่ header กดได้ + content ใต้ ไม่มีกรอบ/พื้นหลังครอบ */
+.conn-subgroup { display: block; }
+.conn-subgroup-summary {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.4rem 0.3rem;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  font-size: 0.85rem;
+  border-radius: 0.4rem;
+  transition: background .12s ease;
+}
+.conn-subgroup-summary::-webkit-details-marker { display: none; }
+.conn-subgroup-summary::marker { display: none; content: ''; }
+.conn-subgroup-summary:hover { background: rgba(15,23,42,0.04); }
+.theme-dark .conn-subgroup-summary:hover { background: rgba(255,255,255,0.04); }
+.conn-subgroup-icon { font-size: 1rem; line-height: 1; }
+.conn-subgroup-title { font-weight: 600; color: #1e293b; font-size: 0.88rem; }
+.theme-dark .conn-subgroup-title { color: var(--text); }
+.conn-subgroup-count {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+.conn-subgroup-count::before { content: '· '; opacity: 0.6; }
+.theme-dark .conn-subgroup-count { color: var(--text-muted); }
+.conn-subgroup-caret {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: #94a3b8;
+  transition: transform .2s ease;
+  transform: rotate(180deg);
+  display: inline-block;
+}
+.conn-subgroup:not([open]) .conn-subgroup-caret { transform: rotate(90deg); }
+.conn-subgroup-body {
+  padding: 0.35rem 0 0.15rem;
+  animation: conn-fade-in .12s ease;
+}
+
+/* Empty state inside sections (no items in a category) */
+.conn-empty {
+  text-align: center;
+  color: #94a3b8;
+  padding: 1.25rem 0.5rem;
+  font-size: 0.78rem;
+  font-style: italic;
+}
+
+/* List of connection cards inside a sub-group */
+.conn-card-list { display: flex; flex-direction: column; gap: 0.4rem; }
+
+@keyframes conn-fade-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* People page: members grid — 1 col on phone/tablet, 2 cols on lg+
+   ใช้กับ inner list (toolbar อยู่นอก grid) */
+#people-members-list {
   display: grid;
   grid-template-columns: 1fr;
   gap: 0.6rem;
 }
 @media (min-width: 1024px) {
-  #people-members:not(.hidden) { grid-template-columns: 1fr 1fr; }
+  #people-members-list { grid-template-columns: 1fr 1fr; }
 }
 .member-card-actions {
   display: flex;
   gap: 0.4rem;
-  margin-top: 0.6rem;
-  padding-top: 0.6rem;
+  padding: 0.6rem 1rem 0.95rem;
   border-top: 1px solid #f1f5f9;
 }
 .member-card-actions .ios-btn-ghost,
@@ -361,21 +1430,113 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
 .conn-card {
   background: #fff;
   border-radius: 1rem;
-  padding: 0.95rem 1rem;
+  padding: 0.75rem 0.95rem;
   box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.04);
   transition: transform .08s ease;
 }
+/* Compact variant สำหรับ connection card ที่อาจไม่มี contact_meta/notes
+   → ลด padding และให้ปุ่ม action ขนาดเล็ก inline (ไม่ stack vertical → ไม่เกิด empty space) */
+.conn-card-compact { padding: 0.65rem 0.85rem; }
+.conn-card-compact .ios-btn-ghost,
+.conn-card-compact .ios-btn-danger {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.7rem;
+  min-height: auto;
+  border-radius: 0.5rem;
+}
+
+/* Group card → connection chips (แสดง connections ที่ผูกกับ group นี้ใน Summary index) */
+.group-card-conns {
+  display: flex; flex-wrap: wrap; gap: 0.25rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #e2e8f0;
+}
+.theme-dark .group-card-conns { border-top-color: var(--border); }
+.group-card-conn-chip {
+  display: inline-flex; align-items: center; gap: 0.15rem;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.65rem;
+  font-weight: 500;
+  background: rgba(99,102,241,0.08);
+  color: #4338ca;
+  border-radius: 9999px;
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.theme-dark .group-card-conn-chip { background: rgba(129,140,248,0.18); color: #c7d2fe; }
+.group-card-conn-more {
+  background: rgba(15,23,42,0.06);
+  color: #64748b;
+  font-weight: 600;
+}
+.theme-dark .group-card-conn-more { background: rgba(255,255,255,0.06); color: var(--text-muted); }
+
+/* Linked groups chips ใน connection card (แสดง groups ที่ใช้ connection นี้) */
+.conn-linked-groups {
+  display: flex; flex-wrap: wrap; gap: 0.3rem;
+  margin-top: 0.45rem;
+}
+.conn-linked-group-chip {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.18rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  background: color-mix(in srgb, var(--g-color, #6366f1) 12%, transparent);
+  color: color-mix(in srgb, var(--g-color, #6366f1) 70%, #1e293b);
+  border: 1px solid color-mix(in srgb, var(--g-color, #6366f1) 30%, transparent);
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: transform .08s ease, background .15s ease;
+}
+.conn-linked-group-chip:hover {
+  background: color-mix(in srgb, var(--g-color, #6366f1) 22%, transparent);
+  transform: translateY(-1px);
+}
+.theme-dark .conn-linked-group-chip {
+  color: color-mix(in srgb, var(--g-color, #818cf8) 50%, #e2e8f0);
+}
+
+/* Connection chips ใน Summary detail (group → connections) */
+.conn-link-kind { display: flex; flex-direction: column; gap: 0.25rem; }
+.conn-link-kind-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #475569;
+}
+.theme-dark .conn-link-kind-label { color: var(--text); }
+.conn-link-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.conn-link-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.78rem;
+  background: rgba(99,102,241,0.08);
+  color: #4338ca;
+  border: 1px solid rgba(99,102,241,0.18);
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background .12s ease, transform .08s ease;
+}
+.conn-link-chip:hover { background: rgba(99,102,241,0.18); transform: translateY(-1px); }
+.theme-dark .conn-link-chip { background: rgba(129,140,248,0.15); color: #c7d2fe; border-color: rgba(129,140,248,0.3); }
+.conn-link-chip-icon { font-size: 0.95rem; line-height: 1; }
+.conn-link-chip-text { font-weight: 500; }
 .task-card:active, .group-card:active, .member-card:active, .conn-card:active { transform: scale(0.99); }
 
-/* Clickable header inside member-card — opens the per-person detail sheet.
-   Negative left/right/top extends hit area to the card edges; bottom kept at 0
-   so admin action row beneath isn't pulled upward. */
+/* .member-card override — ลบ padding ที่ parent (generic .task-card,.group-card,.member-card)
+   ย้าย padding ไปไว้ที่ลูก (.member-card-main / .member-card-actions) แทน
+   → .member-card-main ใช้ width: 100% ตรง ๆ ก็เต็ม parent ทันที (ไม่ต้องเล่น negative margin)
+   overflow: hidden → clip ลูกตาม border-radius ของ card (corners เนียน) */
+.member-card { padding: 0; overflow: hidden; }
+
 .member-card-main {
   cursor: pointer;
-  margin: -0.95rem -1rem 0;
+  width: 100%;
   padding: 0.95rem 1rem;
-  border-radius: 1rem;
   transition: background .12s ease;
+  box-sizing: border-box;
 }
 .member-card-main:hover { background: #f8fafc; }
 
@@ -383,17 +1544,77 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
 .task-card {
   border-left-width: 6px;
   border-left-style: solid;
-  border-left-color: #cbd5e1;
+  border-left-color: transparent;
 }
-/* Color picker — palette swatches for choosing a group's color (admin/leader form) */
+/* Color picker — 3 tier (อ่อน/กลาง/เข้ม) — ใช้ปุ่ม ‹ › navigate ทีละ tier (ไม่ scroll)
+   แสดงทีละ box เดียว ตัวอื่นถูก hidden ด้วย attribute */
 .color-picker {
-  display: flex; flex-wrap: wrap; gap: 0.55rem;
-  padding: 0.4rem 0; margin-top: 0.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 0;
+  margin-top: 0.15rem;
+}
+/* Nav ใต้ palette: ‹ … dots … › */
+.color-tier-nav {
+  display: flex; align-items: center; justify-content: center;
+  gap: 0.85rem;
+  padding-top: 0.2rem;
+}
+.color-tier-arrow {
+  width: 1.85rem; height: 1.85rem;
+  border-radius: 50%;
+  border: 1px solid rgba(99,102,241,0.25);
+  background: rgba(99,102,241,0.08);
+  color: #4f46e5;
+  font-size: 1.3rem; font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background .12s ease, transform .08s ease;
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.color-tier-arrow:hover { background: rgba(99,102,241,0.18); }
+.color-tier-arrow:active { transform: scale(0.92); }
+.theme-dark .color-tier-arrow { background: rgba(129,140,248,0.15); border-color: rgba(129,140,248,0.3); color: #c7d2fe; }
+.theme-dark .color-tier-arrow:hover { background: rgba(129,140,248,0.28); }
+/* Dots — แต่ละจุด = 1 tier (1=อ่อน, 2=กลาง, 3=เข้ม), active = สีเข้ม */
+.color-tier-dots { display: inline-flex; align-items: center; gap: 0.5rem; }
+.color-tier-dot {
+  width: 0.5rem; height: 0.5rem;
+  border-radius: 50%;
+  background: rgba(99,102,241,0.25);
+  cursor: pointer;
+  transition: background .15s ease, transform .12s ease;
+  display: inline-block;
+}
+.color-tier-dot:hover { background: rgba(99,102,241,0.5); }
+.color-tier-dot.active {
+  background: #4f46e5;
+  transform: scale(1.4);
+}
+.theme-dark .color-tier-dot { background: rgba(129,140,248,0.3); }
+.theme-dark .color-tier-dot:hover { background: rgba(129,140,248,0.55); }
+.theme-dark .color-tier-dot.active { background: #818cf8; }
+/* Box ของ tier — bg อ่อน + border */
+.color-tier {
+  padding: 0.55rem 0.7rem 0.7rem;
+  background: rgba(99,102,241,0.05);
+  border: 1px solid rgba(99,102,241,0.14);
+  border-radius: 0.65rem;
+  animation: conn-fade-in .15s ease;
+}
+.color-tier[hidden] { display: none; }
+.theme-dark .color-tier { background: rgba(129,140,248,0.08); border-color: rgba(129,140,248,0.18); }
+.color-tier-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(32px, 1fr));
+  gap: 0.45rem;
 }
 .color-swatch {
-  width: 36px; height: 36px;
+  width: 32px; height: 32px;
   border-radius: 50%;
-  border: 3px solid #fff;
+  border: 2px solid #fff;
   outline: 1px solid rgba(15,23,42,0.1);
   cursor: pointer;
   transition: transform .1s ease, outline-color .12s ease, box-shadow .12s ease;
@@ -407,24 +1628,54 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   box-shadow: 0 0 0 2px #fff inset, 0 2px 6px rgba(0,0,0,0.15);
   transform: scale(1.08);
 }
+/* "used" สีที่ถูกใช้กับกลุ่มอื่น — แสดงเครื่องหมายเตือนแต่ไม่ disable
+ * (ตอนนี้รองรับสีอิสระแล้ว ผู้ใช้ตัดสินใจว่ายอม clash หรือไม่) */
 .color-swatch.used:not(.selected) {
-  cursor: not-allowed;
-  opacity: 0.45;
+  opacity: 0.7;
 }
 .color-swatch.used:not(.selected)::after {
-  content: '✕';
+  content: '!';
   position: absolute;
-  inset: 0;
+  top: -3px; right: -3px;
+  width: 14px; height: 14px;
+  background: #f59e0b;
+  border-radius: 50%;
+  border: 1.5px solid #fff;
   display: flex; align-items: center; justify-content: center;
   color: #fff;
-  font-size: 14px; font-weight: 800;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+  font-size: 9px; font-weight: 800; line-height: 1;
+}
+
+/* Native color picker — ทำให้ดูเข้ากับ ios-input ของระบบ */
+.color-pick-native {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 44px; height: 44px;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.6rem;
+  cursor: pointer;
+  padding: 2px;
+  background: #fff;
+  flex-shrink: 0;
+}
+.color-pick-native::-webkit-color-swatch-wrapper { padding: 0; border-radius: 0.45rem; }
+.color-pick-native::-webkit-color-swatch { border: none; border-radius: 0.45rem; }
+.color-pick-native::-moz-color-swatch { border: none; border-radius: 0.45rem; }
+.theme-dark .color-pick-native { background: var(--bg-soft); border-color: var(--border); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .color-pick-native { background: var(--bg-soft); border-color: var(--border); }
+}
+/* Hex input — monospace กว่าจะอ่านง่าย */
+.color-pick-hex {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
 }
 
 /* Group cards on the Summary page — left stripe + faint colored top accent so each
    group is visually distinct at a glance (matches Kanban + Home + Confirmed dropdowns). */
 .group-card {
-  border-left: 6px solid var(--group-color, #cbd5e1);
+  border-left: 6px solid var(--group-color, transparent);
   position: relative;
   overflow: hidden;
 }
@@ -433,9 +1684,27 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   position: absolute;
   left: 0; right: 0; top: 0;
   height: 3px;
-  background: var(--group-color, #cbd5e1);
+  background: var(--group-color, transparent);
   opacity: 0.55;
 }
+/* Dark mode — สี Tailwind utility (bg-amber-50, bg-indigo-50, bg-slate-50) ใน
+ * stat cells ของ group-card ต้องเปลี่ยนเป็นโทนเข้มให้ contrast เข้าธีม */
+.theme-dark .group-card .bg-slate-50  { background: var(--bg-soft) !important; }
+.theme-dark .group-card .bg-amber-50  { background: rgba(245,158,11,0.18) !important; }
+.theme-dark .group-card .bg-indigo-50 { background: rgba(99,102,241,0.18) !important; }
+.theme-dark .group-card .bg-emerald-500 { background: #34d399 !important; }
+.theme-dark .group-card .bg-slate-200 { background: var(--bg-soft) !important; }
+.theme-dark .group-card .text-amber-700  { color: #fbbf24 !important; }
+.theme-dark .group-card .text-indigo-700 { color: #a5b4fc !important; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .group-card .bg-slate-50  { background: var(--bg-soft) !important; }
+  :root:not([data-theme="light"]) .group-card .bg-amber-50  { background: rgba(245,158,11,0.18) !important; }
+  :root:not([data-theme="light"]) .group-card .bg-indigo-50 { background: rgba(99,102,241,0.18) !important; }
+  :root:not([data-theme="light"]) .group-card .bg-slate-200 { background: var(--bg-soft) !important; }
+  :root:not([data-theme="light"]) .group-card .text-amber-700  { color: #fbbf24 !important; }
+  :root:not([data-theme="light"]) .group-card .text-indigo-700 { color: #a5b4fc !important; }
+}
+
 /* "Mine" indicator: thicker stripe + subtle inset shadow on the colored edge */
 .task-card.is-mine {
   border-left-width: 8px;
@@ -783,6 +2052,9 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   grid-auto-flow: column;
   grid-auto-columns: minmax(240px, 1fr);
   justify-content: start;
+  /* แต่ละคอลัมน์ใช้ความสูงตามเนื้อหาเอง — ไม่ stretch ตาม column ที่ยาวที่สุด
+   * (ก่อนหน้านี้ grid default align-items:stretch ทำให้คอลัมน์ว่างก็สูงเท่าคอลัมน์เต็ม) */
+  align-items: start;
   gap: 0.55rem;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -843,7 +2115,7 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   border-radius: 0.65rem;
   overflow: hidden;
   border: 1px solid #e2e8f0;
-  border-left: 3px solid var(--group-color, #94a3b8);
+  border-left: 3px solid var(--group-color, transparent);
 }
 .confirmed-group + .confirmed-group { margin-top: 0.4rem; }
 .confirmed-group-summary {
@@ -1156,6 +2428,83 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   border-radius: 9999px;
   border: 1px solid #e2e8f0;
 }
+/* Dark mode — รับ inset + card hierarchy ของ multi-task modal */
+.theme-dark .multi-row {
+  background: var(--bg-soft);
+  border-color: var(--border);
+}
+.theme-dark .multi-row-num {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .multi-row {
+    background: var(--bg-soft);
+    border-color: var(--border);
+  }
+  :root:not([data-theme="light"]) .multi-row-num {
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    border-color: var(--border);
+  }
+}
+/* Per-row category dropdown — 1 task = 1 ชุด tag (collapsible เหมือน shared cat-dropdown) */
+.row-cat-dropdown { padding: 0 !important; }
+.row-cat-dropdown[open] .cat-summary-caret { transform: rotate(180deg); }
+.row-cat-chip-grid {
+  display: flex; flex-direction: column; gap: .55rem;
+}
+.row-cat-chip-grid .cat-group { margin: 0; }
+.row-cat-chip-grid .cat-group:not(:first-child) { margin-top: .25rem; }
+
+/* Chip wrapper สำหรับ edit/delete actions — โผล่เมื่อ dropdown อยู่ใน .edit-mode */
+.cat-chip-wrap {
+  display: inline-flex; align-items: center; position: relative;
+  background: transparent;
+}
+.cat-chip-actions {
+  display: none;
+  align-items: center;
+  gap: .15rem;
+  margin-left: .15rem;
+}
+.row-cat-dropdown.edit-mode .cat-chip-actions {
+  display: inline-flex;
+}
+.row-cat-dropdown.edit-mode .cat-chip {
+  /* visual cue: chip กดเลือกไม่ได้ตอนอยู่ใน edit-mode (จับคู่กับ JS guard) */
+  opacity: .85;
+  cursor: default;
+}
+.cat-chip-edit, .cat-chip-delete {
+  font-size: .85rem;
+  line-height: 1;
+  padding: .15rem .25rem;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background .12s ease;
+}
+.cat-chip-edit:hover, .cat-chip-edit:active { background: rgba(99,102,241,.12); }
+.cat-chip-delete:hover, .cat-chip-delete:active { background: rgba(244,63,94,.12); }
+/* "⚙️ จัดการประเภท" — active state ตอนเปิด edit-mode */
+.row-cat-edit-mode.active {
+  background: rgba(99,102,241,.12);
+  color: #4f46e5;
+  font-weight: 600;
+}
+.theme-dark .row-cat-edit-mode.active {
+  background: rgba(129,140,248,.18);
+  color: #c7d2fe;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .row-cat-edit-mode.active {
+    background: rgba(129,140,248,.18);
+    color: #c7d2fe;
+  }
+}
 .multi-remove {
   font-size: 0.75rem; font-weight: 600;
   color: #ef4444;
@@ -1164,6 +2513,52 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
 }
 .multi-remove:hover { background: #fee2e2; }
 .multi-title { font-size: 1rem; font-weight: 600; }
+
+/* Connection picker (group form) — 3 sections (บริษัท / Lobbyist / หน่วยงาน)
+   chips multi-select toggle, ใช้ใน .group-form ตอนสร้าง/แก้ไข group */
+.conn-pick-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.3rem;
+}
+.conn-pick-section {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.65rem;
+  padding: 0.5rem 0.6rem;
+  background: #f8fafc;
+}
+.theme-dark .conn-pick-section { border-color: var(--border); background: var(--bg-soft); }
+.conn-pick-head {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.78rem; font-weight: 600; color: #475569;
+  margin-bottom: 0.4rem;
+}
+.theme-dark .conn-pick-head { color: var(--text); }
+.conn-chip-grid { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.conn-chip {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.35rem 0.7rem;
+  background: #fff;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color .12s ease, background .12s ease, transform .08s ease;
+}
+.theme-dark .conn-chip { background: var(--bg-elevated); border-color: var(--border); color: var(--text); }
+.conn-chip:hover { border-color: #94a3b8; transform: translateY(-1px); }
+.conn-chip.selected {
+  border-style: solid;
+  border-color: #6366f1;
+  background: rgba(99,102,241,0.12);
+  color: #4338ca;
+  font-weight: 600;
+}
+.theme-dark .conn-chip.selected { background: rgba(99,102,241,0.25); color: #c7d2fe; border-color: #818cf8; }
+.conn-chip-sub { font-size: 0.7rem; opacity: 0.7; font-weight: 400; margin-left: 0.15rem; }
 
 /* Member chips — vertical card layout: big circular avatar on top, name below.
    Chips wrap to multiple lines if there are too many for one row. */
@@ -1282,6 +2677,78 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
 
 /* ===== Category chips — multi-select pills used in task & meeting forms ===== */
 .cat-section .cat-counter b { color: #4f46e5; font-weight: 700; }
+
+/* ── Category dropdown (<details> wrapper) ── */
+.cat-dropdown { padding: 0 !important; }   /* details inherits form-section padding; reset */
+.cat-summary {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  padding: .8rem .9rem;
+  cursor: pointer; list-style: none; user-select: none;
+}
+.cat-summary::-webkit-details-marker { display: none; }
+.cat-summary-tags {
+  display: flex; flex-wrap: wrap; gap: .3rem;
+  flex: 1; min-width: 0;
+}
+.cat-summary-chip {
+  background: #eef2ff; color: #4338ca;
+  font-size: .72rem; padding: .15rem .55rem; border-radius: 99px;
+  white-space: nowrap;
+}
+.theme-dark .cat-summary-chip { background: rgba(99,102,241,.20); color: #c7d2fe; }
+.cat-summary-caret {
+  font-size: .85rem; color: #94a3b8;
+  transition: transform .15s ease;
+}
+.cat-dropdown[open] .cat-summary-caret { transform: rotate(180deg); }
+.cat-dropdown-body {
+  padding: 0 .9rem .9rem;
+  border-top: 1px solid #e2e8f0;
+}
+.theme-dark .cat-dropdown-body { border-top-color: var(--border); }
+
+/* ── Category UI — full dark mode overrides ─────────────────────────────── */
+.theme-dark .cat-group {
+  background: var(--bg-soft) !important;
+  border-color: var(--border);
+}
+.theme-dark .cat-group-label { color: var(--text); }
+.theme-dark .cat-group-count {
+  background: var(--bg-elevated);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+.theme-dark .cat-search-input {
+  background: var(--bg-soft) !important;
+  border-color: var(--border) !important;
+  color: var(--text);
+}
+.theme-dark .cat-search-input::placeholder { color: var(--text-muted); }
+.theme-dark .cat-search-input:focus {
+  background: var(--bg-elevated) !important;
+  border-color: var(--accent) !important;
+}
+.theme-dark .cat-search-icon { color: var(--text-muted); }
+.theme-dark .cat-search-clear {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.theme-dark .cat-search-clear:hover { background: var(--border); color: #fff; }
+.theme-dark .cat-chip {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border) !important;
+  color: var(--text);
+}
+.theme-dark .cat-chip:hover {
+  background: rgba(99,102,241,.15) !important;
+  border-color: #818cf8 !important;
+  color: #c7d2fe;
+}
+.theme-dark .cat-chip.selected {
+  background: rgba(99,102,241,.25) !important;
+  border-color: #818cf8 !important;
+  color: #c7d2fe;
+}
 
 /* Live search input above the chip grid — sticky so it stays visible while
    scrolling within long forms. */
@@ -1478,6 +2945,18 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   flex-wrap: wrap;
   min-height: 3rem;
 }
+/* บนจอแคบ (phone) แทนที่จะ wrap แล้วกินที่จอ ให้เลื่อนแนวนอนได้แทน */
+@media (max-width: 640px) {
+  .wb-toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .wb-toolbar::-webkit-scrollbar { display: none; }
+  .wb-tool-group { flex-shrink: 0; }
+}
 
 .wb-tool-group {
   display: flex;
@@ -1499,8 +2978,14 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   transition: background .12s, border-color .12s;
   flex-shrink: 0;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .wb-tool:hover { background: #f1f5f9; }
+/* ขยายปุ่ม whiteboard toolbar ให้ถึง 44x44 บน touch device (Apple HIG) */
+@media (max-width: 640px) {
+  .wb-tool { width: 2.5rem; height: 2.5rem; font-size: 1.05rem; }
+}
 .wb-tool-active {
   background: #eef2ff !important;
   border-color: #6366f1 !important;
@@ -1511,6 +2996,24 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   cursor: not-allowed;
   pointer-events: none;
 }
+
+/* ========================================================================
+ * Toolbar icon colors — เพิ่มสีให้ icon Unicode ที่เดิมเป็นสีเทา/ดำธรรมดา
+ * (emoji icons เช่น ✏️ 🖍️ 🧹 มีสี natural อยู่แล้ว ไม่ต้อง override)
+ * ======================================================================== */
+#wb-back            { color: #475569; font-size: 1.15rem; font-weight: 600; }
+#wb-undo-btn,
+#wb-redo-btn        { color: #6366f1; font-size: 1.2rem; font-weight: 700; }
+#wb-zoom-out-btn,
+#wb-zoom-in-btn     { color: #0ea5e9; }
+#wb-zoom-fit-btn    { color: #0ea5e9; font-size: 1.1rem; }
+#wb-grid-btn        { color: #64748b; font-size: 1.1rem; }
+#wb-fullscreen-btn  { color: #0284c7; font-size: 1.1rem; }
+#wb-fill-toggle     { color: #475569; }
+#wb-clear-btn       { color: #f59e0b; }
+/* Color picker label */
+.wb-color-input     { box-shadow: 0 0 0 1px #cbd5e1; }
+.wb-color-input:hover { box-shadow: 0 0 0 2px #6366f1; }
 
 .wb-confirm-btn {
   background: #6366f1;
@@ -1533,6 +3036,54 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
   padding: 0; cursor: pointer;
   flex-shrink: 0;
   background: transparent;
+}
+
+/* Quick color swatches — เลือกสีเร็วโดยไม่ต้องเปิด color dialog */
+.wb-color-swatches {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 0.25rem 0 0;
+  border-right: 1px solid #e2e8f0;
+  margin-right: 0.25rem;
+  flex-shrink: 0;
+}
+.wb-swatch {
+  width: 1.25rem; height: 1.25rem;
+  border-radius: 50%;
+  border: 1.5px solid #fff;
+  box-shadow: 0 0 0 1px #cbd5e1;
+  cursor: pointer;
+  padding: 0;
+  transition: transform .12s, box-shadow .12s;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.wb-swatch:hover { transform: scale(1.18); }
+.wb-swatch.active {
+  box-shadow: 0 0 0 2px #6366f1;
+  transform: scale(1.18);
+}
+/* ขยาย touch target บนจอเล็ก */
+@media (max-width: 640px) {
+  .wb-swatch { width: 1.6rem; height: 1.6rem; }
+}
+/* Recent colors palette — slightly smaller dots ติดกับ preset palette */
+.wb-color-recent {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 0.25rem;
+  flex-shrink: 0;
+}
+.wb-color-recent:empty { display: none; }
+.wb-color-recent .wb-swatch {
+  width: 1rem; height: 1rem;
+  box-shadow: 0 0 0 1px #94a3b8;
+  border-width: 1px;
+}
+@media (max-width: 640px) {
+  .wb-color-recent .wb-swatch { width: 1.3rem; height: 1.3rem; }
 }
 
 .wb-range { width: 5rem; accent-color: #6366f1; flex-shrink: 0; }
@@ -1568,27 +3119,136 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
 
 .wb-canvas-wrap {
   flex: 1;
-  overflow: hidden;
+  overflow: auto;            /* scroll when paper > viewport */
   position: relative;
-  background: #f8fafc;
-  min-height: 901px;        /* user-requested baseline */
+  background: #e2e8f0;        /* darker than paper so paper looks like a sheet */
+  min-height: 901px;
+  /* Block native gestures (page scroll, pinch-zoom) so touch / Apple Pencil
+     input is consumed by Fabric.js instead. */
+  touch-action: none;
+  -webkit-user-select: none;
+          user-select: none;
+  padding: 1rem;
+}
+.theme-dark .wb-canvas-wrap { background: #0b1220; }
+/* Canvas container ที่ Fabric สร้าง (.canvas-container) — ให้ paper สีขาวลอย
+ * อยู่กลาง wrap ผ่าน margin: auto (ไม่ใช้ flex เพราะ Fabric internal layout
+ * คาดหวัง block parent, flex อาจชน) */
+.wb-canvas-wrap > .canvas-container {
+  margin: 0 auto;
+  box-shadow: 0 2px 6px rgba(15,23,42,.15), 0 8px 24px rgba(15,23,42,.10);
+  background: #fff;
+}
+.theme-dark .wb-canvas-wrap > .canvas-container {
+  background: #fff;          /* paper สีขาวเสมอ (user เขียนบนกระดาษจริง),
+                                wrap dark frame ล้อมรอบ */
+  box-shadow: 0 2px 6px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.4);
 }
 @media (max-width: 1023px) {
-  .wb-canvas-wrap { min-height: calc(100vh - 180px); }
+  .wb-canvas-wrap { min-height: calc(100dvh - 160px); }
 }
-.wb-canvas-wrap canvas { display: block; }
+.wb-canvas-wrap canvas { display: block; touch-action: none; }
 
-/* Grid background — applied as a CSS pattern when toggled on */
-.wb-canvas-wrap.wb-grid-on::before {
+/* Paper templates — applied as a CSS pattern when class is set on wrap.
+ * Toggle via wb-paper-btn (cycle through grid → dot → lined → blank).
+ * Light mode = สีจางพอเห็น เป็นไกด์, dark mode = จางลงอีกไม่ให้กลบ stroke */
+.wb-canvas-wrap.wb-grid-on::before,
+.wb-canvas-wrap.wb-paper-grid::before {
   content: "";
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(to right, rgba(148,163,184,0.18) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(148,163,184,0.18) 1px, transparent 1px);
-  background-size: 20px 20px;
+    linear-gradient(to right, rgba(148,163,184,0.20) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148,163,184,0.20) 1px, transparent 1px);
+  background-size: 25px 25px;
   pointer-events: none;
   z-index: 0;
+}
+.wb-canvas-wrap.wb-paper-dot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(148,163,184,.45) 1px, transparent 1.5px);
+  background-size: 25px 25px;
+  pointer-events: none;
+  z-index: 0;
+}
+.wb-canvas-wrap.wb-paper-lined::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(to bottom, transparent 31px, rgba(148,163,184,.30) 32px);
+  background-size: 100% 32px;
+  pointer-events: none;
+  z-index: 0;
+}
+.theme-dark .wb-canvas-wrap.wb-grid-on::before,
+.theme-dark .wb-canvas-wrap.wb-paper-grid::before {
+  background-image:
+    linear-gradient(to right,  rgba(148,163,184,.10) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148,163,184,.10) 1px, transparent 1px);
+}
+.theme-dark .wb-canvas-wrap.wb-paper-dot::before {
+  background-image: radial-gradient(circle, rgba(148,163,184,.20) 1px, transparent 1.5px);
+}
+.theme-dark .wb-canvas-wrap.wb-paper-lined::before {
+  background-image: linear-gradient(to bottom, transparent 31px, rgba(148,163,184,.15) 32px);
+}
+
+/* ── Popover menu (used by paper size selector + future popovers) ── */
+.wb-popover-menu {
+  position: absolute;
+  top: 3rem; right: 0.5rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.65rem;
+  box-shadow: 0 8px 24px rgba(15,23,42,.15);
+  padding: 0.4rem;
+  z-index: 60;
+  min-width: 200px;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.wb-popover-menu.hidden { display: none; }
+.wb-popover-item {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 0.75rem;
+  background: transparent;
+  border: none;
+  border-radius: 0.4rem;
+  font-size: 0.85rem;
+  color: #1e293b;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+}
+.wb-popover-item:hover { background: #f1f5f9; }
+.wb-popover-item.active { background: #eef2ff; color: #4f46e5; font-weight: 600; }
+.wb-popover-hint { font-size: 0.7rem; color: #94a3b8; font-family: 'JetBrains Mono', monospace; }
+.theme-dark .wb-popover-menu { background: var(--bg-elevated); border-color: var(--border); box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.theme-dark .wb-popover-item { color: var(--text); }
+.theme-dark .wb-popover-item:hover { background: var(--bg-hover); }
+.theme-dark .wb-popover-item.active { background: rgba(99,102,241,.20); color: #a5b4fc; }
+.theme-dark .wb-popover-hint { color: var(--text-muted); }
+
+/* ── Eraser circular cursor — shows radius + dashed border ── */
+.wb-eraser-cursor {
+  position: absolute;
+  pointer-events: none;
+  border: 2px dashed #ef4444;
+  background: rgba(239,68,68,.10);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 50;
+  display: none;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.5) inset;
+}
+.wb-canvas-wrap[data-tool="eraser"] .wb-eraser-cursor.active { display: block; }
+.theme-dark .wb-eraser-cursor {
+  border-color: #f87171;
+  background: rgba(248,113,113,.15);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.4) inset;
 }
 .wb-canvas-wrap > .canvas-container { position: relative; z-index: 1; }
 
@@ -1605,11 +3265,194 @@ body { color: #0f172a; -webkit-font-smoothing: antialiased; overscroll-behavior-
 .wb-inject-panel {
   background: #fff;
   width: 100%;
-  max-width: 480px;
+  max-width: 520px;
   border-radius: 1.25rem 1.25rem 0 0;
   padding: 1rem;
-  max-height: 60vh;
+  max-height: 75vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+/* Tabs row — scrollable on small screens */
+.wb-inject-tabs {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 0.6rem;
+  flex-shrink: 0;
+}
+.wb-inject-tab {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.wb-inject-tab:hover  { color: #1e293b; background: #f8fafc; }
+.wb-inject-tab.active { color: #4f46e5; border-bottom-color: #4f46e5; font-weight: 600; }
+
+.wb-inject-search {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.6rem;
+  font-size: 0.85rem;
+  background: #f8fafc;
+  margin-bottom: 0.6rem;
+  flex-shrink: 0;
+}
+.wb-inject-search:focus { outline: none; border-color: #6366f1; background: #fff; }
+
+.wb-inject-list {
+  flex: 1;
   overflow-y: auto;
+  min-height: 0;
+}
+
+.wb-inject-foot {
+  flex-shrink: 0;
+  display: flex; justify-content: flex-end;
+  padding-top: 0.6rem;
+  border-top: 1px solid #f1f5f9;
+  margin-top: 0.5rem;
+}
+
+/* Inject item rows (per-tab) — same outer chrome, kind-coloured left stripe */
+.wb-inj-row {
+  width: 100%; text-align: left;
+  display: flex; align-items: center; gap: 0.6rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid var(--row-color, #cbd5e1);
+  border-radius: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.85rem;
+  transition: background .1s, border-color .1s;
+}
+.wb-inj-row:hover { background: #eef2ff; border-color: #6366f1; }
+.wb-inj-row .wb-inj-icon { font-size: 1.1rem; flex-shrink: 0; }
+.wb-inj-row .wb-inj-body { flex: 1; min-width: 0; }
+.wb-inj-row .wb-inj-title { font-weight: 500; color: #1e293b; truncate: 1; }
+.wb-inj-row .wb-inj-meta  { font-size: 0.7rem; color: #64748b; margin-top: 1px; }
+.wb-inj-row .wb-inj-actions { display: flex; gap: .25rem; flex-shrink: 0; }
+.wb-inj-row .wb-inj-act {
+  width: 28px; height: 28px;
+  border-radius: 50%; border: none;
+  background: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.wb-inj-row .wb-inj-act.ok:hover  { background: #dcfce7; }
+.wb-inj-row .wb-inj-act.no:hover  { background: #fee2e2; }
+
+/* Audio recorder mini — embedded in the recording tab */
+.wb-rec-panel {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.65rem;
+  padding: 1.5rem 1rem;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 0.85rem;
+}
+.wb-rec-state {
+  font-size: 0.95rem; font-weight: 600;
+  color: #64748b;
+}
+.wb-rec-state.recording { color: #ef4444; animation: wb-rec-pulse 1.2s ease-in-out infinite; }
+@keyframes wb-rec-pulse { 50% { opacity: 0.5; } }
+.wb-rec-timer { font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; color: #1e293b; }
+.wb-rec-btns { display: flex; gap: 0.5rem; }
+.wb-rec-btns button {
+  padding: 0.55rem 1.15rem;
+  border-radius: 0.65rem;
+  border: none; font-weight: 500; font-size: 0.85rem;
+  cursor: pointer;
+}
+.wb-rec-start { background: #ef4444; color: #fff; }
+.wb-rec-start:hover { background: #dc2626; }
+.wb-rec-stop  { background: #1e293b; color: #fff; }
+.wb-rec-stop[disabled], .wb-rec-start[disabled] { opacity: 0.4; cursor: not-allowed; }
+.wb-rec-hint {
+  text-align: center; font-size: 0.7rem; color: #94a3b8;
+  max-width: 320px; line-height: 1.4;
+}
+
+/* Floating recorder widget — sits in the canvas corner so the user can keep
+   drawing / writing while audio records in the background. */
+.wb-float-rec {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.6rem 0.4rem 0.8rem;
+  background: #1e293b;
+  color: #fff;
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(15,23,42,0.25);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  pointer-events: auto;
+}
+.wb-float-rec.hidden { display: none; }
+.wb-float-rec-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: wb-float-rec-pulse 1.2s ease-in-out infinite;
+}
+@keyframes wb-float-rec-pulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.85); }
+}
+.wb-float-rec-stop {
+  margin-left: 0.35rem;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .12s;
+}
+.wb-float-rec-stop:hover { background: #dc2626; }
+.wb-float-rec-stop[disabled] { opacity: 0.4; cursor: not-allowed; }
+/* The "uploading" state — green pulse instead of red */
+.wb-float-rec.uploading .wb-float-rec-dot {
+  background: #10b981;
+  animation: none;
+}
+.wb-float-rec.uploading .wb-float-rec-stop {
+  background: #475569; cursor: default;
+}
+
+/* The 🎙 record button — ตอน idle ปุ่มดูปกติ (ไม่มี bg/border แดง),
+ * เฉพาะ icon มี hint สีแดงเข้มเพื่อสื่อความหมาย "record".
+ * เมื่อ .is-recording ถูก set → pulse animation + bg แดงเข้าทันที */
+#wb-rec-toggle {
+  color: #dc2626;
+  font-size: 1.05rem;
+}
+/* เมื่อ active (กำลังอัด) — ring แดงเข้ม + pulse */
+.wb-tool.is-recording {
+  background: #fee2e2 !important;
+  border-color: #ef4444 !important;
+  animation: wb-tool-rec-pulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25);
+}
+@keyframes wb-tool-rec-pulse {
+  0%, 100% { background: #fee2e2; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25); }
+  50%      { background: #fecaca; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.45); }
 }
 
 /* ===== Fullscreen mode ===== */
@@ -1626,6 +3469,37 @@ body.wb-fullscreen-mode #page-whiteboard:not(.hidden) {
   width: 100vw !important;
 }
 body.wb-fullscreen-mode .page-container { padding: 0 !important; max-width: none !important; }
+
+/* ===== Embed mode — focused edit form for iframe use ===== */
+/* Triggered by ?embed=task|meeting|group&id=X. We hide every shell piece
+   (topbar, tabbar, page content, login screen) so only the form modal shows
+   — gives the parent (dev whiteboard) a dedicated-looking edit page UX
+   without porting the form code. The modal itself is repositioned to fill
+   the iframe instead of floating at the bottom. */
+html.embed-mode #topbar,
+html.embed-mode #tabbar,
+html.embed-mode #desktop-nav,
+html.embed-mode #login-screen,
+html.embed-mode .page-container,
+html.embed-mode .ios-tabbar { display: none !important; }
+html.embed-mode body { background: #f8fafc; }
+html.embed-mode #modal {
+  /* Auto-open with no backdrop dim — feels like a page, not a modal */
+  position: static !important;
+  inset: auto !important;
+  background: transparent !important;
+  padding: 0 !important;
+  display: flex !important;
+}
+html.embed-mode #modal > div {
+  width: 100% !important;
+  max-width: none !important;
+  max-height: 100vh !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  height: 100vh;
+}
+html.embed-mode #app-shell { display: block !important; }
 
 /* ===== flatpickr — date / datetime picker overlays ===== */
 /* flatpickr renders a parallel "alt" input + hides the original; we want the
