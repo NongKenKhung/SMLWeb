@@ -3,17 +3,26 @@ services:
     image: postgres:16-alpine
     container_name: sml_postgres
     restart: unless-stopped
+    # Credentials MUST come from .env — no insecure defaults baked in.
+    # Required keys in `.env` at project root:
+    #   POSTGRES_USER       (e.g. smluser)
+    #   POSTGRES_PASSWORD   (anything strong; no default to force the user to set one)
+    #   POSTGRES_DB         (e.g. smartcitylab)
     environment:
-      POSTGRES_USER: smluser
-      POSTGRES_PASSWORD: smlpass
-      POSTGRES_DB: smartcitylab
+      POSTGRES_USER:     ${POSTGRES_USER:?required — set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required — set in .env}
+      POSTGRES_DB:       ${POSTGRES_DB:?required — set in .env}
       LANG: en_US.utf8
+    # Bind to loopback only — DB not exposed on LAN. Use `docker compose exec
+    # postgres psql ...` or pgAdmin (also localhost-only) for admin access.
+    # If you genuinely need remote access, change to "0.0.0.0:5432:5432" AND
+    # set a strong POSTGRES_PASSWORD in .env first.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U smluser -d smartcitylab"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -22,13 +31,17 @@ services:
     image: dpage/pgadmin4:8.12
     container_name: sml_pgadmin
     restart: unless-stopped
+    # pgAdmin credentials also from .env — no admin/admin default.
+    #   PGADMIN_DEFAULT_EMAIL    (e.g. you@example.com)
+    #   PGADMIN_DEFAULT_PASSWORD (strong password)
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL:    ${PGADMIN_DEFAULT_EMAIL:?required — set in .env}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?required — set in .env}
       PGADMIN_CONFIG_SERVER_MODE: 'False'
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    # pgAdmin also bound to loopback. Tunnel via SSH or VPN for remote admin.
     ports:
-      - "5050:80"
+      - "127.0.0.1:5050:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
       - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
@@ -61,9 +74,11 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
       SMTP_SECURE: ${SMTP_SECURE:-}
-      # Speech-to-text (PyThaiASR) microservice. Server reaches it via the
-      # compose network DNS. Set to empty to disable transcription cleanly.
-      ASR_URL: http://asr:8000
+      # Speech-to-text + AI summary — ปิดใช้งานชั่วคราว (asr + ollama services
+      # ถูก comment ออกด้านล่าง). To re-enable: uncomment asr + ollama blocks
+      # below + rebuild (`docker compose build asr && docker compose up -d`) +
+      # set ASR_URL to http://asr:8000 here
+      ASR_URL: ""
     ports:
       - "3000:3000"
     volumes:
@@ -82,71 +97,65 @@ services:
         condition: service_healthy
 
   # ── WhisperX microservice (Python + Flask) ─────────────────────────────
-  # Wraps github.com/m-bain/whisperX. Mounts the same `uploads` volume
-  # read-only so the app hands it a filename instead of re-uploading.
-  # First boot pulls model weights into the cache volume:
-  #   tiny ~75 MB · base ~150 MB · small ~500 MB (default) · medium ~1.5 GB · large-v3 ~3 GB
-  # Subsequent restarts are fast. ASR is optional — server.js silently skips
-  # transcription if this container is down.
-  asr:
-    build: ./asr-service
-    image: sml-asr:latest
-    container_name: sml_asr
-    restart: unless-stopped
-    environment:
-      UPLOAD_DIR: /uploads
-      # Whisper model size — bigger = better quality, slower, more RAM.
-      # Override per environment via .env or `docker compose run -e WHISPER_MODEL=medium`.
-      WHISPER_MODEL: ${WHISPER_MODEL:-small}
-      WHISPER_DEVICE: ${WHISPER_DEVICE:-cpu}
-      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}
-      WHISPER_LANG: ${WHISPER_LANG:-th}
-      WHISPER_ALIGN: ${WHISPER_ALIGN:-1}
-      WHISPER_BATCH_SIZE: ${WHISPER_BATCH_SIZE:-8}
-      # whisperx ships no default Thai alignment model; point it at a Thai
-      # wav2vec2 on HuggingFace. Set empty to use whisperx's own defaults.
-      WHISPER_ALIGN_MODEL: ${WHISPER_ALIGN_MODEL:-airesearch/wav2vec2-large-xlsr-53-th}
-      # Ollama is reached via compose DNS. Empty = AI summary disabled.
-      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-scb10x/llama3.2-typhoon2-3b-instruct}
-    volumes:
-      - ./uploads:/uploads:ro
-      # NAS counterpart of the app's bind mount — keep in sync with the `app` service:
-      # - sml_uploads:/uploads:ro
-      - asr_cache:/cache
-    # Uncomment to expose for direct curl tests (otherwise only `app` reaches it)
-    # ports: ["8000:8000"]
-
-  # ── Ollama (local LLM for AI summarisation) ─────────────────────────────
-  # Default model: scb10x/llama3.2-typhoon2-3b-instruct — Thai-tuned 3B by
-  # SCB10X (built on Llama 3.2). ~2 GB pull on first asr→ollama call. Swap
-  # OLLAMA_MODEL for any other model in the Ollama library —
-  # llama3.2:3b, qwen2.5:3b, gemma2:2b, llama3.1:8b, etc. Skip starting this
-  # service to disable AI summaries cleanly — ASR marks
-  # `summary_status='skipped'`.
-  ollama:
-    image: ollama/ollama:latest
-    container_name: sml_ollama
-    restart: unless-stopped
-    volumes:
-      - ollama_models:/root/.ollama
-    # Uncomment to expose for direct curl tests (otherwise only `asr` reaches it)
-    # ports: ["11434:11434"]
-    # GPU acceleration: uncomment when running on a host with NVIDIA + nvidia-container-toolkit
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+  # ════════════════════════════════════════════════════════════════════════
+  # AI services (asr + ollama) — DISABLED ตามคำขอ user เพื่อ reclaim disk +
+  # vRAM. To re-enable:
+  #   1) Uncomment ทั้ง 2 block ด้านล่าง (asr + ollama)
+  #   2) Uncomment asr_cache + ollama_models ใน volumes ตอนท้าย
+  #   3) Set `ASR_URL: http://asr:8000` ใน app service env (บรรทัด 79)
+  #   4) `docker compose build asr && docker compose up -d`
+  # Code + uploaded recordings ยังอยู่ครบ — แค่ไม่ run process AI
+  # ════════════════════════════════════════════════════════════════════════
+  #
+  # ── ASR (WhisperX speech-to-text) ──
+  # asr:
+  #   build: ./asr-service
+  #   image: sml-asr:latest
+  #   container_name: sml_asr
+  #   restart: unless-stopped
+  #   environment:
+  #     UPLOAD_DIR: /uploads
+  #     WHISPER_MODEL: ${WHISPER_MODEL:-large-v3}
+  #     WHISPER_DEVICE: ${WHISPER_DEVICE:-cuda}
+  #     WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-float16}
+  #     WHISPER_LANG: ${WHISPER_LANG:-th}
+  #     WHISPER_ALIGN: ${WHISPER_ALIGN:-1}
+  #     WHISPER_BATCH_SIZE: ${WHISPER_BATCH_SIZE:-8}
+  #     WHISPER_ALIGN_MODEL: ${WHISPER_ALIGN_MODEL:-airesearch/wav2vec2-large-xlsr-53-th}
+  #     OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+  #     OLLAMA_MODEL: ${OLLAMA_MODEL:-scb10x/llama3.2-typhoon2-3b-instruct}
+  #   volumes:
+  #     - ./uploads:/uploads:ro
+  #     - asr_cache:/cache
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+  #
+  # ── Ollama (local LLM for AI organisation) ──
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: sml_ollama
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ollama_models:/root/.ollama
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
 
 volumes:
   pg_data:
   pgadmin_data:
   app_state:
-  asr_cache:
-  ollama_models:
+  # asr_cache:      # uncomment เมื่อ re-enable asr service
+  # ollama_models:  # uncomment เมื่อ re-enable ollama service
 
   # ── NAS-backed uploads volume (UGREEN NASync DH4300 Plus, NFSv4) ────────
   # Prepared for future cutover; currently unused (see commented-out mounts
