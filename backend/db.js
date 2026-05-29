@@ -36,13 +36,39 @@ const nowIso = () => new Date().toISOString();
 const palette = ['#ef4444','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#10b981','#14b8a6','#06b6d4','#0ea5e9','#3b82f6','#6366f1','#8b5cf6','#a855f7','#d946ef','#ec4899'];
 const randomColor = () => palette[Math.floor(Math.random() * palette.length)];
 
-const VALID_STATUS = ['in_progress', 'completed', 'cancelled', 'on_hold'];
-const VALID_ROLE = ['admin', 'member'];
+// Status สำหรับ tasks + groups (shared schema)
+// Group project lifecycle: idea → proposal → pending_approval → in_progress → delivery → maintenance → completed
+// Tasks ใช้แค่ subset (in_progress / on_hold / completed / cancelled) แต่ schema เปิดทุก value ได้
+const VALID_STATUS = [
+  'idea', 'proposal', 'pending_approval',
+  'in_progress', 'delivery', 'maintenance',
+  'completed', 'on_hold', 'cancelled', 'archived',
+];
+// 'boss' = role สูงสุด (เหนือ admin). มีสิทธิ์เท่า admin ทุกประการใน permission check
+// (ดู hasAdminPerms() ใน server.js) — แตกต่างกันแค่ label/badge ใน UI
+const VALID_ROLE = ['boss', 'admin', 'member'];
 const VALID_TASK_ROLE = ['leader', 'member'];
 const VALID_KIND = ['task', 'meeting'];
 const VALID_LOCATION_TYPE = ['', 'online', 'onsite_internal', 'onsite_external'];
 
-const GROUP_PALETTE = ['#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#0ea5e9','#6366f1','#a855f7','#ec4899','#84cc16'];
+// 51 สี (3 tier × 17 สี) — ต้องตรงกับ frontend GROUP_PALETTE_TIERS
+const GROUP_PALETTE = [
+  // light
+  '#fda4af','#fca5a5','#fdba74','#fcd34d','#fde047',
+  '#bef264','#86efac','#6ee7b7','#5eead4','#67e8f9',
+  '#7dd3fc','#93c5fd','#a5b4fc','#c4b5fd','#d8b4fe',
+  '#f0abfc','#f9a8d4',
+  // medium
+  '#f43f5e','#ef4444','#f97316','#f59e0b','#eab308',
+  '#84cc16','#22c55e','#10b981','#14b8a6','#06b6d4',
+  '#0ea5e9','#3b82f6','#6366f1','#8b5cf6','#a855f7',
+  '#d946ef','#ec4899',
+  // bold (sync กับ frontend GROUP_PALETTE_TIERS.bold)
+  '#dc2626','#e11d48','#ea580c','#f97316','#facc15',
+  '#84cc16','#16a34a','#059669','#0d9488','#0891b2',
+  '#0284c7','#2563eb','#4f46e5','#7c3aed','#9333ea',
+  '#c026d3','#db2777',
+];
 
 // Tiny query helpers — keep call sites short
 async function q(sql, params = []) {
@@ -56,6 +82,30 @@ async function q1(sql, params = []) {
 async function exec(sql, params = []) {
   const r = await pool.query(sql, params);
   return r.rowCount;
+}
+
+// Transaction helper — รัน callback ภายใน BEGIN/COMMIT, ROLLBACK ถ้า throw.
+// Callback ได้ client object พร้อม methods q / q1 / exec ที่ใช้ connection
+// เดียวกัน (สำคัญ — ต้องใช้ client เดียวกันถึงจะอยู่ใน transaction)
+async function withTx(fn) {
+  const client = await pool.connect();
+  const ctx = {
+    q:    async (sql, params = []) => (await client.query(sql, params)).rows,
+    q1:   async (sql, params = []) => (await client.query(sql, params)).rows[0] || null,
+    exec: async (sql, params = []) => (await client.query(sql, params)).rowCount,
+    raw:  client,  // เผื่อ caller ต้องการ raw query (เช่น array result)
+  };
+  try {
+    await client.query('BEGIN');
+    const result = await fn(ctx);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch {}
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ===== Schema =====
@@ -80,6 +130,8 @@ async function initSchema() {
     -- Meeting end time (ISO datetime). Optional — falls back to deadline+60min
     -- in the ICS mailer when null. Only meaningful for kind='meeting'.
     ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS end_time     TEXT;
+    -- Budget — optional งบประมาณของ task (บาท) ใช้ search/sort ได้
+    ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS budget       NUMERIC;
 
     -- Connection categories:
     --   'personal' (default, existing behavior) — สมาชิก ↔ บริษัทที่ปรึกษา / บุคคลภายนอกส่วนตัว
@@ -173,6 +225,15 @@ async function initSchema() {
       member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
       joined_at TEXT NOT NULL,
       PRIMARY KEY (group_id, member_id)
+    );
+    -- Group ↔ Connection many-to-many — กลุ่มงานเลือก connection ได้หลายตัวต่อกลุ่ม
+    -- (เช่น พี่นัท[lobbyist] → พี่เค[lobbyist] → อบจ[หน่วยงาน] → บริษัท BS[บริษัท])
+    -- ON DELETE CASCADE → ลบกลุ่ม/connection แล้ว row นี้หายตาม
+    CREATE TABLE IF NOT EXISTS group_connections (
+      group_id      TEXT NOT NULL REFERENCES task_groups(id) ON DELETE CASCADE,
+      connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+      added_at      TEXT NOT NULL,
+      PRIMARY KEY (group_id, connection_id)
     );
     CREATE TABLE IF NOT EXISTS group_invitations (
       id          TEXT PRIMARY KEY,
@@ -269,8 +330,22 @@ async function initSchema() {
       canvas_json TEXT NOT NULL DEFAULT '{"version":"5.3.1","objects":[]}',
       created_by  TEXT REFERENCES members(id) ON DELETE SET NULL,
       created_at  TEXT NOT NULL,
-      updated_at  TEXT NOT NULL
+      updated_at  TEXT NOT NULL,
+      -- visibility: 'public' (ทุกคน join ได้), 'private' (เฉพาะ members)
+      visibility  TEXT NOT NULL DEFAULT 'public'
     );
+    ALTER TABLE whiteboards ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'public';
+
+    -- Whiteboard members — ใช้ตอน visibility='private'. owner = creator
+    -- (auto-added). role: 'owner', 'editor', 'viewer' (สำหรับอนาคต)
+    CREATE TABLE IF NOT EXISTS whiteboard_members (
+      board_id    TEXT NOT NULL REFERENCES whiteboards(id) ON DELETE CASCADE,
+      member_id   TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+      role        TEXT NOT NULL DEFAULT 'editor',
+      added_at    TEXT NOT NULL,
+      PRIMARY KEY (board_id, member_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_wb_members_member ON whiteboard_members(member_id);
 
     -- Audio recordings (binary blobs stored on disk; metadata here)
     CREATE TABLE IF NOT EXISTS recordings (
@@ -321,6 +396,9 @@ async function initSchema() {
     ALTER TABLE task_groups ADD COLUMN IF NOT EXISTS folder_name TEXT NOT NULL DEFAULT '';
     ALTER TABLE task_groups ADD COLUMN IF NOT EXISTS summary_md  TEXT NOT NULL DEFAULT '';
     ALTER TABLE task_groups ADD COLUMN IF NOT EXISTS summary_at  TEXT;
+    -- Soft-delete: group ที่ลบจะอยู่ในถังขยะ 30 วันก่อน purge
+    ALTER TABLE task_groups ADD COLUMN IF NOT EXISTS deleted_at  TEXT;
+    CREATE INDEX IF NOT EXISTS idx_task_groups_deleted ON task_groups(deleted_at) WHERE deleted_at IS NOT NULL;
 
     -- When a task accumulates ≥ 2 files we promote them into a subfolder
     -- (uploads/<group>/<task-folder>/...). Empty string = file lives flat in
@@ -354,6 +432,25 @@ async function initSchema() {
       updated_at    TEXT NOT NULL,
       PRIMARY KEY (poll_id, member_id)
     );
+
+    -- Audit log สำหรับ destructive ops (delete/update/admin actions). อ้างอิง
+    -- target แบบ generic (target_kind + target_id) เพื่อรองรับทุก entity ใน
+    -- ระบบโดยไม่ต้อง FK. ถ้า target ถูกลบ row นี้ยังเก็บประวัติไว้
+    CREATE TABLE IF NOT EXISTS audit_events (
+      id          TEXT PRIMARY KEY,
+      actor_id    TEXT,                       -- nullable (system actions)
+      actor_name  TEXT NOT NULL DEFAULT '',
+      action      TEXT NOT NULL,              -- e.g. 'task.delete', 'member.update'
+      target_kind TEXT NOT NULL DEFAULT '',   -- e.g. 'task', 'member', 'group'
+      target_id   TEXT NOT NULL DEFAULT '',
+      payload     TEXT NOT NULL DEFAULT '{}', -- JSON: any extra context (old/new value)
+      ip          TEXT NOT NULL DEFAULT '',
+      created_at  TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_actor    ON audit_events(actor_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_action   ON audit_events(action);
+    CREATE INDEX IF NOT EXISTS idx_audit_target   ON audit_events(target_kind, target_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_created  ON audit_events(created_at DESC);
   `);
 
   // One-time backfill: assign unique palette colors to existing groups in creation order.
@@ -411,10 +508,10 @@ async function init() {
 }
 
 // ===== Members =====
-// Sort: admins first (CASE = 0), then members (CASE = 1); within each role, oldest first.
+// Sort: boss first (0), admins (1), then members (2); within each role, oldest first.
 async function listMembers() {
   return q(`SELECT id, prefix, name, role, email, phone, color, avatar_url, created_at FROM members
-            ORDER BY (CASE role WHEN 'admin' THEN 0 ELSE 1 END), created_at ASC`);
+            ORDER BY (CASE role WHEN 'boss' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END), created_at ASC`);
 }
 async function getMember(id) {
   return q1('SELECT id, prefix, name, role, email, phone, color, avatar_url, created_at FROM members WHERE id = $1', [id]);
@@ -474,14 +571,30 @@ async function deleteMember(id) {
 }
 
 // ===== Groups =====
-async function listGroups() {
-  return q(`SELECT g.*, m.name AS leader_name, m.color AS leader_color,
+async function listGroups({ includeDeleted = false } = {}) {
+  const where = includeDeleted ? '' : 'WHERE g.deleted_at IS NULL';
+  const groups = await q(`SELECT g.*, m.name AS leader_name, m.color AS leader_color,
                    (SELECT COUNT(*)::int FROM group_members gm WHERE gm.group_id = g.id) AS member_count
             FROM task_groups g LEFT JOIN members m ON m.id = g.leader_id
+            ${where}
             ORDER BY g.created_at ASC`);
+  // attach connection_ids (id list) ให้แต่ละ group — frontend ใช้แสดง chip
+  const rows = await q('SELECT group_id, connection_id FROM group_connections ORDER BY added_at ASC');
+  const byGroup = new Map();
+  for (const r of rows) {
+    if (!byGroup.has(r.group_id)) byGroup.set(r.group_id, []);
+    byGroup.get(r.group_id).push(r.connection_id);
+  }
+  for (const g of groups) g.connection_ids = byGroup.get(g.id) || [];
+  return groups;
 }
-async function getGroup(id) {
-  return q1('SELECT * FROM task_groups WHERE id = $1', [id]);
+async function getGroup(id, { includeDeleted = false } = {}) {
+  const where = includeDeleted ? 'WHERE id = $1' : 'WHERE id = $1 AND deleted_at IS NULL';
+  const g = await q1(`SELECT * FROM task_groups ${where}`, [id]);
+  if (!g) return null;
+  const rows = await q('SELECT connection_id FROM group_connections WHERE group_id = $1 ORDER BY added_at ASC', [id]);
+  g.connection_ids = rows.map(r => r.connection_id);
+  return g;
 }
 function normalizeColor(c) {
   if (!c) return '';
@@ -502,13 +615,10 @@ async function createGroup(input) {
   let leader_id = input.leader_id || null;
   if (leader_id && !(await getMember(leader_id))) leader_id = null;
 
+  // สีกลุ่ม — ผู้ใช้เลือกได้อิสระ (custom color picker) ยอม clash กับกลุ่มอื่น
+  // ถ้าไม่ระบุ → pick สีที่ยังไม่ถูกใช้ใน palette เพื่อให้แตกต่างเป็น default
   let color = normalizeColor(input.color);
-  if (color) {
-    const taken = await q1('SELECT id FROM task_groups WHERE color = $1', [color]);
-    if (taken) throw new Error('สีที่เลือกถูกใช้กับกลุ่มอื่นแล้ว — กรุณาเลือกสีอื่น');
-  } else {
-    color = await pickUnusedColor();
-  }
+  if (!color) color = await pickUnusedColor();
 
   const todayIso = new Date().toISOString().slice(0, 10);
   const g = {
@@ -523,17 +633,31 @@ async function createGroup(input) {
     leader_id,
     created_at: nowIso(),
   };
-  await exec(
-    `INSERT INTO task_groups (id, name, description, start_date, deadline, status, target, color, leader_id, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [g.id, g.name, g.description, g.start_date, g.deadline, g.status, g.target, g.color, g.leader_id, g.created_at]
-  );
-  // Pick a folder name now so uploads have a stable directory from day one
+  // Folder name + leader membership inside the same transaction as group
+  // insert. Crash mid-way = ROLLBACK → no orphan task_groups row without a
+  // folder, no group_member entry pointing at a non-existent group.
   const folder = await uniqueFolderName(g.name || g.id, g.id);
-  await exec('UPDATE task_groups SET folder_name = $1 WHERE id = $2', [folder, g.id]);
+  await withTx(async (tx) => {
+    await tx.exec(
+      `INSERT INTO task_groups (id, name, description, start_date, deadline, status, target, color, leader_id, created_at, folder_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [g.id, g.name, g.description, g.start_date, g.deadline, g.status, g.target, g.color, g.leader_id, g.created_at, folder]
+    );
+    if (g.leader_id) {
+      await tx.exec(
+        'INSERT INTO group_members (group_id, member_id, joined_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+        [g.id, g.leader_id, nowIso()]
+      );
+    }
+  });
   _folderCache.set(g.id, folder);
   g.folder_name = folder;
-  if (g.leader_id) await addGroupMember(g.id, g.leader_id);
+  // ผูก connections ที่เลือกตอนสร้าง (optional)
+  if (Array.isArray(input.connection_ids) && input.connection_ids.length > 0) {
+    await setGroupConnections(g.id, input.connection_ids);
+  }
+  // Initial _summary.md ใน upload folder ของกลุ่มใหม่ (fire-and-forget)
+  autoRefreshGroupSummary(g.id);
   return g;
 }
 async function updateGroup(id, patch) {
@@ -548,11 +672,7 @@ async function updateGroup(id, patch) {
   if (patch.color !== undefined && patch.color !== null && patch.color !== '') {
     const newColor = normalizeColor(patch.color);
     if (!newColor) throw new Error('รหัสสีไม่ถูกต้อง (ต้องเป็น #RRGGBB)');
-    if (newColor !== cur.color) {
-      const taken = await q1('SELECT id FROM task_groups WHERE color = $1 AND id != $2', [newColor, id]);
-      if (taken) throw new Error('สีที่เลือกถูกใช้กับกลุ่มอื่นแล้ว — กรุณาเลือกสีอื่น');
-    }
-    color = newColor;
+    color = newColor;   // ยอม clash กับกลุ่มอื่นได้ (custom picker)
   }
   const newName = patch.name !== undefined ? String(patch.name).trim() : cur.name;
   await exec(
@@ -586,12 +706,44 @@ async function updateGroup(id, patch) {
     }
   }
   if (leader_id && leader_id !== cur.leader_id) await addGroupMember(id, leader_id);
+  // Update connections ถ้าส่งมา (undefined = ไม่แก้, [] = clear ทั้งหมด)
+  if (Array.isArray(patch.connection_ids)) {
+    await setGroupConnections(id, patch.connection_ids);
+  }
+  // Refresh _summary.md เผื่อ name/description/leader/status เปลี่ยน
+  autoRefreshGroupSummary(id);
   return getGroup(id);
 }
 async function deleteGroup(id) {
-  // Best-effort: remove the on-disk folder so trash doesn't accumulate. The
-  // DB row CASCADEs to tasks/files; their on-disk blobs already moved with
-  // the folder so deleting it once cleans everything up.
+  // Soft-delete by default — group + tasks ภายในไปอยู่ในถังขยะ 30 วัน
+  // (uploads folder ยังไม่ลบ — เก็บเผื่อ restore; purgeGroup ค่อยลบจริง)
+  return softDeleteGroup(id);
+}
+async function softDeleteGroup(id) {
+  const now = nowIso();
+  // Soft delete group + all its tasks (cascade soft-delete)
+  await withTx(async (tx) => {
+    await tx.exec('UPDATE task_groups SET deleted_at=$1 WHERE id=$2 AND deleted_at IS NULL', [now, id]);
+    await tx.exec('UPDATE tasks SET deleted_at=$1 WHERE group_id=$2 AND deleted_at IS NULL', [now, id]);
+  });
+  return true;
+}
+async function restoreGroup(id) {
+  // Restore group + tasks ที่ถูก soft-delete พร้อมกัน
+  await withTx(async (tx) => {
+    const cur = await tx.q1('SELECT deleted_at FROM task_groups WHERE id=$1', [id]);
+    if (!cur) return;
+    const groupDeletedAt = cur.deleted_at;
+    await tx.exec('UPDATE task_groups SET deleted_at=NULL WHERE id=$1', [id]);
+    // Restore tasks ที่ถูกลบพร้อมกัน (deleted_at ตรงกับ group's deleted_at)
+    if (groupDeletedAt) {
+      await tx.exec('UPDATE tasks SET deleted_at=NULL WHERE group_id=$1 AND deleted_at=$2', [id, groupDeletedAt]);
+    }
+  });
+  return true;
+}
+async function purgeGroup(id) {
+  // Hard delete — DB CASCADE จะลบ tasks/files/etc. + ลบ uploads folder
   const folder = _folderCache.get(id);
   if (folder) {
     const dirPath = path.join(UPLOAD_DIR, folder);
@@ -600,7 +752,14 @@ async function deleteGroup(id) {
     } catch (e) { console.warn(`[uploads] delete folder ${dirPath}: ${e.message}`); }
   }
   _folderCache.delete(id);
-  return (await exec('DELETE FROM task_groups WHERE id = $1', [id])) > 0;
+  return (await exec('DELETE FROM task_groups WHERE id = $1 AND deleted_at IS NOT NULL', [id])) > 0;
+}
+async function listTrashedGroups() {
+  return q(`SELECT g.*, m.name AS leader_name, m.color AS leader_color,
+                   (SELECT COUNT(*)::int FROM tasks t WHERE t.group_id = g.id AND t.deleted_at IS NOT NULL) AS task_count
+            FROM task_groups g LEFT JOIN members m ON m.id = g.leader_id
+            WHERE g.deleted_at IS NOT NULL
+            ORDER BY g.deleted_at DESC`);
 }
 // Generate a markdown summary for a group: front-matter, tasks broken down by
 // status, point totals per member, file inventory. Pure DB — caller decides
@@ -719,6 +878,23 @@ async function setGroupSummary(groupId, md) {
   return { summary_md: md, summary_at: at };
 }
 
+// Best-effort auto-refresh ของ _summary.md ในโฟลเดอร์ upload ของกลุ่ม
+// เรียกได้จากที่ไหนก็ได้ที่มีการเปลี่ยนสถานะของ task/file/group — fire-and-forget
+// ผ่าน setImmediate เพื่อไม่ block API response
+function autoRefreshGroupSummary(groupId) {
+  if (!groupId) return;
+  setImmediate(async () => {
+    try {
+      const g = await getGroup(groupId);
+      if (!g) return;
+      const md = await generateGroupSummary(groupId);
+      await setGroupSummary(groupId, md);
+    } catch (e) {
+      console.warn(`[summary auto-refresh] gid=${groupId}: ${e.message}`);
+    }
+  });
+}
+
 async function isGroupLeader(groupId, memberId) {
   const g = await getGroup(groupId);
   return !!(g && g.leader_id === memberId);
@@ -759,483 +935,12 @@ async function getTask(id) {
   return attachAssignees(row);
 }
 
-// Common Thai abbreviations used in the lab's domain.
-// Bidirectional: search query in either form matches haystack containing the other.
-// Mirror of public/app.js#ABBREVIATIONS — keep them in sync when adding pairs.
-const ABBREVIATIONS = [
-  ['ก.', 'กรัม'],
-  ['ก.ก.', 'คณะกรรมการข้าราชการกรุงเทพมหานคร'],
-  ['ก.ค.', 'เดือนกรกฎาคม'],
-  ['ก.ต.', 'คณะกรรมการตุลาการ'],
-  ['ก.ตร.', 'คณะกรรมการตำรวจแห่งชาติ'],
-  ['ก.พ.', 'เดือนกุมภาพันธ์'],
-  ['ก.พ.ด.', 'กองทุนพัฒนาเด็กและเยาวชนในถิ่นทุรกันดาร'],
-  ['ก.พ.ร.', 'สำนักงานคณะกรรมการพัฒนาระบบราชการ'],
-  ['ก.พ.อ.', 'คณะกรรมการข้าราชการพลเรือนในสถาบันอุดมศึกษา'],
-  ['ก.ย.', 'เดือนกันยายน'],
-  ['ก.ล.ต.', 'คณะกรรมการกำกับหลักทรัพย์และตลาดหลักทรัพย์'],
-  ['ก.ว.', 'คณะกรรมการควบคุมการประกอบวิชาชีพวิศวกรรม'],
-  ['กก.', 'กิโลกรัม'],
-  ['กกต.', 'คณะกรรมการการเลือกตั้ง'],
-  ['กกร.', 'คณะกรรมการร่วมภาคเอกชน 3 สถาบัน'],
-  ['กคช.', 'การเคหะแห่งชาติ'],
-  ['กจ', 'จังหวัดกาญจนบุรี'],
-  ['กต.', 'กระทรวงการต่างประเทศ'],
-  ['กทช.', 'สำนักงานคณะกรรมการกิจการโทรคมนาคมแห่งชาติ'],
-  ['กทท.', 'การท่าเรือแห่งประเทศไทย'],
-  ['กทบ.', 'กองทุนหมู่บ้านและชุมชนเมือแห่งชาติ'],
-  ['กทม.', 'กรุงเทพมหานคร'],
-  ['กท', 'กรุงเทพมหานคร'],
-  ['กนง.', 'คณะกรรมการนโยบายการเงิน (ธนาคารแห่งประเทศไทย)'],
-  ['กบ', 'จังหวัดกระบี่'],
-  ['กบง.', 'คณะกรรมการบริหารนโยบายพลังงาน'],
-  ['กบน.', 'คณะกรรมการบริหารกองทุนน้ำมันเชื้อเพลิง'],
-  ['กปน.', 'การประปานครหลวง'],
-  ['กปภ.', 'การประปาส่วนภูมิภาค'],
-  ['กพ', 'จังหวัดกำแพงเพชร'],
-  ['กพช.', 'คณะกรรมการนโยบายพลังงานแห่งชาติ'],
-  ['กฟน.', 'การไฟฟ้านครหลวง'],
-  ['กฟผ.', 'การไฟฟ้าฝ่ายผลิตแห่งประเทศไทย'],
-  ['กฟภ.', 'การไฟฟ้าส่วนภูมิภาค'],
-  ['กม.', 'กิโลเมตร'],
-  ['กมธ.', 'คณะกรรมาธิการ'],
-  ['กยศ.', 'กองทุนเงินกู้ยืมเพื่อการศึกษา'],
-  ['กรอ.', 'กองทุนเงินกู้ยืมเพื่อการศึกษาที่ผูกกับรายได้ในอนาคต'],
-  ['กศน.', 'สำนักงานส่งเสริมการศึกษานอกระบบและการศึกษาตามอัธยาศัย'],
-  ['กส', 'จังหวัดกาฬสินธุ์'],
-  ['กสท.', 'การสื่อสารแห่งประเทศไทย'],
-  ['กสทช.', 'คณะกรรมการกิจการกระจายเสียง กิจการโทรทัศน์ และกิจการโทรคมนาคมแห่งชาติ'],
-  ['กสม.', 'สำนักงานคณะกรรมการสิทธิมนุษยชนแห่งชาติ'],
-  ['กสส.', 'คณะกรรมการส่งเสริมและประสานงานสตรีแห่งชาติ'],
-  ['กอช.', 'กองทุนการออมแห่งชาติ'],
-  ['กอนช.', 'กองอำนวยการน้ำแห่งชาติ'],
-  ['กอ.รมน.', 'กองอำนวยการรักษาความมั่นคงภายใน'],
-  ['ขก.', 'จังหวัดขอนแก่น'],
-  ['ขจก.', 'ขบวนการโจรก่อการร้าย'],
-  ['ขรก.', 'ข้าราชการ'],
-  ['ขส.ทบ.', 'กรมการขนส่งทหารบก'],
-  ['ขส.ทร.', 'กรมการขนส่งทหารเรือ'],
-  ['ขส.ทอ.', 'กรมการขนส่งทหารอากาศ'],
-  ['ขสมก.', 'องค์การขนส่งมวลชนกรุงเทพ'],
-  ['ค.ร.ฟ.', 'คณะกรรมการรถไฟแห่งประเทศไทย'],
-  ['ค.ศ.', 'คริสตศักราช'],
-  ['ค.ศ.ล.', 'คอนกรีตเสริมเหล็ก'],
-  ['คกก.', 'คณะกรรมการ'],
-  ['คจก.', 'โครงการจัดสรรที่ดินทำกินแก่ราษฎรผู้ยากไร้ในพื้นที่ป่าสงวนเสื่อมโทรม'],
-  ['คตง.', 'คณะกรรมการตรวจเงินแผ่นดิน'],
-  ['คตส.', 'คณะกรรมการตรวจสอบการกระทำที่ก่อให้เกิดความเสียหายแก่รัฐ'],
-  ['คมช.', 'คณะมนตรีความมั่นคงแห่งชาติ'],
-  ['ครน.', 'คูณร่วมน้อย (คณิตศาสตร์)'],
-  ['ครป.', 'คณะกรรมการรณรงค์เพื่อประชาธิปไตย'],
-  ['ครม.', 'คณะรัฐมนตรี'],
-  ['คสช.', 'คณะรักษาความสงบแห่งชาติ'],
-  ['จ.', 'จังหวัด'],
-  ['จ.จ.', 'จตุตถจุลจอมเกล้า'],
-  ['จ.ช.', 'จัตุรถาภรณ์ช้างเผือก'],
-  ['จ.ต.', 'จ่าตรี'],
-  ['จ.ท.', 'จ่าโท'],
-  ['จ.ป.ร.', 'โรงเรียนนายร้อยพระจุลจอมเกล้า'],
-  ['จ.ม.', 'จัตุรถาภรณ์มงกุฎไทย'],
-  ['จ.ภ.', 'จตุตถดิเรกคุณาภรณ์'],
-  ['จ.ส.ต.', 'จ่านายสิบตำรวจ'],
-  ['จ.ส.ท.', 'จ่าสิบโท'],
-  ['จ.ส.อ.', 'จ่าสิบเอก'],
-  ['จ.อ.', 'จ่าเอก'],
-  ['จคม.', 'โจรจีนคอมมิวนิสต์มลายา'],
-  ['จทบ.', 'จังหวัดทหารบก'],
-  ['จนท.', 'เจ้าหน้าที่'],
-  ['จบ', 'จังหวัดจันทบุรี'],
-  ['จพง.', 'เจ้าพนักงาน'],
-  ['จยย.', 'จักรยานยนต์'],
-  ['ฉก.', 'เฉพาะกิจ'],
-  ['ฉช', 'จังหวัดฉะเชิงเทรา'],
-  ['ช.', 'ชาย / เพศชาย'],
-  ['ช.ค.', 'ลูกจ้างชั่วคราวของส่วนราชการ'],
-  ['ช.ค.บ.', 'เงินพิเศษช่วยค่าครองชีพผู้รับเบี้ยหวัดบำนาญ'],
-  ['ชน', 'จังหวัดชัยนาท'],
-  ['ชพ', 'จังหวัดชุมพร'],
-  ['ชม', 'จังหวัดเชียงใหม่'],
-  ['ชม.', 'ชั่วโมง'],
-  ['ชย', 'จังหวัดชัยภูมิ'],
-  ['ชร', 'จังหวัดเชียงราย'],
-  ['ชรบ.', 'ชุดรักษาความปลอดภัยหมู่บ้าน'],
-  ['ชล', 'จังหวัดชลบุรี'],
-  ['ซ.', 'ซอย'],
-  ['ซม.', 'เซนติเมตร'],
-  ['ฌกส.', 'ฌาปนกิจสงเคราะห์'],
-  ['ญ.', 'หญิง / เพศหญิง'],
-  ['ฐปรพ.', 'ฐานปฏิบัติการรบพิเศษ'],
-  ['ด', 'เดือน (เช่น ว/ด/ป)'],
-  ['ด.ช.', 'เด็กชาย'],
-  ['ด.ญ.', 'เด็กหญิง'],
-  ['ด.ต.', 'นายดาบตำรวจ'],
-  ['ดร.', 'ด็อกเตอร์ (คำเรียกผู้เรียนจบปริญญาเอก)'],
-  ['ดล.', 'เดซิลิตร (100 ซีซี)'],
-  ['ต.', 'ตำบล'],
-  ['ต.ค', 'เดือนตุลาคม'],
-  ['ต.จ.', 'ตติยจุลจอมเกล้า'],
-  ['ต.จ.ว.', 'ตติยจุลจอมเกล้าวิเศษ'],
-  ['ต.ช.', 'ตริตาภรณ์ช้างเผือก'],
-  ['ต.ม.', 'ตริตาภรณ์มงกุฎไทย'],
-  ['ต.ภ.', 'ตติยดิเรกคุณาภรณ์'],
-  ['ต.อ.จ.', 'ตติยานุจุลจอมเกล้า'],
-  ['ตก', 'จังหวัดตาก'],
-  ['ตง', 'จังหวัดตรัง'],
-  ['ตจว.', 'ต่างจังหวัด'],
-  ['ตม.', 'ตำรวจตรวจคนเข้าเมือง'],
-  ['ตร', 'จังหวัดตราด'],
-  ['ตร.', 'ตำรวจ'],
-  ['ตร.กม.', 'ตารางกิโลเมตร'],
-  ['ตร.ซม.', 'ตารางเซนติเมตร'],
-  ['ตร.ม.', 'ตารางเมตร'],
-  ['ตร.ว.', 'ตารางวา'],
-  ['ตรอ.', 'สถานตรวจสภาพรถเอกชน'],
-  ['ถ.', 'ถนน'],
-  ['ถ.พ.', 'ความถ่วงจำเพาะ'],
-  ['ท.จ.', 'ทุติยจุลจอมเกล้า'],
-  ['ท.จ.ว.', 'ทุติยจุลจอมเกล้าวิเศษ'],
-  ['ท.ช.', 'ทวีติยาภรณ์ช้างเผือก'],
-  ['ท.ม.', 'ทวีติยาภรณ์มงกุฎไทย'],
-  ['ท.ภ.', 'ทุติยดิเรกคุณาภรณ์'],
-  ['ทต.', 'เทศบาลตำบล'],
-  ['ททท.', 'การท่องเที่ยวแห่งประเทศไทย'],
-  ['ทน.', 'เทศบาลนคร'],
-  ['ทบ.', 'กองทัพบก'],
-  ['ทม.', 'เทศบาลเมือง'],
-  ['ทร.', 'กองทัพเรือ'],
-  ['ทศท.', 'องค์การโทรศัพท์แห่งประเทศไทย'],
-  ['ทส.', 'กระทรวงทรัพยากรธรรมชาติและสิ่งแวดล้อม'],
-  ['ทสปช.', 'ไทยอาสาป้องกันชาติ'],
-  ['ทอ.', 'กองทัพอากาศ'],
-  ['ทอท.', 'การท่าอากาศยานแห่งประเทศไทย'],
-  ['ธ.', 'ธนาคาร'],
-  ['ธ.ก.ส.', 'ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร'],
-  ['ธ.ค.', 'เดือนธันวาคม'],
-  ['ธปท.', 'ธนาคารแห่งประเทศไทย'],
-  ['ธพว.', 'ธนาคารพัฒนาวิสาหกิจขนาดกลางและขนาดย่อมแห่งประเทศไทย'],
-  ['ธสอ.', 'ธนาคารเพื่อการส่งออกและนำเข้าแห่งประเทศไทย'],
-  ['ธอส.', 'ธนาคารอาคารสงเคราะห์'],
-  ['น.', 'นาฬิกา (บอกเวลา)'],
-  ['น.ช.', 'นักโทษชาย'],
-  ['น.ญ.', 'นักโทษหญิง'],
-  ['น.ต.', 'นาวาตรี'],
-  ['น.ท.', 'นาวาโท'],
-  ['น.น.', 'น้ำหนัก'],
-  ['น.ศ.', 'นักศึกษา'],
-  ['น.ส.3', 'หนังสือรับรองการทำประโยชน์ในที่ดิน'],
-  ['น.สพ.', 'นายสัตวแพทย์'],
-  ['น.อ.', 'นาวาเอก'],
-  ['นค', 'จังหวัดหนองคาย'],
-  ['นฐ', 'จังหวัดนครปฐม'],
-  ['นตท.', 'นักเรียนเตรียมทหาร'],
-  ['นทท.', 'นักท่องเที่ยว'],
-  ['นธ', 'จังหวัดนราธิวาส'],
-  ['นน', 'จังหวัดน่าน'],
-  ['นนร.', 'นักเรียนนายร้อย'],
-  ['นบ', 'จังหวัดนนทบุรี'],
-  ['นปข.', 'หน่วยปฏิบัติการตามลำน้ำโขง'],
-  ['นพ', 'จังหวัดนครพนม'],
-  ['นพ.', 'นายแพทย์'],
-  ['นภ', 'จังหวัดหนองบัวลำภู'],
-  ['นม', 'จังหวัดนครราชสีมา'],
-  ['นย', 'จังหวัดนครนายก'],
-  ['นว', 'จังหวัดนครสวรรค์'],
-  ['นร.', 'นักเรียน'],
-  ['นรข.', 'หน่วยเรือรักษาความสงบเรียบร้อยตามลำแม่น้ำโขง'],
-  ['นรม.', 'นายกรัฐมนตรี'],
-  ['นศ', 'จังหวัดนครศรีธรรมราช'],
-  ['นศ.', 'นักศึกษา'],
-  ['นศท.', 'นักศึกษาวิชาทหาร'],
-  ['นส.', 'นางสาว'],
-  ['นสพ.', 'หนังสือพิมพ์'],
-  ['นอภ.', 'นายอำเภอ'],
-  ['บ.', 'บาท'],
-  ['บ.ช.', 'เบญจมาภรณ์ช้างเผือก'],
-  ['บ.ม.', 'เบญจมาภรณ์มงกุฎไทย'],
-  ['บ.ภ.', 'เบญจมดิเรกคุณาภรณ์'],
-  ['บก', 'จังหวัดบึงกาฬ'],
-  ['บก.จร.', 'กองบังคับการตำรวจจราจร'],
-  ['บก.ป.', 'กองบังคับการปราบปราม'],
-  ['บจก.', 'บริษัท จำกัด'],
-  ['บช.ก.', 'กองบัญชาการตำรวจสอบสวนกลาง'],
-  ['บช.น.', 'กองบัญชาการตำรวจนครบาล'],
-  ['บช.ภ.', 'กองบัญชาการตำรวจภูธร'],
-  ['บมจ.', 'บริษัทมหาชน จำกัด'],
-  ['บร', 'จังหวัดบุรีรัมย์'],
-  ['ป.จ.', 'ปฐมจุลจอมเกล้า'],
-  ['ป.จ.ว.', 'ปฐมจุลจอมเกล้าวิเศษ'],
-  ['ป.ช.', 'ประถมาภรณ์ช้างเผือก'],
-  ['ป.ธ.', 'เปรียญธรรม'],
-  ['ป.ป.ท.', 'สำนักงานคณะกรรมการป้องกันและปราบปรามการทุจริตในภาครัฐ'],
-  ['ป.ป.ส.', 'สำนักงานคณะกรรมการป้องกันและปราบปรามยาเสพติด'],
-  ['ป.ภ.', 'ปฐมดิเรกคุณาภรณ์'],
-  ['ป.ม.', 'ประถมาภรณ์มงกุฎไทย'],
-  ['ป.วิ.อ.', 'ประมวลกฎหมายวิธีพิจารณาความอาญา'],
-  ['ปกส.', 'สำนักงานประกันสังคม'],
-  ['ปข', 'จังหวัดประจวบคีรีขันธ์'],
-  ['ปจ', 'จังหวัดปราจีนบุรี'],
-  ['ปชป.', 'พรรคประชาธิปัตย์'],
-  ['ปตอ.', 'ปืนต่อสู้อากาศยาน'],
-  ['ปท', 'จังหวัดปทุมธานี'],
-  ['ปธ.', 'ประธาน'],
-  ['ปธน.', 'ประธานาธิบดี'],
-  ['ปน', 'จังหวัดปัตตานี'],
-  ['ปปง.', 'สำนักงานป้องกันและปราบปรามการฟอกเงิน'],
-  ['ปปช.', 'คณะกรรมการป้องกันและปราบปรามการทุจริตแห่งชาติ'],
-  ['ปปป.', 'กองบังคับการป้องกันปราบปรามการทุจริตและประพฤติมิชอบ'],
-  ['ปรส.', 'องค์การเพื่อการปฏิรูประบบสถาบันการเงิน'],
-  ['ผกก.', 'ผู้กำกับ'],
-  ['ผกค.', 'ผู้ก่อการร้ายคอมมิวนิสต์'],
-  ['ผจก.', 'ผู้จัดการ'],
-  ['ผช.', 'ผู้ช่วย'],
-  ['ผช. ผบ.ทบ.', 'ผู้ช่วยผู้บัญชาการทหารบก'],
-  ['ผช. ผบ.ทร.', 'ผู้ช่วยบัญชาการทหารเรือ'],
-  ['ผช. ผบ.ทอ.', 'ผู้ช่วยผู้บัญชาการทหารอากาศ'],
-  ['ผบ.ทบ.', 'ผู้บัญชาการทหารบก'],
-  ['ผบ.ทร.', 'ผู้บัญชาการทหารเรือ'],
-  ['ผบ.ทอ.', 'ผู้บัญชาการทหารอากาศ'],
-  ['ผบ.สส.', 'ผู้บัญชาการทหารสูงสุด'],
-  ['ผบก.', 'ผู้บังคับการ'],
-  ['ผบช.', 'ผู้บัญชาการ'],
-  ['ผบช.น.', 'ผู้บัญชาการตำรวจนครบาล'],
-  ['ผบช.ภ.', 'ผู้บัญชาการตำรวจภูธร'],
-  ['ผอ.', 'ผู้อำนวยการ'],
-  ['พ.', 'วันพุธ'],
-  ['พ.ค.', 'เดือนพฤษภาคม'],
-  ['พ.จ.ต.', 'พันจ่าตรี'],
-  ['พ.จ.ท.', 'พันจ่าโท'],
-  ['พ.จ.อ.', 'พันจ่าเอก'],
-  ['พ.ต.', 'พันตรี'],
-  ['พ.ต.ต.', 'พันตำรวจตรี'],
-  ['พ.ต.ท.', 'พันตำรวจโท'],
-  ['พ.ต.อ.', 'พันตำรวจเอก'],
-  ['พ.ท.', 'พันโท'],
-  ['พ.ย.', 'เดือนพฤศจิกายน'],
-  ['พ.ร.ก.', 'พระราชกำหนด'],
-  ['พ.ร.ฎ.', 'พระราชกฤษฎีกา'],
-  ['พ.ร.บ.', 'พระราชบัญญัติ'],
-  ['พ.ร.ป.', 'พระราชบัญญัติประกอบรัฐธรรมนูญ'],
-  ['พ.อ.', 'พันเอก'],
-  ['พ.อ.ต.', 'พันจ่าอากาศตรี'],
-  ['พ.อ.ท.', 'พันจ่าอากาศโท'],
-  ['พ.อ.อ.', 'พันจ่าอากาศเอก'],
-  ['พฤ.', 'วันพฤหัสบดี'],
-  ['พกส.', 'พนักงานกระทรวงสาธารณสุข'],
-  ['พขร.', 'พนักงานขับรถ'],
-  ['พง', 'จังหวัดพังงา'],
-  ['พจ', 'จังหวัดพิจิตร'],
-  ['พช', 'จังหวัดเพชรบูรณ์'],
-  ['พท', 'จังหวัดพัทลุง'],
-  ['พท.', 'พรรคเพื่อไทย'],
-  ['พบ', 'จังหวัดเพชรบุรี'],
-  ['พปชร.', 'พรรคพลังประชารัฐ'],
-  ['พย', 'จังหวัดพะเยา'],
-  ['พร', 'จังหวัดแพร่'],
-  ['พล', 'จังหวัดพิษณุโลก'],
-  ['พล.ต.ต.', 'พลตำรวจตรี'],
-  ['พล.ต.ท.', 'พลตำรวจโท'],
-  ['พล.ต.อ.', 'พลตำรวจเอก'],
-  ['พล.ร.ต.', 'พลเรือตรี'],
-  ['พล.ร.ท.', 'พลเรือโท'],
-  ['พล.ร.อ.', 'พลเรือเอก'],
-  ['พล.อ.ต.', 'พลอากาศตรี'],
-  ['พล.อ.ท.', 'พลอากาศโท'],
-  ['พล.อ.อ.', 'พลอากาศเอก'],
-  ['พล.ต.', 'พลตรี'],
-  ['พล.ท.', 'พลโท'],
-  ['พล.อ.', 'พลเอก'],
-  ['ฟ.', 'ฟุต'],
-  ['ภ.ง.ด.', 'ภาษีเงินได้'],
-  ['ภ.พ.', 'ภาษีมูลค่าเพิ่ม'],
-  ['ภก', 'จังหวัดภูเก็ต'],
-  ['ภท.', 'พรรคภูมิใจไทย'],
-  ['ม.จ.', 'หม่อมเจ้า'],
-  ['ม.ป.ช.', 'มหาปรมาภรณ์ช้างเผือก'],
-  ['ม.ร.ว.', 'หม่อมราชวงศ์'],
-  ['ม.ล.', 'หม่อมหลวง'],
-  ['ม.ว.ม.', 'มหาวชิรมงกุฎ'],
-  ['มิ.ย.', 'เดือนมิถุนายน'],
-  ['เม.ย.', 'เดือนเมษายน'],
-  ['มค', 'จังหวัดมหาสารคาม'],
-  ['มทบ.', 'มณฑลทหารบก'],
-  ['ทพบ.', 'มูลนิธิเพื่อผู้บริโภค'],
-  ['มว.', 'สถาบันมาตรวิทยาแห่งชาติ'],
-  ['มส', 'จังหวัดแม่ฮ่องสอน'],
-  ['มห', 'จังหวัดมุกดาหาร'],
-  ['มอก.', 'มาตรฐานผลิตภัณฑ์อุตสาหกรรม'],
-  ['ยธ.', 'กระทรวงยุติธรรม'],
-  ['ยล', 'จังหวัดยะลา'],
-  ['ยศ.ทบ.', 'กรมยุทธศึกษาทหารบก'],
-  ['ยศ.ทร.', 'กรมยุทธศึกษาทหารเรือ'],
-  ['ยศ.ทอ.', 'กรมยุทธศึกษาทหารอากาศ'],
-  ['ยส', 'จังหวัดยโสธร'],
-  ['ร.', 'รัชกาล (เช่น ร.9 หมายถึง รัชกาลที่ 9)'],
-  ['ร.ต.', 'ร้อยตรี'],
-  ['ร.ต.ต.', 'ร้อยตำรวจตรี'],
-  ['ร.ต.ท.', 'ร้อยตำรวจโท'],
-  ['ร.ต.อ.', 'ร้อยตำรวจเอก'],
-  ['ร.ท.', 'ร้อยโท'],
-  ['ร.น.', 'ราชนาวี'],
-  ['ร.อ.', 'ร้อยเอก'],
-  ['รง.', 'โรงงาน'],
-  ['รธน.', 'รัฐธรรมนูญ'],
-  ['รน', 'จังหวัดระนอง'],
-  ['รบ', 'จังหวัดราชบุรี'],
-  ['รพ.', 'โรงพยาบาล'],
-  ['รพ.สต.', 'โรงพยาบาลส่งเสริมสุขภาพตำบล'],
-  ['รมช.', 'รัฐมนตรีช่วยว่าการ'],
-  ['รมต.', 'รัฐมนตรี'],
-  ['รมว.', 'รัฐมนตรีว่าการ'],
-  ['รย', 'จังหวัดระยอง'],
-  ['รสพ.', 'องค์การรับส่งสินค้าและพัสดุภัณฑ์'],
-  ['รอ', 'จังหวัดร้อยเอ็ด'],
-  ['ล.', 'ลิตร'],
-  ['ลบ', 'จังหวัดลพบุรี'],
-  ['ลบ.ซม.', 'ลูกบาศก์เซนติเมตร'],
-  ['ลบ.ม.', 'ลูกบาศก์เมตร'],
-  ['ลบ.กม.', 'ลูกบาศก์กิโลเมตร'],
-  ['ลป', 'จังหวัดลำปาง'],
-  ['ลพ', 'จังหวัดลำพูน'],
-  ['ลย', 'จังหวัดเลย'],
-  ['ว.ช.', 'สำนักงานคณะกรรมการวัฒนธรรมแห่งชาติ'],
-  ['ว.ด.ป.', 'วัน เดือน ปี'],
-  ['วค.', 'วิทยาลัยครู'],
-  ['วท.', 'วิทยาลัยเทคนิค'],
-  ['วปอ.', 'วิทยาลัยป้องกันราชอาณาจักร'],
-  ['วว.', 'สถาบันวิจัยวิทยาศาสตร์และเทคโนโลยีแห่งประเทศไทย'],
-  ['วอศ.', 'วิทยาลัยอาชีวศึกษา'],
-  ['ศ.', 'วันศุกร์'],
-  ['ศก', 'จังหวัดศรีสะเกษ'],
-  ['ศธ.', 'กระทรวงศึกษาธิการ'],
-  ['ศน.', 'ศึกษานิเทศก์'],
-  ['ศนท.', 'ศูนย์กลางนิสิตนักศึกษาแห่งประเทศไทย'],
-  ['ศบค.', 'ศูนย์บริหารสถานการณ์แพร่ระบาดของโรคติดเชื้อไวรัสโคโรนา 2019'],
-  ['ศปก.', 'ศูนย์ปฏิบัติการ'],
-  ['ศพฐ.', 'ศูนย์พิสูจน์หลักฐาน'],
-  ['ศรภ.', 'ศูนย์รักษาความปลอดภัย กองบัญชาการกองทัพไทย'],
-  ['ศวฝ.', 'ศูนย์วิจัยและฝึกอบรมด้านสิ่งแวดล้อม'],
-  ['ศสพ.', 'ศูนย์สงครามพิเศษ'],
-  ['ศอ.บต.', 'ศูนย์อำนวยการบริหารจังหวัดชายแดนภาคใต้'],
-  ['ศอ.ปส.', 'ศูนย์อำนวยการป้องกันและปราบปรามยาเสพติดแห่งชาติ'],
-  ['ศอ.รส.', 'ศูนย์อำนวยการรักษาความสงบเรียบร้อย'],
-  ['ศอฉ.', 'ศูนย์อำนวยการแก้ไขสถานการณ์ฉุกเฉิน'],
-  ['ส.', 'วันเสาร์'],
-  ['เสธ.', 'เสนาธิการ'],
-  ['ส.ก.', 'สมาชิกสภากรุงเทพมหานคร'],
-  ['ส.ข.', 'สมาชิกสภาเขต'],
-  ['ส.ค.', 'เดือนสิงหาคม'],
-  ['ส.ค.ส.', 'ส่งความสุข'],
-  ['ส.ต.', 'สิบตรี'],
-  ['ส.ต.ต.', 'สิบตำรวจตรี'],
-  ['ส.ต.ท.', 'สิบตำรวจโท'],
-  ['ส.ต.อ.', 'สิบตำรวจเอก'],
-  ['ส.ท.', 'สมาชิกสภาเทศบาล'],
-  ['ส.ส.', 'สมาชิกสภาผู้แทนราษฎร'],
-  ['ส.ว.', 'สมาชิกวุฒิสภา'],
-  ['ส.ห.', 'สารวัตรทหาร'],
-  ['ส.อ.', 'สิบเอก'],
-  ['ส.อ.ท.', 'สภาอุตสาหกรรมแห่งประเทศไทย'],
-  ['ส.อบต.', 'สมาชิกองค์การบริหารส่วนตำบล'],
-  ['สก', 'จังหวัดสระแก้ว'],
-  ['สกนช.', 'สำนักงานกองทุนน้ำมันเชื้อเพลิง'],
-  ['สกว.', 'สำนักงานกองทุนสนับสนุนการวิจัย'],
-  ['สกศ.', 'สำนักงานคณะกรรมการการศึกษาแห่งชาติ'],
-  ['สข', 'จังหวัดสงขลา'],
-  ['สค', 'จังหวัดสมุทรสาคร'],
-  ['สคบ.', 'สำนักงานคณะกรรมการคุ้มครองผู้บริโภค'],
-  ['สจ.', 'สมาชิกสภาจังหวัด'],
-  ['สจก.', 'สำนักงานจัดหางานกรุงเทพมหานคร'],
-  ['สจจ.', 'สำนักงานจัดหางานจังหวัด'],
-  ['สจร.', 'สำนักงานคณะกรรมการจัดระบบการจราจรทางบก'],
-  ['สจล.', 'สถาบันเทคโนโลยีพระจอมเกล้าคุณทหารลาดกระบัง'],
-  ['สช.', 'สำนักงานคณะกรรมการการศึกษาเอกชน'],
-  ['สฎ', 'จังหวัดสุราษฎร์ธานี'],
-  ['สดร.', 'สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน)'],
-  ['สต', 'จังหวัดสตูล'],
-  ['สตง.', 'สำนักงานตรวจเงินแผ่นดิน'],
-  ['สตช.', 'สำนักงานตำรวจแห่งชาติ'],
-  ['สท', 'จังหวัดสุโขทัย'],
-  ['สทท.', 'สถานีวิทยุโทรทัศน์แห่งประเทศไทย'],
-  ['สทน.', 'สถาบันเทคโนโลยีนิวเคลียร์แห่งชาติ'],
-  ['สทศ.', 'สถาบันทดสอบทางการศึกษาแห่งชาติ (องค์การมหาชน)'],
-  ['สธ.', 'กระทรวงสาธารณสุข'],
-  ['สธค.', 'สำนักงานธนานุเคราะห์'],
-  ['สน', 'จังหวัดสกลนคร'],
-  ['สน.', 'สถานีตำรวจนครบาล'],
-  ['สนข.', 'สำนักงานนโยบายและแผนการขนส่งและจราจร'],
-  ['สนง.', 'สำนักงาน'],
-  ['สนช.', 'สภานิติบัญญัติแห่งชาติ'],
-  ['สนญ.', 'สำนักงานใหญ่'],
-  ['สนนท.', 'สหพันธ์นิสิตนักศึกษาแห่งประเทศไทย'],
-  ['สบ', 'จังหวัดสระบุรี'],
-  ['สบยช.', 'สถาบันบำบัดรักษาและฟื้นฟูผู้ติดยาเสพติดแห่งชาติบรมราชชนนี'],
-  ['สบส.', 'กรมสนับสนุนบริการสุขภาพ'],
-  ['สพฐ.', 'สํานักงานคณะกรรมการการศึกษาขั้นพื้นฐาน'],
-  ['สพม.', 'สำนักงานเขตพื้นที่การศึกษามัธยมศึกษา'],
-  ['สป', 'จังหวัดสมุทรปราการ'],
-  ['สปก.', 'สำนักงานการปฏิรูปที่ดินเพื่อเกษตรกรรม'],
-  ['สปจ.', 'สำนักงานการประถมศึกษาจังหวัด'],
-  ['สปช.', 'สำนักงานคณะกรรมการการประถมศึกษาแห่งชาติ'],
-  ['สปส.', 'สำนักงานประกันสังคม'],
-  ['สปสช.', 'สำนักงานหลักประกันสุขภาพแห่งชาติ'],
-  ['สพ', 'จังหวัดสุพรรณบุรี'],
-  ['สภ.', 'สถานีตำรวจภูธร'],
-  ['สมอ.', 'สำนักงานมาตรฐานผลิตภัณฑ์อุตสาหกรรม'],
-  ['สร', 'จังหวัดสุรินทร์'],
-  ['สว.จร.', 'สารวัตรจราจร'],
-  ['สว.ญ.', 'สารวัตรใหญ่'],
-  ['สว.สส.', 'สารวัตรสืบสวน'],
-  ['สวท.', 'สถานีวิทยุกระจายเสียงแห่งประเทศไทย'],
-  ['สวทช.', 'สำนักงานพัฒนาวิทยาศาสตร์และเทคโนโลยีแห่งชาติ'],
-  ['สวป.', 'สารวัตรปราบปราม'],
-  ['สวล.', 'สำนักงานคณะกรรมการสิ่งแวดล้อมแห่งชาติ'],
-  ['สวส.', 'สํานักงานส่งเสริมวิสาหกิจเพื่อสังคม'],
-  ['สศช.', 'สำนักงานคณะกรรมการพัฒนาการเศรษฐกิจและสังคมแห่งชาติ'],
-  ['สส', 'จังหวัดสมุทรสงคราม'],
-  ['สสจ.', 'สำนักงานสาธารณสุขจังหวัด'],
-  ['สสวท.', 'สถาบันส่งเสริมการสอนวิทยาศาสตร์และเทคโนโลยี'],
-  ['สสร.', 'สมาชิกสภาร่างรัฐธรรมนูญ'],
-  ['สสส.', 'สำนักงานกองทุนสนับสนุนการสร้างเสริมสุขภาพ'],
-  ['สห', 'จังหวัดสิงห์บุรี'],
-  ['สอค.', 'สำนักงานคณะกรรมการการอาชีวศึกษา'],
-  ['สอน.', 'สำนักงานคณะกรรมการอ้อยและน้ำตาลทราย'],
-  ['สอบ.', 'สภาองค์กรของผู้บริโภค'],
-  ['หจก.', 'ห้างหุ้นส่วนจำกัด'],
-  ['หน.', 'หัวหน้า'],
-  ['หรม.', 'หารร่วมมาก (คณิตศาสตร์)'],
-  ['หสน.', 'ห้างหุ้นส่วนสามัญนิติบุคคล'],
-  ['อ.', 'อำเภอ'],
-  ['อคส.', 'องค์การคลังสินค้า'],
-  ['อจ', 'จังหวัดอำนาจเจริญ'],
-  ['อช.', 'อุทยานแห่งชาติ'],
-  ['อด', 'จังหวัดอุดรธานี'],
-  ['อต', 'จังหวัดอุตรดิตถ์'],
-  ['อท', 'จังหวัดอ่างทอง'],
-  ['อน', 'จังหวัดอุทัยธานี'],
-  ['อบ', 'จังหวัดอุบลราชธานี'],
-  ['อบจ.', 'องค์การบริหารส่วนจังหวัด'],
-  ['อบต.', 'องค์การบริหารส่วนตำบล'],
-  ['อภ.', 'องค์การเภสัชกรรม'],
-  ['อย', 'จังหวัดพระนครศรีอยุธยา'],
-  ['อว.', 'กระทรวงการอุดมศึกษา วิทยาศาสตร์ วิจัยและนวัตกรรม'],
-  ['อสม.', 'อาสาสมัครสาธารณสุขประจำหมู่บ้าน'],
-  ['อสมท.', 'องค์การสื่อสารมวลชนแห่งประเทศไทย'],
-  ['อสร.', 'องค์การผลิตอาหารสำเร็จรูป'],
-  ['อสส.', 'อัยการสูงสุด'],
-  ['ฮ.', 'เฮลิคอปเตอร์'],
-  ['ฮ.ศ.', 'ฮิจเราะห์ศักราช'],
-  ['ทอ', 'ทหารอากาศ'],
-  ['ทบ', 'ทหารบก'],
-  ['ทร', 'ทหารเรือ'],
-  ['รพ', 'โรงพยาบาล'],
-  ['รร', 'โรงเรียน'],
-  ['ทม', 'เทศบาลเมือง'],
-  ['ทต', 'เทศบาลตำบล'],
-  ['ทน', 'เทศบาลนคร'],
-  ['สนง', 'สำนักงาน'],
-  ['อบจ', 'องค์การบริหารส่วนจังหวัด'],
-  ['อบต', 'องค์การบริหารส่วนตำบล'],
-];
+// Common Thai abbreviations used in the lab's domain — moved out of code
+// into backend/data/abbreviations.json so this file isn't bloated by ~470
+// hardcoded rows. Bidirectional: search query in either form matches a
+// haystack containing the other. Mirror of public/app.js#ABBREVIATIONS —
+// keep them in sync when adding pairs.
+const ABBREVIATIONS = require('./data/abbreviations.json');
 // One-way expansion: SHORT → LONG only. Reverse direction would over-match
 // because 2-letter abbreviations like "ทอ" are substrings of many Thai words.
 function expandSearchToken(token) {
@@ -1258,10 +963,25 @@ async function fuzzyScoreAsync(query, task) {
   const qLow = String(query).toLowerCase().trim();
   if (!qLow) return 1;
   const grp = task.group_id ? await getGroup(task.group_id) : null;
+  // Connections ที่ผูกกับ group นี้ — ค้นด้วยชื่อบริษัท/lobbyist/หน่วยงาน หรือชื่อ liaison
+  // ก็จะเจอ tasks ใน group ที่มี connection ตรงนั้น
+  let connHay = '';
+  if (grp && Array.isArray(grp.connection_ids) && grp.connection_ids.length > 0) {
+    const conns = await q(
+      `SELECT company, contact_name, liaison_name, topics FROM connections WHERE id = ANY($1)`,
+      [grp.connection_ids]
+    );
+    connHay = conns.map(c => [c.company, c.contact_name, c.liaison_name, c.topics].filter(Boolean).join(' ')).join(' ');
+  }
+  // เพิ่ม budget เป็น string + status + categories + connections ใน haystack สำหรับ search
   const haystack = [
     task.title, task.description, task.target,
     grp?.name, grp?.description,
+    task.budget != null ? String(task.budget) : '',
+    task.status,
     ...(task.assignees || []).map(a => a.name),
+    ...(task.categories || []).map(c => c.name),
+    connHay,
   ].filter(Boolean).join(' ').toLowerCase();
   if (!haystack) return 0;
   // Direct phrase match (fastest, highest weight)
@@ -1280,13 +1000,51 @@ async function fuzzyScoreAsync(query, task) {
 }
 
 async function listTasks(filter = {}) {
+  // Single-query implementation — เดิมเป็น N+1 (รัน attachAssignees ทุก row =
+  // 3 queries ต่อ task → 200 tasks = 600+ queries). ใช้ subquery + json_agg
+  // เพื่อรวม assignees + categories + group target ใน 1 ครั้งเดียว
   // By default exclude soft-deleted (recycle bin). Set filter.includeDeleted=true
   // to see them; the trash UI uses listTrashedTasks() instead.
-  let sql = 'SELECT t.* FROM tasks t WHERE t.deleted_at IS NULL';
+  let sql = `
+    SELECT t.*,
+      COALESCE(g.target, '') AS group_target,
+      (SELECT COALESCE(json_agg(
+                json_build_object(
+                  'id', m.id, 'name', m.name, 'role', m.role,
+                  'email', m.email, 'phone', m.phone,
+                  'color', m.color, 'avatar_url', m.avatar_url,
+                  'task_role', ta.task_role, 'is_supreme', ta.is_supreme,
+                  'points_share', ta.points_share, 'claimed_self', ta.claimed_self,
+                  'assigned_at', ta.assigned_at, 'proposed_at', ta.proposed_at
+                )
+                ORDER BY ta.is_supreme DESC, ta.task_role DESC, ta.assigned_at ASC
+              ), '[]'::json)
+       FROM task_assignees ta JOIN members m ON m.id = ta.member_id
+       WHERE ta.task_id = t.id
+      ) AS assignees,
+      (SELECT COALESCE(json_agg(json_build_object('id', c.id, 'name', c.name) ORDER BY c.name ASC), '[]'::json)
+       FROM task_categories tc JOIN categories c ON c.id = tc.category_id
+       WHERE tc.task_id = t.id
+      ) AS categories
+    FROM tasks t
+    LEFT JOIN task_groups g ON g.id = t.group_id
+    WHERE t.deleted_at IS NULL`;
   const params = [];
   let i = 1;
   if (filter.group)  { sql += ` AND t.group_id = $${i++}`; params.push(filter.group); }
-  if (filter.status) { sql += ` AND t.status = $${i++}`;   params.push(filter.status); }
+  if (filter.status) {
+    // รองรับ multi-status (comma-separated หรือ array) เช่น status=in_progress,completed
+    const statuses = Array.isArray(filter.status)
+      ? filter.status
+      : String(filter.status).split(',').map(s => s.trim()).filter(Boolean);
+    if (statuses.length === 1) {
+      sql += ` AND t.status = $${i++}`;
+      params.push(statuses[0]);
+    } else if (statuses.length > 1) {
+      sql += ` AND t.status = ANY($${i++})`;
+      params.push(statuses);
+    }
+  }
   if (filter.member) {
     sql += ` AND EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.member_id = $${i++})`;
     params.push(filter.member);
@@ -1295,7 +1053,7 @@ async function listTasks(filter = {}) {
     sql += ' AND NOT EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id)';
   }
   if (filter.target) {
-    sql += ` AND EXISTS (SELECT 1 FROM task_groups g WHERE g.id = t.group_id AND LOWER(g.target) LIKE $${i++})`;
+    sql += ` AND LOWER(COALESCE(g.target, '')) LIKE $${i++}`;
     params.push('%' + String(filter.target).toLowerCase() + '%');
   }
   // ISO date strings sort lexically the same as date order — no need for ::date cast
@@ -1307,13 +1065,28 @@ async function listTasks(filter = {}) {
     points:        't.points DESC',
     created:       't.created_at ASC',
     created_desc:  't.created_at DESC',
+    // เพิ่ม sort: ชื่อโครงการ (group.name), หน่วยงาน (target), งบประมาณ, สถานะ
+    group_name:      'g.name ASC NULLS LAST, t.created_at ASC',
+    group_name_desc: 'g.name DESC NULLS LAST, t.created_at ASC',
+    target:          "COALESCE(g.target, t.target) ASC NULLS LAST, t.created_at ASC",
+    target_desc:     "COALESCE(g.target, t.target) DESC NULLS LAST, t.created_at ASC",
+    budget:          't.budget ASC NULLS LAST, t.created_at ASC',
+    budget_desc:     't.budget DESC NULLS LAST, t.created_at ASC',
+    status:          't.status ASC, t.created_at ASC',
+    status_desc:     't.status DESC, t.created_at ASC',
   };
   const sortKey = (filter.sort || 'created') + (filter.sort && filter.dir === 'desc' ? '_desc' : '');
   const orderBy = sortMap[sortKey] || sortMap[filter.sort] || sortMap.created;
   sql += ' ORDER BY ' + orderBy;
 
   const rows = await q(sql, params);
-  let attached = await Promise.all(rows.map(attachAssignees));
+  // Map shape ให้เหมือนของเดิม: target field มาจาก group.target ถ้ามี
+  // group_id, ไม่งั้นใช้ t.target ของ task เอง (backward-compatible)
+  let attached = rows.map(r => {
+    const target = r.group_id ? r.group_target : (r.target || '');
+    const { group_target, ...rest } = r;
+    return { ...rest, target, assignees: r.assignees || [], categories: r.categories || [] };
+  });
   if (filter.q) {
     const scored = await Promise.all(attached.map(async t => ({ t, score: await fuzzyScoreAsync(filter.q, t) })));
     attached = scored.filter(x => x.score > 0).sort((a, b) => b.score - a.score).map(x => x.t);
@@ -1359,12 +1132,19 @@ async function createTask(input, opts = {}) {
     }
   }
 
+  // Budget — optional; ยอมรับ number, string ที่ parse ได้, หรือ null/undefined
+  let budget = null;
+  if (input.budget !== undefined && input.budget !== null && input.budget !== '') {
+    const b = Number(input.budget);
+    if (Number.isFinite(b) && b >= 0) budget = b;
+  }
   const t = {
     id: uid(),
     title: String(input.title || '').trim(),
     description: String(input.description || '').trim(),
     group_id: input.group_id || null,
     points: Number.isFinite(+input.points) ? Math.max(0, +input.points) : 0,
+    budget,
     start_date: startDate,
     deadline:   input.deadline   || null,
     end_time:   endTime,
@@ -1378,33 +1158,54 @@ async function createTask(input, opts = {}) {
     created_at: nowIso(),
     completed_at: status === 'completed' ? nowIso() : null,
   };
-  await exec(
-    `INSERT INTO tasks
-     (id, title, description, group_id, points, start_date, deadline, end_time, status, target, points_phase,
-      kind, location_type, location_detail, created_by, created_at, completed_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
-    [t.id, t.title, t.description, t.group_id, t.points, t.start_date, t.deadline, t.end_time, t.status, t.target, t.points_phase,
-     t.kind, t.location_type, t.location_detail, t.created_by, t.created_at, t.completed_at]
-  );
-
-  for (const spec of validSpecs) {
-    const points_share = (points_phase === 'confirmed' && Number.isFinite(+spec.points_share))
-      ? Math.max(0, +spec.points_share) : 0;
-    const proposed_at = (points_phase !== 'none' && points_share > 0) ? nowIso() : null;
-    await exec(
-      `INSERT INTO task_assignees (task_id, member_id, task_role, is_supreme, points_share, claimed_self, assigned_at, proposed_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,
-      [t.id, spec.id, 'member', 0, points_share, 0, nowIso(), proposed_at]
-    );
-    if (t.group_id) await addGroupMember(t.group_id, spec.id);
-  }
+  // Validate category_ids ก่อนเข้า transaction (read-only, ไม่ต้อง atomic
+  // กับ task insert)
+  const validCategoryIds = [];
   if (Array.isArray(input.category_ids)) {
     for (const cid of input.category_ids) {
       if (cid && await q1('SELECT 1 FROM categories WHERE id = $1', [cid])) {
-        await exec('INSERT INTO task_categories (task_id, category_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [t.id, cid]);
+        validCategoryIds.push(cid);
       }
     }
   }
+
+  // Atomic write: task + assignees + categories ใน 1 transaction
+  // crash กลางทาง = ROLLBACK ทั้งหมด — ไม่มี task ที่ไม่มี assignee/category
+  // (auto-refresh _summary.md ของ group ถูกเรียกหลัง tx commit)
+  await withTx(async (tx) => {
+    await tx.exec(
+      `INSERT INTO tasks
+       (id, title, description, group_id, points, budget, start_date, deadline, end_time, status, target, points_phase,
+        kind, location_type, location_detail, created_by, created_at, completed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+      [t.id, t.title, t.description, t.group_id, t.points, t.budget, t.start_date, t.deadline, t.end_time, t.status, t.target, t.points_phase,
+       t.kind, t.location_type, t.location_detail, t.created_by, t.created_at, t.completed_at]
+    );
+    for (const spec of validSpecs) {
+      const points_share = (points_phase === 'confirmed' && Number.isFinite(+spec.points_share))
+        ? Math.max(0, +spec.points_share) : 0;
+      const proposed_at = (points_phase !== 'none' && points_share > 0) ? nowIso() : null;
+      await tx.exec(
+        `INSERT INTO task_assignees (task_id, member_id, task_role, is_supreme, points_share, claimed_self, assigned_at, proposed_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,
+        [t.id, spec.id, 'member', 0, points_share, 0, nowIso(), proposed_at]
+      );
+      // เพิ่ม assignee เข้า group_members ใน tx เดียวกัน (idempotent —
+      // ON CONFLICT DO NOTHING ใน addGroupMember)
+      if (t.group_id) {
+        await tx.exec(
+          'INSERT INTO group_members (group_id, member_id, joined_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+          [t.group_id, spec.id, nowIso()]
+        );
+      }
+    }
+    for (const cid of validCategoryIds) {
+      await tx.exec('INSERT INTO task_categories (task_id, category_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [t.id, cid]);
+    }
+  });
+
+  // Auto-refresh _summary.md ของกลุ่ม (fire-and-forget, ไม่ block response)
+  if (t.group_id) autoRefreshGroupSummary(t.group_id);
   return getTask(t.id);
 }
 
@@ -1457,10 +1258,20 @@ async function updateTask(id, patch) {
     }
   }
 
+  // Budget patch — รองรับ null/''/0/positive number
+  let nextBudget = cur.budget;
+  if (patch.budget !== undefined) {
+    if (patch.budget === null || patch.budget === '') nextBudget = null;
+    else {
+      const b = Number(patch.budget);
+      nextBudget = Number.isFinite(b) && b >= 0 ? b : cur.budget;
+    }
+  }
+
   await exec(
     `UPDATE tasks SET title=$1, description=$2, group_id=$3, points=$4, start_date=$5, deadline=$6,
                       status=$7, target=$8, points_phase=$9, kind=$10, location_type=$11,
-                      location_detail=$12, completed_at=$13, end_time=$14 WHERE id=$15`,
+                      location_detail=$12, completed_at=$13, end_time=$14, budget=$15 WHERE id=$16`,
     [
       patch.title       !== undefined ? String(patch.title).trim()       : cur.title,
       patch.description !== undefined ? String(patch.description).trim() : cur.description,
@@ -1476,6 +1287,7 @@ async function updateTask(id, patch) {
       nextLocDetail,
       completed_at,
       nextEndTime,
+      nextBudget,
       id,
     ]
   );
@@ -1511,6 +1323,11 @@ async function updateTask(id, patch) {
       }
     }
   }
+  // Auto-refresh _summary.md ของกลุ่มทั้งของเก่า (ถ้า move group) และของใหม่
+  const oldGid = cur.group_id;
+  const newGid = patch.group_id !== undefined ? (patch.group_id || null) : cur.group_id;
+  if (oldGid)                 autoRefreshGroupSummary(oldGid);
+  if (newGid && newGid !== oldGid) autoRefreshGroupSummary(newGid);
   return getTask(id);
 }
 async function deleteTask(id) {
@@ -1627,13 +1444,23 @@ async function bulkSetShares(taskId, sharesMap) {
   if (!['leader_review','final_review'].includes(t.points_phase)) {
     throw new Error('แก้ไข Point ได้เฉพาะขั้นตอนตรวจสอบหัวหน้ากลุ่ม / ที่ประชุม');
   }
-  for (const [memberId, pts] of Object.entries(sharesMap || {})) {
-    const exists = await getAssignee(taskId, memberId);
-    if (exists) {
-      await exec('UPDATE task_assignees SET points_share = $1 WHERE task_id = $2 AND member_id = $3',
-        [Math.max(0, +pts || 0), taskId, memberId]);
+  // Atomic update — ทั้ง batch ของ shares ต้องสำเร็จด้วยกัน หรือไม่สำเร็จ
+  // ทั้ง batch. กันสถานการณ์ที่ user A กำหนด 50/50 สำเร็จ A ก่อน แล้ว crash
+  // → คนได้ 50 แต่อีกคนยังเป็นค่าเก่า (รวมไม่ตรงตามที่ leader ตั้งใจ)
+  await withTx(async (tx) => {
+    for (const [memberId, pts] of Object.entries(sharesMap || {})) {
+      const exists = await tx.q1(
+        'SELECT 1 FROM task_assignees WHERE task_id = $1 AND member_id = $2',
+        [taskId, memberId]
+      );
+      if (exists) {
+        await tx.exec(
+          'UPDATE task_assignees SET points_share = $1 WHERE task_id = $2 AND member_id = $3',
+          [Math.max(0, +pts || 0), taskId, memberId]
+        );
+      }
     }
-  }
+  });
   return getTask(taskId);
 }
 
@@ -1646,17 +1473,32 @@ async function listConnections() {
 async function getConnection(id) {
   return q1('SELECT * FROM connections WHERE id = $1', [id]);
 }
-const VALID_CONNECTION_KIND = ['personal', 'agency'];
+// 3 ประเภท: 'personal' = สมาชิก lab ติดต่อบริษัท, 'agency' = หน่วยงานที่เราทำงานให้,
+// 'lobbyist' = บุคคลภายนอกที่เป็น lobbyist กับหน่วยงาน
+const VALID_CONNECTION_KIND = ['personal', 'agency', 'lobbyist'];
 async function createConnection(input) {
   if (!input.member_id || !(await getMember(input.member_id))) throw new Error('invalid member_id');
-  if (!input.company || !String(input.company).trim()) throw new Error('company required');
   const kind = VALID_CONNECTION_KIND.includes(input.kind) ? input.kind : 'personal';
   const liaison_name = String(input.liaison_name || '').trim();
-  if (kind === 'agency' && !liaison_name) throw new Error('ชื่อผู้ประสานงานจำเป็นสำหรับ agency contact');
+  // Validation per kind:
+  //  - personal: ต้องมี company (ชื่อบริษัท)
+  //  - agency: ต้องมี company (ชื่อหน่วยงาน) + liaison_name (ผู้ประสานงาน)
+  //  - lobbyist: เก็บแค่ข้อมูลคน → ต้องมี liaison_name; company ไม่จำเป็น (fallback = liaison_name)
+  if (kind === 'lobbyist') {
+    if (!liaison_name) throw new Error('ชื่อ lobbyist จำเป็น');
+  } else {
+    if (!input.company || !String(input.company).trim()) throw new Error('company required');
+    if (kind === 'agency' && !liaison_name) throw new Error('ชื่อผู้ประสานงานจำเป็นสำหรับ agency contact');
+  }
+  // ตั้ง company สำหรับ lobbyist เป็น liaison_name เพื่อให้ schema NOT NULL ผ่าน
+  // (lobbyist ไม่มี company ของตัวเอง — ใช้ชื่อคนเป็น label)
+  const companyVal = kind === 'lobbyist'
+    ? (String(input.company || '').trim() || liaison_name)
+    : String(input.company).trim();
   const c = {
     id: uid(),
     member_id: input.member_id,
-    company: String(input.company).trim(),
+    company: companyVal,
     contact_name: String(input.contact_name || '').trim(),
     contact_role: String(input.contact_role || '').trim(),
     phone: String(input.phone || '').trim(),
@@ -1679,13 +1521,21 @@ async function updateConnection(id, patch) {
   if (!cur) return null;
   const nextKind = patch.kind !== undefined && VALID_CONNECTION_KIND.includes(patch.kind) ? patch.kind : (cur.kind || 'personal');
   const nextLiaison = patch.liaison_name !== undefined ? String(patch.liaison_name).trim() : (cur.liaison_name || '');
-  if (nextKind === 'agency' && !nextLiaison) throw new Error('ชื่อผู้ประสานงานจำเป็นสำหรับ agency contact');
+  // Validation per kind (เหมือน createConnection)
+  if (nextKind === 'lobbyist') {
+    if (!nextLiaison) throw new Error('ชื่อ lobbyist จำเป็น');
+  } else if (nextKind === 'agency' && !nextLiaison) {
+    throw new Error('ชื่อผู้ประสานงานจำเป็นสำหรับ agency contact');
+  }
+  // company: ถ้า lobbyist → fallback เป็น liaison_name (ไม่มี company ของตัวเอง)
+  const rawCompany = patch.company !== undefined ? String(patch.company).trim() : cur.company;
+  const nextCompany = nextKind === 'lobbyist' ? (rawCompany || nextLiaison) : rawCompany;
   await exec(
     `UPDATE connections SET member_id=$1, company=$2, contact_name=$3, contact_role=$4,
                             phone=$5, email=$6, notes=$7, kind=$8, topics=$9, liaison_name=$10 WHERE id=$11`,
     [
       patch.member_id    !== undefined ? patch.member_id : cur.member_id,
-      patch.company      !== undefined ? String(patch.company).trim() : cur.company,
+      nextCompany,
       patch.contact_name !== undefined ? String(patch.contact_name).trim() : cur.contact_name,
       patch.contact_role !== undefined ? String(patch.contact_role).trim() : cur.contact_role,
       patch.phone        !== undefined ? String(patch.phone).trim()  : cur.phone,
@@ -1948,6 +1798,7 @@ async function recordFile({ task_id, group_id, uploaded_by, filename, original_n
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
     [f.id, f.task_id, f.group_id, f.uploaded_by, f.filename, f.original_name, f.mimetype, f.size, f.kind, f.url, f.label, f.subfolder, f.doc_type, f.uploaded_at]
   );
+  if (f.group_id) autoRefreshGroupSummary(f.group_id);
   return f;
 }
 async function recordUrl({ task_id, group_id, uploaded_by, url, label }) {
@@ -1964,6 +1815,7 @@ async function recordUrl({ task_id, group_id, uploaded_by, url, label }) {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
     [f.id, f.task_id, f.group_id, f.uploaded_by, f.filename, f.original_name, f.mimetype, f.size, f.kind, f.url, f.label, f.uploaded_at]
   );
+  if (f.group_id) autoRefreshGroupSummary(f.group_id);
   return f;
 }
 async function listFilesForTask(taskId) {
@@ -2009,6 +1861,7 @@ async function deleteFile(id) {
     const onDisk = filePath(f);   // honours subfolder column
     try { if (fs.existsSync(onDisk)) fs.unlinkSync(onDisk); } catch {}
   }
+  if (f.group_id) autoRefreshGroupSummary(f.group_id);
   return true;
 }
 
@@ -2071,6 +1924,35 @@ async function isGroupMember(groupId, memberId) {
 }
 async function groupIdsForMember(memberId) {
   return (await q('SELECT group_id FROM group_members WHERE member_id = $1', [memberId])).map(r => r.group_id);
+}
+
+// ===== Group ↔ Connections =====
+// คืน list ของ connection_ids ที่ group นี้เลือกไว้ (เรียงตามลำดับเพิ่ม)
+async function listGroupConnections(groupId) {
+  return (await q(
+    `SELECT gc.connection_id, gc.added_at,
+            c.company, c.contact_name, c.kind, c.liaison_name, c.member_id
+     FROM group_connections gc
+     JOIN connections c ON c.id = gc.connection_id
+     WHERE gc.group_id = $1
+     ORDER BY gc.added_at ASC`,
+    [groupId]
+  ));
+}
+// แทนที่ rows ทั้งหมดของ group ด้วย set ใหม่ — ใช้ตอน create/update group
+async function setGroupConnections(groupId, connectionIds) {
+  const ids = Array.isArray(connectionIds) ? connectionIds.filter(Boolean) : [];
+  await q('DELETE FROM group_connections WHERE group_id = $1', [groupId]);
+  if (ids.length === 0) return;
+  const now = nowIso();
+  // insert ทีละ row (จำนวนน้อยอยู่แล้ว — ไม่ต้อง batch)
+  for (const cid of ids) {
+    await q(
+      `INSERT INTO group_connections (group_id, connection_id, added_at) VALUES ($1, $2, $3)
+       ON CONFLICT (group_id, connection_id) DO NOTHING`,
+      [groupId, cid, now]
+    );
+  }
 }
 
 // ===== Group invitations =====
@@ -2196,6 +2078,20 @@ async function createCategory(name) {
   const c = { id: uid(), name: trimmed, created_at: nowIso() };
   await exec('INSERT INTO categories (id, name, created_at) VALUES ($1, $2, $3)', [c.id, c.name, c.created_at]);
   return c;
+}
+async function getCategory(id) { return q1('SELECT * FROM categories WHERE id = $1', [id]); }
+async function updateCategory(id, name) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) throw new Error('name required');
+  // กันชื่อซ้ำกับ category อื่น (ของตัวเองยอม)
+  const dup = await q1('SELECT id FROM categories WHERE name = $1 AND id <> $2', [trimmed, id]);
+  if (dup) throw new Error('มีประเภทชื่อนี้อยู่แล้ว');
+  await exec('UPDATE categories SET name = $1 WHERE id = $2', [trimmed, id]);
+  return await getCategory(id);
+}
+async function deleteCategory(id) {
+  // task_categories ON DELETE CASCADE → link ทุก task ที่ใช้ tag นี้จะหายอัตโนมัติ
+  await exec('DELETE FROM categories WHERE id = $1', [id]);
 }
 
 // ===== Leaves =====
@@ -2410,14 +2306,53 @@ async function listWhiteboards() {
             LEFT JOIN members m ON m.id = w.created_by
             ORDER BY w.updated_at DESC`);
 }
-async function createWhiteboard(name, created_by) {
+async function createWhiteboard(name, created_by, opts = {}) {
   const id = uid();
   const now = nowIso();
-  await exec(
-    'INSERT INTO whiteboards (id, name, canvas_json, created_by, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6)',
-    [id, name, '{"version":"5.3.1","objects":[]}', created_by || null, now, now]
-  );
+  const visibility = opts.visibility === 'private' ? 'private' : 'public';
+  await withTx(async (tx) => {
+    await tx.exec(
+      'INSERT INTO whiteboards (id, name, canvas_json, created_by, created_at, updated_at, visibility) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [id, name, '{"version":"5.3.1","objects":[]}', created_by || null, now, now, visibility]
+    );
+    // Creator auto-added เป็น owner (สำหรับ private board เท่านั้น)
+    if (visibility === 'private' && created_by) {
+      await tx.exec(
+        'INSERT INTO whiteboard_members (board_id, member_id, role, added_at) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING',
+        [id, created_by, 'owner', now]
+      );
+    }
+  });
   return getWhiteboard(id);
+}
+
+// ACL helpers for whiteboard
+async function whiteboardCanAccess(boardId, memberId, memberRole) {
+  if (!boardId || !memberId) return false;
+  if (memberRole === 'admin') return true;
+  const board = await q1('SELECT visibility, created_by FROM whiteboards WHERE id = $1', [boardId]);
+  if (!board) return false;
+  if (board.visibility === 'public') return true;       // public = ทุก member เข้าได้
+  if (board.created_by === memberId) return true;       // creator
+  const m = await q1(
+    'SELECT 1 FROM whiteboard_members WHERE board_id = $1 AND member_id = $2',
+    [boardId, memberId]
+  );
+  return !!m;
+}
+async function whiteboardAddMember(boardId, memberId, role = 'editor') {
+  await exec(
+    'INSERT INTO whiteboard_members (board_id, member_id, role, added_at) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING',
+    [boardId, memberId, role, nowIso()]
+  );
+}
+async function whiteboardRemoveMember(boardId, memberId) {
+  return (await exec('DELETE FROM whiteboard_members WHERE board_id = $1 AND member_id = $2', [boardId, memberId])) > 0;
+}
+async function whiteboardListMembers(boardId) {
+  return q(`SELECT wm.member_id, wm.role, wm.added_at, m.name, m.email, m.avatar_url, m.color
+            FROM whiteboard_members wm JOIN members m ON m.id = wm.member_id
+            WHERE wm.board_id = $1 ORDER BY wm.added_at ASC`, [boardId]);
 }
 async function getWhiteboard(id) {
   return q1(`SELECT w.*, m.name AS creator_name FROM whiteboards w
@@ -2450,6 +2385,47 @@ async function listRecordings({ memberId = null, all = false } = {}) {
 async function getRecording(id) {
   const r = await q1(`SELECT * FROM recordings WHERE id=$1`, [id]);
   return r;
+}
+// ===== Audit log =====
+async function logAudit({ actor_id, actor_name, action, target_kind, target_id, payload, ip }) {
+  try {
+    await exec(
+      `INSERT INTO audit_events (id, actor_id, actor_name, action, target_kind, target_id, payload, ip, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [uid(), actor_id || null, String(actor_name || ''), String(action),
+       String(target_kind || ''), String(target_id || ''),
+       typeof payload === 'string' ? payload : JSON.stringify(payload || {}),
+       String(ip || ''), nowIso()]
+    );
+  } catch (e) {
+    // Audit log failure ไม่ควรล้ม operation — log แล้วไปต่อ
+    console.warn('[audit] failed:', e.message);
+  }
+}
+async function listAuditEvents({ limit = 200, action, target_kind, actor_id, since } = {}) {
+  const where = []; const params = [];
+  if (action)      { params.push(action);       where.push(`action = $${params.length}`); }
+  if (target_kind) { params.push(target_kind);  where.push(`target_kind = $${params.length}`); }
+  if (actor_id)    { params.push(actor_id);     where.push(`actor_id = $${params.length}`); }
+  if (since)       { params.push(since);        where.push(`created_at >= $${params.length}`); }
+  params.push(Math.min(1000, +limit || 200));
+  return q(
+    `SELECT * FROM audit_events ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+     ORDER BY created_at DESC LIMIT $${params.length}`,
+    params
+  );
+}
+
+// Recordings ที่อยู่ใน state error — ใช้สำหรับ retry worker
+async function listErroredRecordings(limit = 20) {
+  return q(
+    `SELECT id, transcript_status, summary_status, created_at
+     FROM recordings
+     WHERE transcript_status = 'error' OR summary_status = 'error'
+     ORDER BY created_at DESC
+     LIMIT $1`,
+    [limit]
+  );
 }
 async function createRecording({ id, filename, label, mime, size_bytes, duration_ms, member_id }) {
   await exec(
@@ -2506,6 +2482,33 @@ async function updateComment(id, body) {
   );
   return getComment(id);
 }
+// Mentions ของสมาชิก — query comments ที่มี "@<member.name>" ใน body
+// ใช้สำหรับ notification เมื่อมีคน mention ผู้ใช้ปัจจุบัน
+// sinceIso = ISO date string; default = 14 วันที่ผ่านมา
+async function listMentionsForMember(memberId, sinceIso = null) {
+  const m = await getMember(memberId);
+  if (!m || !m.name) return [];
+  const since = sinceIso || new Date(Date.now() - 14 * 86400_000).toISOString();
+  // LIKE pattern — escape % _ \ ใน member name เพื่อกัน wildcard injection
+  const escaped = m.name.replace(/[\\%_]/g, '\\$&');
+  const pattern = '%@' + escaped + '%';
+  return q(`
+    SELECT c.id, c.task_id, c.member_id, c.body, c.created_at, c.updated_at,
+           m.name AS member_name, m.color AS member_color, m.avatar_url,
+           t.title AS task_title, t.group_id, g.name AS group_name, g.color AS group_color
+    FROM task_comments c
+    JOIN members m ON m.id = c.member_id
+    JOIN tasks   t ON t.id = c.task_id  AND t.deleted_at IS NULL
+    LEFT JOIN task_groups g ON g.id = t.group_id
+    WHERE c.deleted_at IS NULL
+      AND c.body LIKE $1 ESCAPE '\\'
+      AND c.created_at > $2
+      AND c.member_id != $3   -- ไม่ต้องแจ้งเตือนตัวเอง
+    ORDER BY c.created_at DESC
+    LIMIT 50
+  `, [pattern, since, memberId]);
+}
+
 async function deleteComment(id) {
   // Soft-delete so threads keep their continuity
   return (await exec(
@@ -2527,10 +2530,17 @@ async function listTrashedTasks() {
   `);
 }
 async function softDeleteTask(id) {
-  return (await exec(`UPDATE tasks SET deleted_at=$1 WHERE id=$2 AND deleted_at IS NULL`, [nowIso(), id])) > 0;
+  // ดึง group_id ก่อนลบเพื่อ refresh _summary.md หลังจาก soft delete
+  const cur = await q1('SELECT group_id FROM tasks WHERE id = $1', [id]);
+  const ok = (await exec(`UPDATE tasks SET deleted_at=$1 WHERE id=$2 AND deleted_at IS NULL`, [nowIso(), id])) > 0;
+  if (ok && cur?.group_id) autoRefreshGroupSummary(cur.group_id);
+  return ok;
 }
 async function restoreTask(id) {
-  return (await exec(`UPDATE tasks SET deleted_at=NULL WHERE id=$1`, [id])) > 0;
+  const cur = await q1('SELECT group_id FROM tasks WHERE id = $1', [id]);
+  const ok = (await exec(`UPDATE tasks SET deleted_at=NULL WHERE id=$1`, [id])) > 0;
+  if (ok && cur?.group_id) autoRefreshGroupSummary(cur.group_id);
+  return ok;
 }
 async function purgeTask(id) {
   return (await exec(`DELETE FROM tasks WHERE id=$1 AND deleted_at IS NOT NULL`, [id])) > 0;
@@ -2625,7 +2635,10 @@ module.exports = {
   listMembers, getMember, getMemberFull, findMemberByName,
   createMember, updateMember, setMemberPassword, setMemberAvatar, deleteMember,
   listGroups, getGroup, createGroup, updateGroup, deleteGroup, isGroupLeader,
+  softDeleteGroup, restoreGroup, purgeGroup, listTrashedGroups,
   listTasks, getTask, createTask, updateTask, deleteTask, bumpIcsSequence,
+  listErroredRecordings,
+  logAudit, listAuditEvents,
   getSetting, setSetting, listSettings,
   getSetting, setSetting, listSettings,
   claimTask, dropTask, getAssignee, isAssigned, isLeader, isSupremeLeader,
@@ -2640,14 +2653,17 @@ module.exports = {
   requestDeadline, listDeadlineRequests, decideDeadline,
   requestPoints, listPointRequests, decidePoints,
   listLeaves, getLeave, listLeavesForMember, createLeave, updateLeave, deleteLeave,
-  listCategories, createCategory,
+  listCategories, createCategory, getCategory, updateCategory, deleteCategory,
   createInvitation, getInvitation, listAllInvitations, decideInvitation, claimGroup,
   addGroupMember, removeGroupMember, listGroupMembers, isGroupMember, groupIdsForMember,
+  listGroupConnections, setGroupConnections,
   createGroupInvitation, getGroupInvitation, listAllGroupInvitations, decideGroupInvitation,
   getStats, getPointLedger, reset,
   listWhiteboards, createWhiteboard, getWhiteboard, updateWhiteboardCanvas, deleteWhiteboard,
+  whiteboardCanAccess, whiteboardAddMember, whiteboardRemoveMember, whiteboardListMembers,
   listRecordings, getRecording, createRecording, updateRecording, deleteRecording,
   listTaskComments, getComment, createComment, updateComment, deleteComment,
+  listMentionsForMember,
   listTrashedTasks, softDeleteTask, restoreTask, purgeTask, purgeOldTrash,
   listPolls, getPoll, createPoll, closePoll, deletePoll, votePoll,
 };
