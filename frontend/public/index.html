@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#4f46e5">
@@ -14,6 +14,56 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Embed mode — runs BEFORE any CSS / app.js loads so the chrome is hidden
+       from the very first paint (no flash of full UI). The CSS lives INLINE
+       here (not in style.css) so it can't be served stale from cache, and
+       so it can use `!important` rules to defeat any later main-app CSS that
+       might reset display. Triggered by `?embed=task|meeting|group&id=X`. -->
+  <script>
+    if (new URLSearchParams(location.search).has('embed')) {
+      document.documentElement.classList.add('embed-mode');
+    }
+    // Theme — apply 'theme-dark' class before first paint to prevent FOUC.
+    // Saved value 'dark' = forced dark; 'light' = forced light; '' or absent =
+    // Auto (follow OS prefers-color-scheme). Effective theme = explicit value
+    // OR OS preference if Auto. App.js syncs this on load + OS-change events.
+    try {
+      var _saved = localStorage.getItem('sml_theme');
+      var _isDark = _saved === 'dark' ||
+        (_saved !== 'light' && matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+      if (_isDark) document.documentElement.classList.add('theme-dark');
+      if (_saved === 'dark' || _saved === 'light') {
+        document.documentElement.setAttribute('data-theme', _saved);
+      }
+    } catch (e) {}
+  </script>
+  <style>
+    html.embed-mode #topbar,
+    html.embed-mode #tabbar,
+    html.embed-mode #desktop-nav,
+    html.embed-mode #login-screen,
+    html.embed-mode #pages,
+    html.embed-mode .page-container,
+    html.embed-mode .ios-tabbar,
+    html.embed-mode .ios-topbar { display: none !important; }
+    html.embed-mode body { background: #f8fafc !important; }
+    html.embed-mode #app-shell { display: block !important; }
+    html.embed-mode #modal {
+      position: static !important;
+      inset: auto !important;
+      background: transparent !important;
+      padding: 0 !important;
+      display: flex !important;
+    }
+    html.embed-mode #modal > div {
+      width: 100% !important;
+      max-width: none !important;
+      max-height: 100vh !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      height: 100vh !important;
+    }
+  </style>
   <link rel="stylesheet" href="style.css" />
   <!-- flatpickr — replaces native date / datetime inputs so the picker shows
        dd/mm/yyyy + 24-hour time on every browser (native pickers follow OS
@@ -35,7 +85,7 @@
       <form id="login-form" class="space-y-3">
         <div>
           <label class="ios-label">ชื่อผู้ใช้</label>
-          <input id="login-name" class="ios-input" autocomplete="username" placeholder="ชื่อ-นามสกุล" required>
+          <input id="login-name" class="ios-input" autocomplete="username" placeholder="ชื่อ" required>
         </div>
         <div>
           <label class="ios-label">รหัสผ่าน (PIN)</label>
@@ -60,8 +110,15 @@
 
         <!-- Desktop tab nav — appears at lg (1024+) so iPad portrait still uses
              the bottom tabbar (6 tabs don't fit alongside title+actions at 768-1023). -->
+        <!-- Order: home → overview/summary → todo → calendar → people → profile
+             Overview ซ่อนจาก non-boss, Summary ซ่อนจาก boss → ตำแหน่ง 2 มี 1 ตัวเสมอ -->
+        <!-- Order:
+             • boss:     home → overview → todo → calendar → people → profile
+             • non-boss: home → todo → calendar → people → summary → profile
+             Overview อยู่ position 2 (boss-only), Summary อยู่ position 6 (hide สำหรับ boss) -->
         <nav id="desktop-nav" class="hidden lg:flex items-center gap-1">
           <button data-tab="home"       class="dt-tab active">🏠 Home</button>
+          <button data-tab="overview"   class="dt-tab hidden">🗂️ Overview</button>
           <button data-tab="tasks"      class="dt-tab">📋 Todo</button>
           <button data-tab="calendar"   class="dt-tab">📅 Calendar</button>
           <button data-tab="people"     class="dt-tab">👥 People</button>
@@ -88,18 +145,18 @@
         <div class="space-y-4">
           <!-- 1. User info + points -->
           <div class="bg-gradient-to-br from-indigo-500 to-cyan-400 text-white rounded-2xl p-5 ios-card shadow-md">
-            <div class="text-sm opacity-80">สวัสดี</div>
+            <div class="text-base opacity-80">สวัสดี</div>
             <div class="flex items-center justify-between gap-3">
               <div class="min-w-0">
                 <div id="home-greeting" class="text-2xl font-semibold truncate">—</div>
                 <div class="flex items-center gap-2 mt-1">
-                  <span id="home-role-badge" class="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-white/20"></span>
-                  <span class="text-xs opacity-80">เสร็จ <b id="home-done">0</b> · กำลังทำ <b id="home-todo">0</b></span>
+                  <span id="home-role-badge" class="text-xs uppercase font-bold px-2 py-0.5 rounded-full bg-white/20"></span>
+                  <span class="text-sm opacity-80">เสร็จ <b id="home-done">0</b> · กำลังทำ <b id="home-todo">0</b></span>
                 </div>
               </div>
               <div class="text-right shrink-0">
                 <div class="text-3xl font-bold" id="home-points">0</div>
-                <div class="text-xs opacity-80">points</div>
+                <div class="text-sm opacity-80">points</div>
               </div>
             </div>
           </div>
@@ -118,27 +175,27 @@
               <div class="bg-white rounded-2xl ios-card overflow-hidden">
                 <div class="px-4 pt-3 pb-2 flex items-center justify-between">
                   <h2 class="font-semibold">📅 ใกล้ถึง Deadline</h2>
-                  <button class="text-xs text-indigo-600" data-goto="calendar">ดู Calendar</button>
+                  <button class="text-sm text-indigo-600" data-goto="calendar">ดู Calendar</button>
                 </div>
-                <div id="home-upcoming" class="divide-y divide-slate-100"></div>
+                <div id="home-upcoming" class="divide-y divide-slate-100 home-scroll-list"></div>
               </div>
 
               <!-- 2b. Upcoming meetings (≤ 2 days) -->
               <div class="bg-white rounded-2xl ios-card overflow-hidden">
                 <div class="px-4 pt-3 pb-2 flex items-center justify-between">
                   <h2 class="font-semibold">📅 การประชุมที่ใกล้จะถึง</h2>
-                  <button class="text-xs text-indigo-600" data-goto="calendar">ดู Calendar</button>
+                  <button class="text-sm text-indigo-600" data-goto="calendar">ดู Calendar</button>
                 </div>
-                <div id="home-meetings" class="divide-y divide-slate-100"></div>
+                <div id="home-meetings" class="divide-y divide-slate-100 home-scroll-list"></div>
               </div>
 
               <!-- 3. Open groups (haven't joined yet) -->
               <div class="bg-white rounded-2xl ios-card overflow-hidden">
                 <div class="px-4 pt-3 pb-2 flex items-center justify-between">
                   <h2 class="font-semibold">🪪 กลุ่มงานที่ยังไม่ได้เข้าร่วม</h2>
-                  <button class="text-xs text-indigo-600" data-goto="summary">ดูทั้งหมด</button>
+                  <button class="text-sm text-indigo-600" data-goto="summary">ดูทั้งหมด</button>
                 </div>
-                <div id="home-open" class="divide-y divide-slate-100"></div>
+                <div id="home-open" class="divide-y divide-slate-100 home-scroll-list"></div>
               </div>
             </div>
 
@@ -146,7 +203,7 @@
             <div class="bg-white rounded-2xl ios-card overflow-hidden">
               <div class="px-4 pt-3 pb-2 flex items-center justify-between">
                 <h2 class="font-semibold">📊 Scoreboard</h2>
-                <span class="text-xs text-slate-500">จากงานที่เสร็จ</span>
+                <span class="text-sm text-slate-500">จากงานที่เสร็จ</span>
               </div>
               <div class="p-4">
                 <div id="scoreboard-chart" class="flex items-center justify-center"></div>
@@ -159,7 +216,7 @@
           <div class="bg-white rounded-2xl ios-card overflow-hidden">
             <div class="px-4 pt-3 pb-2 flex items-center justify-between">
               <h2 class="font-semibold">🗳️ โพล / โหวต</h2>
-              <button class="text-xs text-indigo-600" id="poll-new-btn">+ สร้างใหม่</button>
+              <button class="text-sm text-indigo-600" id="poll-new-btn">+ สร้างใหม่</button>
             </div>
             <div id="home-polls-list" class="divide-y divide-slate-100"></div>
           </div>
@@ -167,7 +224,7 @@
           <!-- Pending deadline requests (admin only) -->
           <div id="home-pending-extensions" class="bg-white rounded-2xl ios-card overflow-hidden hidden">
             <div class="px-4 pt-3 pb-2 flex items-center justify-between">
-              <h2 class="font-semibold">⏰ คำขอเลื่อน Deadline (Admin)</h2>
+              <h2 class="font-semibold">⏰ คำขอเลื่อน Deadline</h2>
             </div>
             <div id="home-extensions-list" class="divide-y divide-slate-100"></div>
           </div>
@@ -182,7 +239,7 @@
               <input id="task-search" class="ios-input pl-9" placeholder="🔎 ค้นหางาน…">
               <button id="task-search-clear" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hidden">✕</button>
             </div>
-            <button id="task-filter-btn" class="ios-btn-ghost relative" title="ตัวกรอง">🎚<span id="task-filter-badge" class="filter-badge hidden">0</span></button>
+            <button id="task-filter-btn" class="ios-btn-ghost relative" title="ตัวกรอง"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M3 5h18l-7 9v6l-4-2v-4z"/></svg><span id="task-filter-badge" class="filter-badge hidden">0</span></button>
           </div>
           <div class="ios-segmented" id="task-segmented">
             <button data-seg="mine"  class="active">งานของฉัน</button>
@@ -198,19 +255,19 @@
         <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl shadow-xl max-h-[85vh] overflow-auto safe-bottom">
           <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-10">
             <button id="filter-clear" class="text-rose-600 text-sm">ล้างตัวกรอง</button>
-            <h3 class="font-semibold">🎚 ตัวกรอง</h3>
+            <h3 class="font-semibold flex items-center gap-2"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 9v6l-4-2v-4z"/></svg> ตัวกรอง</h3>
             <button id="filter-close" class="text-indigo-600 font-semibold">เสร็จ</button>
           </div>
           <div class="p-4 space-y-4">
             <div>
-              <label class="ios-label">สถานะ</label>
+              <label class="ios-label">สถานะ <span class="text-[11px] text-slate-400 font-normal">(ติ๊กได้หลายอัน)</span></label>
               <div class="flex flex-wrap gap-2">
-                <button class="ios-chip active" data-fs-status="">ทั้งหมด</button>
-                <button class="ios-chip" data-fs-status="on_hold">พักไว้</button>
-                <button class="ios-chip" data-fs-status="in_progress">กำลังดำเนินการ</button>
-                <button class="ios-chip" data-fs-status="completed">เสร็จแล้ว</button>
-                <button class="ios-chip" data-fs-status="cancelled">ยกเลิก</button>
+                <button class="ios-chip" data-fs-status="on_hold">⏸️ พักไว้</button>
+                <button class="ios-chip" data-fs-status="in_progress">🔨 กำลังดำเนินการ</button>
+                <button class="ios-chip" data-fs-status="completed">✅ เสร็จแล้ว</button>
+                <button class="ios-chip" data-fs-status="cancelled">❌ ยกเลิก</button>
               </div>
+              <div class="text-[11px] text-slate-400 mt-1">ไม่ติ๊กอะไรเลย = แสดงทั้งหมด</div>
             </div>
             <div>
               <label class="ios-label">เรียงตาม</label>
@@ -221,6 +278,14 @@
                 <option value="start">📅 วันเริ่มงาน (เก่า → ใหม่)</option>
                 <option value="start_desc">📅 วันเริ่มงาน (ใหม่ → เก่า)</option>
                 <option value="points">⭐ Points (มาก → น้อย)</option>
+                <option value="group_name">📁 ชื่อโครงการ (ก → ฮ)</option>
+                <option value="group_name_desc">📁 ชื่อโครงการ (ฮ → ก)</option>
+                <option value="target">📤 หน่วยงาน (ก → ฮ)</option>
+                <option value="target_desc">📤 หน่วยงาน (ฮ → ก)</option>
+                <option value="budget">💰 งบประมาณ (น้อย → มาก)</option>
+                <option value="budget_desc">💰 งบประมาณ (มาก → น้อย)</option>
+                <option value="status">📊 สถานะ (ก → ฮ)</option>
+                <option value="status_desc">📊 สถานะ (ฮ → ก)</option>
               </select>
             </div>
             <div>
@@ -273,17 +338,22 @@
 
             <!-- Internal scroll: meetings + tasks scroll inside this box -->
             <div class="cal-right-zone space-y-4 mt-4">
+              <!-- ปุ่มดูทั้งเดือน — visible เมื่อมีวันถูกเลือก -->
+              <button id="cal-clear-selection" class="cal-clear-btn hidden" type="button">
+                <span class="text-base leading-none">‹</span>
+                <span>ดูทั้งเดือน</span>
+              </button>
               <div>
                 <h3 class="font-semibold text-sm mb-2"><span id="cal-meetings-label">📅 การประชุม</span></h3>
-                <div id="cal-meetings-list" class="space-y-3"></div>
+                <div id="cal-meetings-list" class="space-y-3 cal-scroll-list"></div>
               </div>
               <div>
                 <h3 class="font-semibold text-sm mb-2"><span id="cal-day-label">📋 งานในเดือนนี้</span></h3>
-                <div id="cal-day-list" class="space-y-3"></div>
+                <div id="cal-day-list" class="space-y-3 cal-scroll-list"></div>
               </div>
               <div>
                 <h3 class="font-semibold text-sm mb-2"><span id="cal-leaves-label">🏖️ วันลาในเดือนนี้</span></h3>
-                <div id="cal-leaves-list" class="space-y-2"></div>
+                <div id="cal-leaves-list" class="space-y-2 cal-scroll-list"></div>
               </div>
             </div>
           </div>
@@ -296,11 +366,45 @@
           <button data-pseg="members" class="active">สมาชิก</button>
           <button data-pseg="connections">Connections</button>
         </div>
-        <div id="people-members" class="space-y-3"></div>
+        <div id="people-members" class="space-y-3">
+          <!-- Search + sort + filter — combination อิสระ -->
+          <div class="people-toolbar">
+            <div class="relative flex-1 min-w-[180px]">
+              <input id="people-members-search" class="ios-input pl-9" placeholder="🔎 ค้นหาสมาชิก — ชื่อ / อีเมล / เบอร์ ...">
+              <button id="people-members-search-clear" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hidden">✕</button>
+            </div>
+            <select id="people-members-sort" class="ov-control">
+              <option value="points_desc">Sort: Points มาก→น้อย</option>
+              <option value="name">Sort: ชื่อ</option>
+              <option value="role">Sort: บทบาท</option>
+              <option value="tasks_desc">Sort: งานมาก→น้อย</option>
+            </select>
+            <select id="people-members-filter" class="ov-control">
+              <option value="all">Role: ทั้งหมด</option>
+              <option value="boss">Role: Boss</option>
+              <option value="admin">Role: Admin</option>
+              <option value="member">Role: Member</option>
+            </select>
+          </div>
+          <div id="people-members-list" class="space-y-3"></div>
+        </div>
         <div id="people-connections" class="hidden space-y-3">
-          <div class="relative">
-            <input id="conn-search" class="ios-input pl-9" placeholder="🔎 ค้นหา Connection — ชื่อ / หน่วยงาน / หัวข้อ / เบอร์ ...">
-            <button id="conn-search-clear" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hidden">✕</button>
+          <div class="people-toolbar">
+            <div class="relative flex-1 min-w-[180px]">
+              <input id="conn-search" class="ios-input pl-9" placeholder="🔎 ค้นหา Connection — ชื่อ / หน่วยงาน / เบอร์ ...">
+              <button id="conn-search-clear" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hidden">✕</button>
+            </div>
+            <select id="conn-sort" class="ov-control">
+              <option value="default">Sort: ตามหมวด</option>
+              <option value="name">Sort: ชื่อ</option>
+              <option value="kind">Sort: ประเภท</option>
+            </select>
+            <select id="conn-filter" class="ov-control">
+              <option value="all">Type: ทั้งหมด</option>
+              <option value="personal">Type: บริษัท</option>
+              <option value="lobbyist">Type: Lobbyist</option>
+              <option value="agency">Type: หน่วยงาน</option>
+            </select>
           </div>
           <div id="conn-list"></div>
         </div>
@@ -309,6 +413,32 @@
       <!-- ============== SUMMARY ============== -->
       <section id="page-summary" class="page hidden">
         <div id="summary-content"></div>
+      </section>
+
+      <!-- ============== OVERVIEW / MANAGE ALL ENTITIES ==============
+           Comprehensive admin/manager page — manage tasks, groups, members,
+           connections in one unified view with search + filter + CRUD actions -->
+      <section id="page-overview" class="page hidden">
+        <div class="overview-root">
+          <!-- Top: search + entity tabs + stats summary -->
+          <div class="overview-toolbar">
+            <div class="overview-search-wrap">
+              <span class="overview-search-icon">🔍</span>
+              <input type="text" id="overview-search" class="ios-input overview-search-input"
+                     placeholder="ค้นหา งาน / กลุ่ม / สมาชิก / Connection..." autocomplete="off">
+              <button type="button" id="overview-search-clear" class="overview-search-clear" title="ล้าง" style="display:none">×</button>
+            </div>
+            <div class="overview-tabs" role="tablist" aria-label="ประเภทรายการ">
+              <button class="overview-tab active" data-overview-tab="all">📊 All <span class="overview-tab-count" id="ov-cnt-all">0</span></button>
+              <button class="overview-tab" data-overview-tab="tasks">📋 Tasks <span class="overview-tab-count" id="ov-cnt-tasks">0</span></button>
+              <button class="overview-tab" data-overview-tab="groups">📁 Groups <span class="overview-tab-count" id="ov-cnt-groups">0</span></button>
+              <button class="overview-tab" data-overview-tab="members">👥 Members <span class="overview-tab-count" id="ov-cnt-members">0</span></button>
+              <button class="overview-tab" data-overview-tab="connections">🤝 Connections <span class="overview-tab-count" id="ov-cnt-connections">0</span></button>
+            </div>
+          </div>
+          <!-- Content area — populated by renderOverview() -->
+          <div id="overview-content" class="overview-content"></div>
+        </div>
       </section>
 
       <!-- ============== PROFILE ============== -->
@@ -332,14 +462,23 @@
             <div class="ios-list-row"><span>⏳ งานกำลังทำ</span><span class="text-slate-500" id="me-doing">0</span></div>
             <div class="ios-list-row"><span>📋 งานทั้งหมด</span><span class="text-slate-500" id="me-all">0</span></div>
           </div>
+          <!-- Theme toggle — 3-state segmented control: auto (system) / light / dark -->
+          <div class="bg-white rounded-2xl ios-card overflow-hidden p-3 mb-2">
+            <div class="text-xs font-semibold text-slate-600 mb-2">🎨 ธีม</div>
+            <div class="theme-seg" role="radiogroup" aria-label="เลือกธีม">
+              <button class="theme-opt" data-theme="" aria-label="ตามระบบ">💻 Auto</button>
+              <button class="theme-opt" data-theme="light" aria-label="โหมดสว่าง">☀️ Light</button>
+              <button class="theme-opt" data-theme="dark" aria-label="โหมดมืด">🌙 Dark</button>
+            </div>
+          </div>
           <div class="bg-white rounded-2xl ios-card overflow-hidden">
             <button class="ios-list-row w-full text-left" id="btn-change-pw"><span>🔑 เปลี่ยน PIN</span><span class="text-slate-400">›</span></button>
             <button class="ios-list-row w-full text-left" id="btn-manage-leaves"><span>🏖️ จัดการวันลาของฉัน</span><span class="text-slate-400">›</span></button>
             <button class="ios-list-row w-full text-left" id="btn-manage-groups"><span>📁 จัดการ Task Groups</span><span class="text-slate-400">›</span></button>
             <button class="ios-list-row w-full text-left" id="btn-extensions"><span>⏰ คำขอเลื่อน Deadline</span><span class="text-slate-400">›</span></button>
-            <button class="ios-list-row w-full text-left" id="btn-trash"><span>🗑 ถังขยะ <span class="text-[10px] text-slate-400">(งานที่ลบ · เก็บไว้ 30 วัน)</span></span><span class="text-slate-400">›</span></button>
-            <button class="ios-list-row w-full text-left hidden" id="btn-system-settings"><span>⚙️ ตั้งค่าระบบ (Admin)</span><span class="text-slate-400">›</span></button>
-            <button class="ios-list-row w-full text-left hidden" id="btn-dev-tools"><span>🛠️ Dev & Test Tools <span class="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full ml-1">ADMIN</span></span><span class="text-slate-400">›</span></button>
+            <button class="ios-list-row w-full text-left" id="btn-trash"><span>🗑️ ถังขยะ <span class="text-[10px] text-slate-400">(งานที่ลบ · เก็บไว้ 30 วัน)</span></span><span class="text-slate-400">›</span></button>
+            <button class="ios-list-row w-full text-left hidden" id="btn-system-settings"><span>⚙️ ตั้งค่าระบบ</span><span class="text-slate-400">›</span></button>
+            <button class="ios-list-row w-full text-left hidden" id="btn-dev-tools"><span>🛠️ Dev & Test Tools</span><span class="text-slate-400">›</span></button>
             <button class="ios-list-row w-full text-left text-rose-600" id="btn-logout"><span>🚪 ออกจากระบบ</span><span class="text-rose-300">›</span></button>
           </div>
           <div class="text-center text-xs text-slate-400 pt-2">SML · v2.0</div>
@@ -357,18 +496,19 @@
         </div>
         <div id="wb-canvas-view" class="hidden flex flex-col h-full">
           <div id="wb-toolbar" class="wb-toolbar">
-            <button id="wb-back" class="wb-tool" title="กลับ">←</button>
+            <button id="wb-back" class="wb-tool" title="กลับ">⬅</button>
             <span id="wb-board-name" class="font-semibold text-sm px-1 truncate"></span>
 
             <div class="wb-tool-group">
               <button class="wb-tool wb-tool-active" data-tool="select" title="เลือก (V)">👆</button>
+              <button class="wb-tool" data-tool="lasso" title="Lasso — ขีดวงรอบ object เพื่อเลือก (Q)">🪢</button>
               <button class="wb-tool" data-tool="pan" title="เลื่อนหน้า (H)">✋</button>
             </div>
 
             <div class="wb-tool-group">
               <button class="wb-tool" data-tool="draw" title="วาดอิสระ (P)">✏️</button>
               <button class="wb-tool" data-tool="highlight" title="ไฮไลต์">🖍️</button>
-              <button class="wb-tool" data-tool="eraser" title="ยางลบ (E)">🧹</button>
+              <button class="wb-tool" data-tool="eraser" title="ยางลบ (E)">🧽</button>
             </div>
 
             <div class="wb-tool-group">
@@ -387,7 +527,20 @@
             </div>
 
             <div class="wb-tool-group wb-tool-group-props">
-              <input id="wb-color-pick" type="color" value="#1e293b" class="wb-color-input" title="สีเส้น/เติม">
+              <!-- Quick color swatches — กดเลือกสีเร็ว ๆ ไม่ต้องเปิด dialog -->
+              <div class="wb-color-swatches" role="toolbar" aria-label="สีด่วน">
+                <button type="button" class="wb-swatch" data-color="#1e293b" style="background:#1e293b" title="ดำ"></button>
+                <button type="button" class="wb-swatch" data-color="#ef4444" style="background:#ef4444" title="แดง"></button>
+                <button type="button" class="wb-swatch" data-color="#f97316" style="background:#f97316" title="ส้ม"></button>
+                <button type="button" class="wb-swatch" data-color="#facc15" style="background:#facc15" title="เหลือง"></button>
+                <button type="button" class="wb-swatch" data-color="#22c55e" style="background:#22c55e" title="เขียว"></button>
+                <button type="button" class="wb-swatch" data-color="#3b82f6" style="background:#3b82f6" title="ฟ้า"></button>
+                <button type="button" class="wb-swatch" data-color="#a855f7" style="background:#a855f7" title="ม่วง"></button>
+                <button type="button" class="wb-swatch" data-color="#ec4899" style="background:#ec4899" title="ชมพู"></button>
+              </div>
+              <!-- Recent colors — สีที่ใช้ล่าสุด สูงสุด 6 ตัว (เติมโดย JS) -->
+              <div class="wb-color-recent" id="wb-color-recent" role="toolbar" aria-label="สีที่ใช้ล่าสุด"></div>
+              <input id="wb-color-pick" type="color" value="#1e293b" class="wb-color-input" title="สีกำหนดเอง">
               <input id="wb-stroke-size" type="range" min="1" max="30" value="3" class="wb-range" title="ขนาดเส้น">
               <button id="wb-fill-toggle" class="wb-tool" title="โปร่งใส / เติมสี">⬜</button>
             </div>
@@ -405,28 +558,61 @@
             </div>
 
             <div class="wb-tool-group">
-              <button id="wb-grid-btn"       class="wb-tool" title="แสดง/ซ่อน Grid">▦</button>
+              <button id="wb-grid-btn"       class="wb-tool" title="กระดาษ: เปล่า / Grid / Dot / Lined (กดเพื่อเปลี่ยน)">📃</button>
+              <button id="wb-paper-size-btn" class="wb-tool" title="ขนาดกระดาษ (A4 / A3 / A5 / Letter / ∞)">📐</button>
+              <div id="wb-paper-size-menu" class="wb-popover-menu hidden" role="menu" aria-label="ขนาดกระดาษ">
+                <button data-size="a4-p"   class="wb-popover-item" role="menuitem">A4 ตั้ง <span class="wb-popover-hint">210 × 297mm</span></button>
+                <button data-size="a4-l"   class="wb-popover-item" role="menuitem">A4 นอน <span class="wb-popover-hint">297 × 210mm</span></button>
+                <button data-size="a3-p"   class="wb-popover-item" role="menuitem">A3 ตั้ง <span class="wb-popover-hint">297 × 420mm</span></button>
+                <button data-size="a3-l"   class="wb-popover-item" role="menuitem">A3 นอน <span class="wb-popover-hint">420 × 297mm</span></button>
+                <button data-size="a5-p"   class="wb-popover-item" role="menuitem">A5 ตั้ง <span class="wb-popover-hint">148 × 210mm</span></button>
+                <button data-size="letter" class="wb-popover-item" role="menuitem">Letter <span class="wb-popover-hint">8.5 × 11"</span></button>
+                <button data-size="tabloid" class="wb-popover-item" role="menuitem">Tabloid <span class="wb-popover-hint">11 × 17"</span></button>
+                <button data-size="infinite" class="wb-popover-item" role="menuitem">∞ ไม่จำกัด <span class="wb-popover-hint">canvas เต็มจอ</span></button>
+              </div>
               <button id="wb-fullscreen-btn" class="wb-tool" title="Fullscreen (F)">⛶</button>
               <button id="wb-inject-btn"     class="wb-tool" title="นำข้อมูลเข้า">📥</button>
+              <button id="wb-rec-toggle"     class="wb-tool" title="🎙 อัดเสียง (ทำต่อขณะจด)">🎙</button>
               <button id="wb-export-btn"     class="wb-tool" title="ดาวน์โหลด PNG">💾</button>
               <button id="wb-delete-btn"     class="wb-tool text-red-500" title="ลบที่เลือก (Del)">🗑️</button>
               <button id="wb-clear-btn"      class="wb-tool text-red-500" title="ล้างทั้งหมด" style="display:none">🔄</button>
             </div>
 
-            <button id="wb-confirm-btn" class="wb-confirm-btn" title="บันทึกทันที (ปกติบันทึกอัตโนมัติทุก 1.5 วิ)">💾 บันทึกทันที</button>
+            <!-- "บันทึกทันที" ถูกลบออก เพราะ canvas auto-save ทุก 1.5 วิอยู่แล้ว -->
           </div>
           <div id="wb-users" class="wb-users-bar"></div>
           <div id="wb-canvas-wrap" class="wb-canvas-wrap">
             <canvas id="wb-canvas"></canvas>
+            <!-- Eraser cursor — circular dashed overlay, follows pointer when
+                 eraser tool is active. Size = eraser radius (from stroke slider) -->
+            <div id="wb-eraser-cursor" class="wb-eraser-cursor"></div>
+            <!-- Floating recorder widget — non-blocking, lets the user keep
+                 drawing/writing on the canvas while audio records in the
+                 background. Visible only when recording is active. -->
+            <div id="wb-float-rec" class="wb-float-rec hidden">
+              <span class="wb-float-rec-dot"></span>
+              <span id="wb-float-rec-timer" class="wb-float-rec-timer">00:00</span>
+              <button id="wb-float-rec-stop" class="wb-float-rec-stop" title="หยุดและส่ง">⏹</button>
+            </div>
           </div>
-          <!-- Inject modal -->
+          <!-- Inject modal — tabbed: task / group / meeting / audio / points -->
           <div id="wb-inject-modal" class="wb-inject-modal hidden">
             <div class="wb-inject-panel">
-              <div class="flex items-center justify-between mb-3">
-                <span class="font-semibold text-sm">นำข้อมูลเข้า Whiteboard</span>
-                <button id="wb-inject-close" class="text-slate-400">✕</button>
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-semibold text-sm">📥 นำข้อมูลเข้า Whiteboard</span>
+                <button id="wb-inject-close" class="text-slate-400 text-xl leading-none">✕</button>
               </div>
-              <div class="space-y-2" id="wb-inject-list"></div>
+              <div class="wb-inject-tabs" role="tablist">
+                <button class="wb-inject-tab active" data-inject-tab="task"   >📋 งาน</button>
+                <button class="wb-inject-tab"        data-inject-tab="group"  >📁 โครงการ</button>
+                <button class="wb-inject-tab"        data-inject-tab="meeting">📅 ประชุม</button>
+                <button class="wb-inject-tab"        data-inject-tab="points" >⭐ Points</button>
+              </div>
+              <input id="wb-inject-search" type="text" class="wb-inject-search" placeholder="🔍 ค้นหา..." autocomplete="off">
+              <div id="wb-inject-list" class="wb-inject-list space-y-1.5"></div>
+              <div class="wb-inject-foot">
+                <button id="wb-inject-create" class="ios-btn-secondary text-sm" style="padding:.45rem 1rem;min-height:auto">+ สร้างใหม่</button>
+              </div>
             </div>
           </div>
         </div>
@@ -435,8 +621,12 @@
     </main>
 
     <!-- Bottom Tab Bar — used on phone AND iPad portrait (anything below lg) -->
+    <!-- Order (same as desktop-nav):
+         • boss:     home → overview → todo → calendar → people → profile
+         • non-boss: home → todo → calendar → people → summary → profile -->
     <nav id="tabbar" class="ios-tabbar lg:hidden">
       <button data-tab="home"     class="active"><span class="ico">🏠</span><span>Home</span></button>
+      <button data-tab="overview" class="hidden"><span class="ico">🗂️</span><span>Overview</span></button>
       <button data-tab="tasks"            ><span class="ico">📋</span><span>Todo</span></button>
       <button data-tab="calendar"         ><span class="ico">📅</span><span>Calendar</span></button>
       <button data-tab="people"           ><span class="ico">👥</span><span>People</span></button>
@@ -559,13 +749,30 @@
   <script src="app.js"></script>
 
   <!-- PWA: register service worker. Production-only so dev iterations aren't
-       fighting a stale cache. Bump CACHE_VERSION in sw.js to force update. -->
+       fighting a stale cache. Bump CACHE_VERSION in sw.js to force update.
+       เมื่อ SW ใหม่ activate → ส่ง postMessage 'SW_UPDATED' มา → reload page
+       เพื่อ apply UI ใหม่ทันที (role visibility, .hidden flags, etc.) -->
   <script>
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').catch(e =>
           console.warn('[sw] register failed', e)
         );
+        // Reload เมื่อ SW ใหม่ activate (มี version mismatch)
+        let _reloadedOnce = false;
+        navigator.serviceWorker.addEventListener('message', (event) => {
+          if (event.data && event.data.type === 'SW_UPDATED' && !_reloadedOnce) {
+            _reloadedOnce = true;  // กัน loop กรณี SW broadcast ซ้ำ
+            console.log('[sw] new version active:', event.data.version, '— reloading');
+            location.reload();
+          }
+        });
+        // Reload เมื่อ controllerchange (SW ใหม่ take over)
+        let _ctlReloaded = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (_ctlReloaded) return; _ctlReloaded = true;
+          location.reload();
+        });
       });
     }
   </script>
