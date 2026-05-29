@@ -258,6 +258,28 @@ const audioUpload = multer({
   },
 });
 
+// Magic-byte verification — ตรวจ "เนื้อในไฟล์" vs MIME ที่ client ส่งมา.
+// กันการ upload file ปลอม (เช่น `.exe` ที่ตั้งชื่อเป็น `.png` ส่งมาพร้อม
+// Content-Type: image/png). ใช้ first-bytes check แทน ไม่ต้อง dep ใหม่.
+function verifyImageMagicBytes(filePath, declaredMime) {
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const buf = Buffer.alloc(16);
+    fs.readSync(fd, buf, 0, 16, 0);
+    fs.closeSync(fd);
+    const hex = buf.toString('hex').toLowerCase();
+    // PNG: 89504e470d0a1a0a
+    if (declaredMime.includes('png')) return hex.startsWith('89504e470d0a1a0a');
+    // JPEG: ffd8ff
+    if (declaredMime.includes('jpeg') || declaredMime.includes('jpg')) return hex.startsWith('ffd8ff');
+    // GIF: 474946383761 or 474946383961
+    if (declaredMime.includes('gif')) return hex.startsWith('474946383761') || hex.startsWith('474946383961');
+    // WEBP: 52494646 ... 57454250 (RIFF....WEBP)
+    if (declaredMime.includes('webp')) return hex.startsWith('52494646') && buf.slice(8, 12).toString() === 'WEBP';
+    return false;
+  } catch { return false; }
+}
+
 // Avatar upload — separate multer config (different destination + size limits + image filter)
 const avatarUpload = multer({
   storage: multer.diskStorage({
@@ -268,7 +290,10 @@ const avatarUpload = multer({
       cb(null, `${req.user.id}_${crypto.randomBytes(6).toString('hex')}${ext}`);
     },
   }),
-  limits: { fileSize: 4 * 1024 * 1024 },  // 4 MB cap for profile pictures
+  // 1.5 MB ceiling — client resizes to ≤ 256×256 WebP before upload (typically
+  // < 100 KB). ลด attack surface (DoS via huge upload) + ประหยัด disk + เว็บ
+  // โหลด People page เร็วขึ้น
+  limits: { fileSize: 1.5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (!/^image\/(png|jpe?g|gif|webp)$/i.test(file.mimetype)) return cb(new Error('รองรับเฉพาะไฟล์รูปภาพ (PNG/JPG/GIF/WEBP)'));
     cb(null, true);
@@ -329,9 +354,14 @@ function requireAuth(req, res) {
   if (!req.user) { res.status(401).json({ error: 'login required' }); return false; }
   return true;
 }
+// "Admin-or-above" — boss inherits all admin permissions. ใช้แทน `user.role === 'admin'`
+// เพื่อให้ role ใหม่ (boss/owner/etc.) เพิ่มได้ที่จุดเดียว ไม่ต้องไล่แก้ทั้งระบบ
+function hasAdminPerms(user) {
+  return !!user && (user.role === 'admin' || user.role === 'boss');
+}
 function requireAdmin(req, res) {
   if (!requireAuth(req, res)) return false;
-  if (req.user.role !== 'admin') { res.status(403).json({ error: 'admin only' }); return false; }
+  if (!hasAdminPerms(req.user)) { res.status(403).json({ error: 'admin only' }); return false; }
   return true;
 }
 
@@ -348,11 +378,41 @@ const loginLimiter = rateLimit({
 });
 app.use('/api/login', loginLimiter);
 
+// Per-username lockout — defends against attackers rotating IPs to dodge the
+// per-IP rate limit above. After 5 consecutive failed attempts on the same
+// username, lock that account for 5 minutes. Resets on successful login.
+const _loginFails = new Map();  // name(lowercase) → { count, lockedUntil }
+const MAX_FAILS = 5;
+const LOCK_MS   = 5 * 60 * 1000;
+function _checkLock(name) {
+  const k = String(name || '').trim().toLowerCase();
+  const entry = _loginFails.get(k);
+  if (entry && entry.lockedUntil > Date.now()) {
+    const secs = Math.ceil((entry.lockedUntil - Date.now()) / 1000);
+    return { locked: true, secs };
+  }
+  return { locked: false };
+}
+function _recordFail(name) {
+  const k = String(name || '').trim().toLowerCase();
+  const cur = _loginFails.get(k) || { count: 0, lockedUntil: 0 };
+  cur.count += 1;
+  if (cur.count >= MAX_FAILS) cur.lockedUntil = Date.now() + LOCK_MS;
+  _loginFails.set(k, cur);
+}
+function _resetFail(name) { _loginFails.delete(String(name || '').trim().toLowerCase()); }
+
 app.post('/api/login', wrap(async (req, res) => {
   const { name, password } = req.body || {};
   if (!name || !password) return res.status(400).json({ error: 'name + password required' });
+  const lock = _checkLock(name);
+  if (lock.locked) return res.status(429).json({ error: `บัญชีนี้ถูกล็อกชั่วคราว — รอ ${lock.secs} วินาทีแล้วลองใหม่` });
   const m = await db.findMemberByName(String(name).trim());
-  if (!m || !auth.verifyPassword(password, m.password_hash)) return res.status(401).json({ error: 'invalid credentials' });
+  if (!m || !auth.verifyPassword(password, m.password_hash)) {
+    _recordFail(name);
+    return res.status(401).json({ error: 'invalid credentials' });
+  }
+  _resetFail(name);
   const token = auth.createToken(m.id);
   const { password_hash, ...pub } = m;
   res.json({ token, user: pub });
@@ -362,7 +422,7 @@ app.get('/api/me', wrap(async (req, res) => { if (!requireAuth(req, res)) return
 app.put('/api/me/password', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const { current_password, new_password } = req.body || {};
-  if (!new_password || String(new_password).length < 4) return res.status(400).json({ error: 'new_password >= 4 chars' });
+  if (!new_password || String(new_password).length < 6) return res.status(400).json({ error: 'รหัสผ่านต้องยาวอย่างน้อย 6 ตัวอักษร' });
   const full = await db.getMemberFull(req.user.id);
   if (!auth.verifyPassword(current_password || '', full.password_hash)) return res.status(401).json({ error: 'current password incorrect' });
   await db.setMemberPassword(req.user.id, auth.hashPassword(new_password));
@@ -376,6 +436,11 @@ app.post('/api/me/avatar', (req, res) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'no file uploaded' });
     try {
+      // Magic-byte verify — กัน upload .exe ที่ตั้งชื่อ .png
+      if (!verifyImageMagicBytes(req.file.path, req.file.mimetype)) {
+        try { fs.unlinkSync(req.file.path); } catch {}
+        return res.status(400).json({ error: 'ไฟล์ไม่ใช่รูปภาพจริง (magic bytes ไม่ตรง)' });
+      }
       // Delete previous avatar file (if any) so we don't accumulate stale uploads
       const prev = req.user.avatar_url;
       if (prev && prev.startsWith('/avatars/')) {
@@ -412,6 +477,12 @@ app.post('/api/members', wrap(async (req, res) => {
 }));
 app.put('/api/members/:id', wrap(async (req, res) => {
   if (!requireAdmin(req, res)) return;
+  // Same min-length policy as the self-service /api/me/password — applies
+  // when admin resets a user's PIN. Don't let admins set a weaker password
+  // for a user than the user could set for themselves.
+  if (req.body?.password && String(req.body.password).length < 6) {
+    return res.status(400).json({ error: 'รหัสผ่านต้องยาวอย่างน้อย 6 ตัวอักษร' });
+  }
   const u = await db.updateMember(req.params.id, req.body || {});
   if (!u) return res.status(404).json({ error: 'not found' });
   if (req.body?.password) await db.setMemberPassword(req.params.id, auth.hashPassword(req.body.password));
@@ -420,7 +491,15 @@ app.put('/api/members/:id', wrap(async (req, res) => {
 app.delete('/api/members/:id', wrap(async (req, res) => {
   if (!requireAdmin(req, res)) return;
   if (req.params.id === req.user.id) return res.status(400).json({ error: 'cannot delete yourself' });
+  // Capture snapshot ก่อนลบ ลง audit log
+  const victim = await db.getMember(req.params.id);
   if (!(await db.deleteMember(req.params.id))) return res.status(404).json({ error: 'not found' });
+  await db.logAudit({
+    actor_id: req.user.id, actor_name: req.user.name,
+    action: 'member.delete', target_kind: 'member', target_id: req.params.id,
+    payload: { name: victim?.name, email: victim?.email },
+    ip: req.ip,
+  });
   res.json({ ok: true });
 }));
 
@@ -434,7 +513,7 @@ app.get('/api/groups', wrap(async (req, res) => {
 app.post('/api/groups', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   if (!req.body?.name || !String(req.body.name).trim()) return res.status(400).json({ error: 'name required' });
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
 
   // Resolve leader:
   //   - Admin sets explicit leader via dropdown → use that
@@ -462,7 +541,7 @@ app.post('/api/groups', wrap(async (req, res) => {
 }));
 app.put('/api/groups/:id', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isLeader = await db.isGroupLeader(req.params.id, req.user.id);
   if (!isAdmin && !isLeader) return res.status(403).json({ error: 'admin or group leader only' });
   const patch = { ...(req.body || {}) };
@@ -475,7 +554,14 @@ app.put('/api/groups/:id', wrap(async (req, res) => {
 }));
 app.delete('/api/groups/:id', wrap(async (req, res) => {
   if (!requireAdmin(req, res)) return;
+  const victim = await db.getGroup(req.params.id);
   if (!(await db.deleteGroup(req.params.id))) return res.status(404).json({ error: 'not found' });
+  await db.logAudit({
+    actor_id: req.user.id, actor_name: req.user.name,
+    action: 'group.delete', target_kind: 'group', target_id: req.params.id,
+    payload: { name: victim?.name, leader_id: victim?.leader_id },
+    ip: req.ip,
+  });
   res.json({ ok: true });
 }));
 app.get('/api/groups/:id/files', wrap(async (req, res) => {
@@ -502,7 +588,7 @@ app.post('/api/groups/:id/summary/regenerate', wrap(async (req, res) => {
   const g = await db.getGroup(req.params.id);
   if (!g) return res.status(404).json({ error: 'group not found' });
   // Anyone in the group OR admin OR the leader can regenerate
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isLeader = g.leader_id === req.user.id;
   const isMember = await db.isGroupMember(g.id, req.user.id);
   if (!isAdmin && !isLeader && !isMember) return res.status(403).json({ error: 'group member required' });
@@ -550,7 +636,7 @@ app.get('/api/files/raw', wrap(async (req, res) => {
     if (memberId) user = await db.getMember(memberId);
   }
   if (!user) return res.status(401).json({ error: 'login required' });
-  if (user.role !== 'admin') return res.status(403).json({ error: 'admin only' });
+  if (!hasAdminPerms(user)) return res.status(403).json({ error: 'admin only' });
 
   const rel = String(req.query.path || '').replace(/^\/+/, '');
   const abs = path.resolve(db.UPLOAD_DIR, rel);
@@ -569,7 +655,7 @@ app.get('/api/tasks', wrap(async (req, res) => { if (!requireAuth(req, res)) ret
 // further down.
 app.get('/api/tasks/trash', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const all = await db.listTrashedTasks();
   // Non-admin sees only their own trashed tasks (group leaders see their group's trash)
   if (isAdmin) return res.json(all);
@@ -589,7 +675,7 @@ app.get('/api/tasks/:id', wrap(async (req, res) => {
 app.post('/api/tasks', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   if (!req.body?.title || !String(req.body.title).trim()) return res.status(400).json({ error: 'title required' });
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   if (!isAdmin) {
     if (!req.body.group_id) return res.status(403).json({ error: 'non-admin must create tasks inside a group they lead' });
     if (!(await db.isGroupLeader(req.body.group_id, req.user.id))) return res.status(403).json({ error: 'you are not the leader of that group' });
@@ -605,7 +691,7 @@ app.put('/api/tasks/:id', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const t = await db.getTask(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, req.user.id));
   const isAssignee = t.assignees.some(a => a.id === req.user.id);
   if (!isAdmin && !isGroupLeader && !isAssignee) return res.status(403).json({ error: 'no permission' });
@@ -651,13 +737,20 @@ app.delete('/api/tasks/:id', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const t = await db.getTask(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, req.user.id));
   if (!isAdmin && !isGroupLeader) return res.status(403).json({ error: 'admin or group leader only' });
   // ?permanent=1 → hard delete (only from trash). Default = soft delete (recycle bin).
   const permanent = req.query.permanent === '1';
   if (permanent) await db.purgeTask(req.params.id);
   else           await db.deleteTask(req.params.id);   // soft delete
+  await db.logAudit({
+    actor_id: req.user.id, actor_name: req.user.name,
+    action: permanent ? 'task.purge' : 'task.delete',
+    target_kind: 'task', target_id: req.params.id,
+    payload: { title: t.title, kind: t.kind, group_id: t.group_id },
+    ip: req.ip,
+  });
 
   // Meeting deletion → CANCEL invitation to attendees so the event drops from their cal.
   // Sequence is bumped client-side (in-memory snapshot) since the row is gone.
@@ -675,10 +768,38 @@ app.post('/api/tasks/:id/restore', wrap(async (req, res) => {
   const all = await db.listTrashedTasks();
   const t = all.find(x => x.id === req.params.id);
   if (!t) return res.status(404).json({ error: 'not in trash' });
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, req.user.id));
   if (!isAdmin && !isGroupLeader) return res.status(403).json({ error: 'admin or group leader only' });
   await db.restoreTask(req.params.id);
+  res.json({ ok: true });
+}));
+
+// ── Group trash (recycle bin for groups) ──
+app.get('/api/groups/trash', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const all = await db.listTrashedGroups();
+  const isAdmin = hasAdminPerms(req.user);
+  if (isAdmin) return res.json(all);
+  // Non-admin: see only groups they led
+  res.json(all.filter(g => g.leader_id === req.user.id));
+}));
+app.post('/api/groups/:id/restore', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const all = await db.listTrashedGroups();
+  const g = all.find(x => x.id === req.params.id);
+  if (!g) return res.status(404).json({ error: 'not in trash' });
+  const isAdmin = hasAdminPerms(req.user);
+  const isLeader = g.leader_id === req.user.id;
+  if (!isAdmin && !isLeader) return res.status(403).json({ error: 'admin or group leader only' });
+  await db.restoreGroup(req.params.id);
+  res.json({ ok: true });
+}));
+app.delete('/api/groups/:id/purge', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  if (!hasAdminPerms(req.user)) return res.status(403).json({ error: 'admin only' });
+  const ok = await db.purgeGroup(req.params.id);
+  if (!ok) return res.status(404).json({ error: 'not in trash' });
   res.json({ ok: true });
 }));
 
@@ -688,6 +809,12 @@ app.get('/api/tasks/:id/comments', wrap(async (req, res) => {
   const t = await db.getTask(req.params.id);
   if (!t) return res.status(404).json({ error: 'task not found' });
   res.json(await db.listTaskComments(req.params.id));
+}));
+// Mentions ของ user ปัจจุบัน — ใช้สำหรับ bell notification
+// Query: comments ที่มี "@<myname>" ใน body (14 วันที่ผ่านมา) จากคนอื่น
+app.get('/api/comments/mentions/me', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  res.json(await db.listMentionsForMember(req.user.id));
 }));
 app.post('/api/tasks/:id/comments', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
@@ -703,7 +830,7 @@ app.put('/api/comments/:id', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const c = await db.getComment(req.params.id);
   if (!c || c.deleted_at) return res.status(404).json({ error: 'not found' });
-  if (c.member_id !== req.user.id && req.user.role !== 'admin') {
+  if (c.member_id !== req.user.id && !hasAdminPerms(req.user)) {
     return res.status(403).json({ error: 'owner or admin only' });
   }
   const body = (req.body?.body || '').trim();
@@ -714,7 +841,7 @@ app.delete('/api/comments/:id', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const c = await db.getComment(req.params.id);
   if (!c || c.deleted_at) return res.status(404).json({ error: 'not found' });
-  if (c.member_id !== req.user.id && req.user.role !== 'admin') {
+  if (c.member_id !== req.user.id && !hasAdminPerms(req.user)) {
     return res.status(403).json({ error: 'owner or admin only' });
   }
   await db.deleteComment(req.params.id);
@@ -728,7 +855,7 @@ app.post('/api/tasks/:id/send-invite', wrap(async (req, res) => {
   const t = await db.getTask(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
   if (t.kind !== 'meeting') return res.status(400).json({ error: 'ใช้ได้เฉพาะการประชุม (kind=meeting) เท่านั้น' });
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, req.user.id));
   const isAssignee = t.assignees.some(a => a.id === req.user.id);
   if (!isAdmin && !isGroupLeader && !isAssignee) return res.status(403).json({ error: 'no permission' });
@@ -746,7 +873,7 @@ app.post('/api/tasks/:id/claim', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const t = await db.getTask(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, req.user.id));
   if (!isAdmin && !isGroupLeader) {
     return res.status(403).json({ error: 'members cannot self-claim — use /propose instead' });
@@ -764,7 +891,7 @@ app.post('/api/tasks/:id/assignees', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const t = await db.getTask(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, req.user.id));
   if (!isAdmin && !isGroupLeader) return res.status(403).json({ error: 'admin or group leader only' });
   const { member_id, role } = req.body || {};
@@ -786,7 +913,7 @@ app.post('/api/groups/:id/claim', wrap(async (req, res) => {
 // Group leader / admin invites a member to JOIN the group
 app.post('/api/groups/:id/invite', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isLeader = await db.isGroupLeader(req.params.id, req.user.id);
   if (!isAdmin && !isLeader) return res.status(403).json({ error: 'admin or group leader only' });
   const { member_id, message } = req.body || {};
@@ -800,7 +927,7 @@ app.post('/api/groups/:id/invite', wrap(async (req, res) => {
 // (Replaces the old "invite + accept" loop for the simple case.)
 app.post('/api/groups/:id/add-member', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isLeader = await db.isGroupLeader(req.params.id, req.user.id);
   if (!isAdmin && !isLeader) return res.status(403).json({ error: 'admin or group leader only' });
   const { member_id } = req.body || {};
@@ -828,7 +955,7 @@ app.get('/api/group-invitations', wrap(async (req, res) => {
     i.member_id === me ||
     i.invited_by === me ||
     i.group_leader_id === me ||
-    req.user.role === 'admin'
+    hasAdminPerms(req.user)
   );
   res.json(filtered);
 }));
@@ -841,7 +968,7 @@ app.post('/api/group-invitations/:id/decide', wrap(async (req, res) => {
   const decision = req.body?.decision;
   if (!['accepted','rejected'].includes(decision)) return res.status(400).json({ error: 'invalid decision' });
   const me = req.user.id;
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   let allowed = false;
   if (inv.kind === 'invite') {
     allowed = (inv.member_id === me) || isAdmin;
@@ -862,7 +989,7 @@ app.get('/api/groups/:id/members', wrap(async (req, res) => {
 // Remove member from group (admin, group leader, or self)
 app.delete('/api/groups/:id/members/:memberId', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isLeader = await db.isGroupLeader(req.params.id, req.user.id);
   const isSelf = req.params.memberId === req.user.id;
   if (!isAdmin && !isLeader && !isSelf) return res.status(403).json({ error: 'no permission' });
@@ -874,7 +1001,7 @@ app.delete('/api/tasks/:id/assignees/:memberId', wrap(async (req, res) => {
   const t = await db.getTask(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
   const me = req.user.id;
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, me));
   const isSelf = req.params.memberId === me;
   if (!isAdmin && !isGroupLeader && !isSelf) return res.status(403).json({ error: 'no permission' });
@@ -896,7 +1023,7 @@ app.put('/api/tasks/:id/assignees/:memberId/points', wrap(async (req, res) => {
   if (!Number.isFinite(pts) || pts < 0) return res.status(400).json({ error: 'points_share must be >= 0' });
 
   const me = req.user.id;
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, me));
   const isSelfRow = req.params.memberId === me;
 
@@ -918,7 +1045,7 @@ app.put('/api/tasks/:id/points-allocation', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const t = await db.getTask(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, req.user.id));
   if (!isAdmin && !isGroupLeader) return res.status(403).json({ error: 'admin or group leader only' });
   const allocations = req.body?.allocations || {};
@@ -943,7 +1070,7 @@ app.post('/api/tasks/:id/points/leader-approve', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const t = await db.getTask(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, req.user.id));
   if (!isAdmin && !isGroupLeader) return res.status(403).json({ error: 'หัวหน้ากลุ่มหรือ Admin เท่านั้น' });
   res.json(await db.leaderApprovePoints(req.params.id));
@@ -954,7 +1081,7 @@ app.post('/api/tasks/:id/points/confirm', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const t = await db.getTask(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, req.user.id));
   if (!isAdmin && !isGroupLeader) return res.status(403).json({ error: 'หัวหน้ากลุ่มหรือ Admin เท่านั้น' });
   res.json(await db.confirmPoints(req.params.id));
@@ -965,7 +1092,7 @@ app.post('/api/tasks/:id/points/reopen', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const t = await db.getTask(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, req.user.id));
   if (!isAdmin && !isGroupLeader) return res.status(403).json({ error: 'หัวหน้ากลุ่มหรือ Admin เท่านั้น' });
   res.json(await db.reopenPoints(req.params.id));
@@ -996,11 +1123,19 @@ app.get('/api/groups/:id/export.csv', wrap(async (req, res) => {
   if (!g) return res.status(404).json({ error: 'not found' });
   const tasks = await db.listTasks({ group: g.id });
   const csv = await buildCsv(tasks, g);
+  // HTTP headers ห้ามมี non-ASCII (เช่น ตัวอักษรไทย) — ใช้ RFC 5987 syntax: filename* รองรับ UTF-8
+  //   filename="ASCII fallback"  ← browser เก่า
+  //   filename*=UTF-8''url-encoded  ← browser modern ใช้ตัวนี้ → ได้ชื่อภาษาไทยถูกต้อง
+  const datePart = new Date().toISOString().slice(0,10);
+  const utf8Name = csvSafeFilename(g.name) + '_' + datePart + '.csv';
+  const asciiName = utf8Name.replace(/[^\x20-\x7E]+/g, '_');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${csvSafeFilename(g.name)}_${new Date().toISOString().slice(0,10)}.csv"`);
+  res.setHeader('Content-Disposition',
+    `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(utf8Name)}`);
   res.send('﻿' + csv);
 }));
-function csvSafeFilename(s) { return String(s||'export').replace(/[^\w฀-๿.\- ]+/g, '_').slice(0,80); }
+// Strip characters ที่ filename ห้ามใช้ (\/?<>:"|*) — เก็บไทย/อังกฤษ/ตัวเลข/อักขระทั่วไป
+function csvSafeFilename(s) { return String(s||'export').replace(/[\\/:*?"<>|\n\r]+/g, '_').slice(0,80); }
 function csvEscape(v) {
   if (v == null) return '';
   const s = String(v);
@@ -1081,7 +1216,7 @@ app.delete('/api/files/:id', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const f = await db.getFile(req.params.id);
   if (!f) return res.status(404).json({ error: 'not found' });
-  if (req.user.role !== 'admin' && f.uploaded_by !== req.user.id) return res.status(403).json({ error: 'no permission' });
+  if (!hasAdminPerms(req.user) && f.uploaded_by !== req.user.id) return res.status(403).json({ error: 'no permission' });
   await db.deleteFile(req.params.id);
   res.json({ ok: true });
 }));
@@ -1090,21 +1225,21 @@ app.delete('/api/files/:id', wrap(async (req, res) => {
 app.get('/api/connections', wrap(async (req, res) => { if (!requireAuth(req, res)) return; res.json(await db.listConnections()); }));
 app.post('/api/connections', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
-  if (req.user.role !== 'admin' && req.body?.member_id !== req.user.id) return res.status(403).json({ error: 'can only add connections for yourself' });
+  if (!hasAdminPerms(req.user) && req.body?.member_id !== req.user.id) return res.status(403).json({ error: 'can only add connections for yourself' });
   res.status(201).json(await db.createConnection(req.body || {}));
 }));
 app.put('/api/connections/:id', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const c = await db.getConnection(req.params.id);
   if (!c) return res.status(404).json({ error: 'not found' });
-  if (req.user.role !== 'admin' && c.member_id !== req.user.id) return res.status(403).json({ error: 'no permission' });
+  if (!hasAdminPerms(req.user) && c.member_id !== req.user.id) return res.status(403).json({ error: 'no permission' });
   res.json(await db.updateConnection(req.params.id, req.body || {}));
 }));
 app.delete('/api/connections/:id', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const c = await db.getConnection(req.params.id);
   if (!c) return res.status(404).json({ error: 'not found' });
-  if (req.user.role !== 'admin' && c.member_id !== req.user.id) return res.status(403).json({ error: 'no permission' });
+  if (!hasAdminPerms(req.user) && c.member_id !== req.user.id) return res.status(403).json({ error: 'no permission' });
   await db.deleteConnection(req.params.id);
   res.json({ ok: true });
 }));
@@ -1114,7 +1249,7 @@ app.post('/api/tasks/:id/deadline-request', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const t = await db.getTask(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, req.user.id));
   if (!isAdmin && !isGroupLeader) return res.status(403).json({ error: 'admin or group leader only' });
   const { requested_deadline, reason } = req.body || {};
@@ -1128,7 +1263,7 @@ app.post('/api/tasks/:id/points-request', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const t = await db.getTask(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = hasAdminPerms(req.user);
   const isGroupLeader = t.group_id && (await db.isGroupLeader(t.group_id, req.user.id));
   if (!isAdmin && !isGroupLeader) return res.status(403).json({ error: 'admin or group leader only' });
   const { requested_points, reason } = req.body || {};
@@ -1208,7 +1343,7 @@ app.post('/api/polls/:id/close', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const p = await db.getPoll(req.params.id);
   if (!p) return res.status(404).json({ error: 'not found' });
-  if (p.created_by !== req.user.id && req.user.role !== 'admin') {
+  if (p.created_by !== req.user.id && !hasAdminPerms(req.user)) {
     return res.status(403).json({ error: 'creator or admin only' });
   }
   await db.closePoll(req.params.id);
@@ -1218,7 +1353,7 @@ app.delete('/api/polls/:id', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const p = await db.getPoll(req.params.id);
   if (!p) return res.status(404).json({ error: 'not found' });
-  if (p.created_by !== req.user.id && req.user.role !== 'admin') {
+  if (p.created_by !== req.user.id && !hasAdminPerms(req.user)) {
     return res.status(403).json({ error: 'creator or admin only' });
   }
   await db.deletePoll(req.params.id);
@@ -1227,12 +1362,64 @@ app.delete('/api/polls/:id', wrap(async (req, res) => {
 
 // Auto-purge old trashed tasks once a day (default: 30 days).
 const TRASH_PURGE_DAYS = +(process.env.TRASH_PURGE_DAYS || 30);
+let _trashPurgeRunning = false;
 setInterval(async () => {
+  if (_trashPurgeRunning) return;  // กัน concurrency ถ้า purge ก่อนหน้ายังไม่จบ
+  _trashPurgeRunning = true;
   try {
     const n = await db.purgeOldTrash(TRASH_PURGE_DAYS);
     if (n > 0) console.log(`[trash] purged ${n} task(s) older than ${TRASH_PURGE_DAYS} days`);
   } catch (e) { console.warn('[trash] purge failed:', e.message); }
+  finally { _trashPurgeRunning = false; }
 }, 24 * 3600_000).unref();
+
+// ── ASR / Ollama retry worker ──
+// Scan recordings ที่อยู่ใน state 'error' (transcribe หรือ summarise) ทุก 5
+// นาที — ลองใหม่อัตโนมัติด้วย exponential backoff. แทนที่ user ต้องกด 🔄 เอง
+// เมื่อ Ollama เพิ่ง warm up / ASR เพิ่ง restart / network blip ระหว่าง pipeline
+const RETRY_MAX_ATTEMPTS = 4;       // 1 ครั้งแรก + retry 3 ครั้ง
+const RETRY_BACKOFF_MS = [60_000, 5 * 60_000, 30 * 60_000];  // 1m, 5m, 30m
+const _retryAttempts = new Map();   // id → { count, nextAt }
+function _shouldRetry(id) {
+  const e = _retryAttempts.get(id);
+  if (!e) return true;
+  if (e.count >= RETRY_MAX_ATTEMPTS) return false;
+  return Date.now() >= e.nextAt;
+}
+function _markRetry(id) {
+  const e = _retryAttempts.get(id) || { count: 0, nextAt: 0 };
+  e.count += 1;
+  e.nextAt = Date.now() + (RETRY_BACKOFF_MS[Math.min(e.count - 1, RETRY_BACKOFF_MS.length - 1)] || 30 * 60_000);
+  _retryAttempts.set(id, e);
+}
+function _resetRetry(id) { _retryAttempts.delete(id); }
+
+// Retry worker — เริ่มเฉพาะถ้า ASR/Ollama service ถูก enable. ปิดปัจจุบัน
+// เพราะ ASR_URL ว่าง = ASR ปิดอยู่ → retry ไม่มีอะไรให้ทำ + console spam
+let _retryRunning = false;
+if (process.env.ASR_URL) {
+  setInterval(async () => {
+    if (_retryRunning) return;
+    _retryRunning = true;
+    try {
+      const errored = await db.listErroredRecordings(20).catch(() => []);
+      for (const rec of errored) {
+        if (!_shouldRetry(rec.id)) continue;
+        _markRetry(rec.id);
+        if (rec.transcript_status === 'error') {
+          console.log(`[retry] transcribe ${rec.id} (attempt ${_retryAttempts.get(rec.id).count})`);
+          transcribeRecording(rec.id).then(() => _resetRetry(rec.id)).catch(() => {});
+        } else if (rec.summary_status === 'error') {
+          console.log(`[retry] summarise ${rec.id} (attempt ${_retryAttempts.get(rec.id).count})`);
+          summariseRecording(rec.id).then(() => _resetRetry(rec.id)).catch(() => {});
+        }
+      }
+    } catch (e) { console.warn('[retry] worker failed:', e.message); }
+    finally { _retryRunning = false; }
+  }, 5 * 60 * 1000).unref();
+} else {
+  console.log('[asr] disabled (ASR_URL empty) — retry worker NOT started');
+}
 
 // ── Recordings (audio) ──
 // Authenticated user can record + manage their own clips. Admin sees and can
@@ -1241,7 +1428,7 @@ setInterval(async () => {
 // the whole file first.
 app.get('/api/recordings', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
-  const all = req.query.all === '1' && req.user.role === 'admin';
+  const all = req.query.all === '1' && hasAdminPerms(req.user);
   const rows = await db.listRecordings({ memberId: req.user.id, all });
   res.json(rows);
 }));
@@ -1285,7 +1472,7 @@ app.post('/api/recordings/:id/transcribe', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const rec = await db.getRecording(req.params.id);
   if (!rec) return res.status(404).json({ error: 'recording not found' });
-  if (rec.member_id !== req.user.id && req.user.role !== 'admin') {
+  if (rec.member_id !== req.user.id && !hasAdminPerms(req.user)) {
     return res.status(403).json({ error: 'admin or owner only' });
   }
   transcribeRecording(rec.id).catch(e => console.warn('[asr] retry error:', e.message));
@@ -1297,7 +1484,7 @@ app.post('/api/recordings/:id/summarise', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const rec = await db.getRecording(req.params.id);
   if (!rec) return res.status(404).json({ error: 'recording not found' });
-  if (rec.member_id !== req.user.id && req.user.role !== 'admin') {
+  if (rec.member_id !== req.user.id && !hasAdminPerms(req.user)) {
     return res.status(403).json({ error: 'admin or owner only' });
   }
   if (!rec.transcript) return res.status(400).json({ error: 'no transcript yet — run transcribe first' });
@@ -1309,7 +1496,13 @@ app.post('/api/recordings/:id/summarise', wrap(async (req, res) => {
 // transcript back to the recording row. Steps: pending → processing → done/error.
 async function transcribeRecording(id) {
   const ASR_URL = process.env.ASR_URL;
-  if (!ASR_URL) return; // ASR disabled — leave row in 'pending'
+  if (!ASR_URL) {
+    // ASR disabled — mark explicitly so UI shows "— ปิด AI" แทน pending ค้าง
+    try {
+      await db.updateRecording(id, { transcript_status: 'skipped', summary_status: 'skipped' });
+    } catch {}
+    return;
+  }
 
   const rec = await db.getRecording(id);
   if (!rec) return;
@@ -1403,19 +1596,62 @@ async function summariseRecording(id) {
   }
 }
 
+// ── Signed URL helpers (short-lived URLs ที่ <audio src=> หรือ <img src=>
+// ใช้ได้โดยไม่ต้องโผล่ token ใน URL log/history) ──
+// secret = ENV (UPLOAD_SIGN_SECRET) หรือ random ที่สร้างใหม่ทุก process start.
+// ถ้า random — signed URL จะ invalidate ทันทีหลัง restart (ปลอดภัย แต่
+// user ต้อง refresh page หลัง restart เพื่อให้ frontend ขอ signed URL ใหม่)
+const SIGN_SECRET = process.env.UPLOAD_SIGN_SECRET || crypto.randomBytes(32).toString('hex');
+function signUrl(scope, id, ttlSec = 3600) {
+  const exp = Math.floor(Date.now() / 1000) + ttlSec;
+  const payload = `${scope}:${id}:${exp}`;
+  const sig = crypto.createHmac('sha256', SIGN_SECRET).update(payload).digest('base64url').slice(0, 24);
+  return { sig, exp };
+}
+function verifySignature(scope, id, sig, exp) {
+  if (!sig || !exp) return false;
+  if (Math.floor(Date.now() / 1000) > +exp) return false;
+  const payload = `${scope}:${id}:${exp}`;
+  const expected = crypto.createHmac('sha256', SIGN_SECRET).update(payload).digest('base64url').slice(0, 24);
+  try { return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)); } catch { return false; }
+}
+
+// Endpoint ที่ frontend ขอ signed URL — ปกป้องด้วย auth header ตามปกติ
+app.get('/api/recordings/:id/sign', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const rec = await db.getRecording(req.params.id);
+  if (!rec) return res.status(404).json({ error: 'recording not found' });
+  if (rec.member_id !== req.user.id && !hasAdminPerms(req.user)) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  const { sig, exp } = signUrl('rec', rec.id, 3600);  // 1 ชม
+  res.json({ url: `/api/recordings/${rec.id}/stream?sig=${sig}&exp=${exp}` });
+}));
+
 app.get('/api/recordings/:id/stream', wrap(async (req, res) => {
-  // Allow token via query string for <audio src=...> usage where the browser
-  // can't easily attach an Authorization header (same trick we use for SSE).
-  let user = req.user;
+  // 1) Signed URL (preferred) — sig + exp ใน query, HMAC verify ไม่มี token leak
+  let user = null;
+  if (req.query.sig && req.query.exp) {
+    if (verifySignature('rec', req.params.id, req.query.sig, req.query.exp)) {
+      // signature OK → no need to look up user (signed URL = authenticated)
+      // We still need to check existence below — record may have been deleted
+      user = { id: '_signed', role: 'admin' };  // bypass owner check below
+    }
+  }
+  // 2) Token via header (Authorization: Bearer ...) — preferred for SPA fetch
+  if (!user) user = req.user;
+  // 3) Token via query (legacy, deprecated — kept for backward-compat with
+  //    <audio src> that loaded before SW v41). Logs warning.
   if (!user && req.query.token) {
     const memberId = auth.lookupToken(req.query.token);
     if (memberId) user = await db.getMember(memberId);
+    if (user) console.warn('[deprecated] /api/recordings/.../stream via ?token= — switch to /sign endpoint');
   }
   if (!user) return res.status(401).json({ error: 'login required' });
 
   const rec = await db.getRecording(req.params.id);
   if (!rec) return res.status(404).json({ error: 'recording not found' });
-  if (rec.member_id !== user.id && user.role !== 'admin') {
+  if (rec.member_id !== user.id && !hasAdminPerms(user)) {
     return res.status(403).json({ error: 'forbidden' });
   }
   const filePath = path.join(AUDIO_DIR, rec.filename);
@@ -1424,7 +1660,14 @@ app.get('/api/recordings/:id/stream', wrap(async (req, res) => {
   const stat = fs.statSync(filePath);
   const total = stat.size;
   const range = req.headers.range;
-  res.setHeader('Content-Type', rec.mime || 'audio/webm');
+  // Sanitize Content-Type: whitelist known audio mime types ที่ระบบเรารับเข้า
+  // ไม่ไว้ใจค่าใน DB เพราะ user เคย upload — ถ้า DB ถูกเขียนเป็น
+  // 'image/svg+xml' ก็จะ XSS ตอน embed ใน page อื่น
+  const safeAudioMimes = ['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/flac', 'audio/aac', 'audio/x-m4a'];
+  const declaredMime = String(rec.mime || '').toLowerCase();
+  const contentType = safeAudioMimes.includes(declaredMime) ? declaredMime : 'application/octet-stream';
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Accept-Ranges', 'bytes');
   res.setHeader('Cache-Control', 'private, max-age=0');
   if (range) {
@@ -1446,7 +1689,7 @@ app.patch('/api/recordings/:id', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const rec = await db.getRecording(req.params.id);
   if (!rec) return res.status(404).json({ error: 'recording not found' });
-  if (rec.member_id !== req.user.id && req.user.role !== 'admin') {
+  if (rec.member_id !== req.user.id && !hasAdminPerms(req.user)) {
     return res.status(403).json({ error: 'admin or owner only' });
   }
   const { label, duration_ms } = req.body || {};
@@ -1458,7 +1701,7 @@ app.delete('/api/recordings/:id', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const rec = await db.getRecording(req.params.id);
   if (!rec) return res.status(404).json({ error: 'recording not found' });
-  if (rec.member_id !== req.user.id && req.user.role !== 'admin') {
+  if (rec.member_id !== req.user.id && !hasAdminPerms(req.user)) {
     return res.status(403).json({ error: 'admin or owner only' });
   }
   // Remove disk file first; if that fails we still drop the DB row so it
@@ -1467,6 +1710,11 @@ app.delete('/api/recordings/:id', wrap(async (req, res) => {
   try { fs.unlinkSync(path.join(AUDIO_DIR, rec.filename)); }
   catch (e) { if (e.code !== 'ENOENT') diskErr = e.message; }
   await db.deleteRecording(req.params.id);
+  await db.logAudit({
+    actor_id: req.user.id, actor_name: req.user.name,
+    action: 'recording.delete', target_kind: 'recording', target_id: req.params.id,
+    payload: { label: rec.label, owner: rec.member_id }, ip: req.ip,
+  });
   res.json({ ok: true, ...(diskErr ? { warning: diskErr } : {}) });
 }));
 
@@ -1474,11 +1722,17 @@ app.delete('/api/recordings/:id', wrap(async (req, res) => {
 // Whitelist of writable settings + how to validate / serialize each one.
 // Add new entries here when introducing more settings — anything outside the
 // whitelist is rejected by PUT /api/settings to prevent stray DB rows.
+// Settings whitelist — เพิ่ม key ใหม่ที่นี่. แต่ละ key ต้องมี:
+//   default: ค่าเริ่มต้น (เก็บเป็น string เพื่อ schema เดียวกับ db)
+//   parse: function แปลงค่าจาก client → string ที่จะเก็บ
+//   label: คำอธิบายสั้น (สำหรับ admin UI)
+//   description: รายละเอียดยาว ๆ อธิบายผลของ setting (optional)
 const SETTINGS_DEFS = {
   email_invitations_enabled: {
     default: 'true',
     parse:   v => (v === 'false' || v === false || v === 0 || v === '0') ? 'false' : 'true',
     label:   'ส่งอีเมลเชิญประชุม (iMIP) ตอนสร้าง/แก้/ลบประชุม',
+    description: 'เมื่อเปิด — ระบบจะส่งอีเมลพร้อม iCalendar (.ics) attachment ให้ผู้เข้าร่วมประชุมทุกครั้งที่สร้าง/แก้ไข/ยกเลิกประชุม. ใช้ SMTP_* env เป็น relay. ปิดถ้าทีมใช้ปฏิทินอื่น (Google Calendar etc) แล้วไม่ต้องการ duplicate.',
   },
 };
 
@@ -1513,42 +1767,32 @@ app.put('/api/settings', wrap(async (req, res) => {
     // Sync runtime state for settings the mailer caches in-memory.
     if (k === 'email_invitations_enabled') mailer.setAdminEnabled(value === 'true');
   }
+  if (Object.keys(written).length) {
+    await db.logAudit({
+      actor_id: req.user.id, actor_name: req.user.name,
+      action: 'settings.update', target_kind: 'settings', target_id: '*',
+      payload: written, ip: req.ip,
+    });
+  }
   res.json({ ok: true, updated: written });
 }));
 
-// ===== App settings (admin only) =====
-// Returns all settings as a flat key:value object plus a few diagnostic keys
-// (prefixed _ so they're never written back to DB).
-app.get('/api/settings', wrap(async (req, res) => {
+// Audit log viewer — admin only. Query filters: action, target_kind, actor_id, since, limit
+app.get('/api/audit', wrap(async (req, res) => {
   if (!requireAdmin(req, res)) return;
-  const rows = await db.listSettings();
-  const obj = {};
-  for (const r of rows) obj[r.key] = r.value;
-  // Diagnostics (read-only, computed live)
-  obj._smtp_configured     = mailer.smtpConfigured();
-  obj._email_admin_enabled = mailer.getAdminEnabled();
-  // Default values for keys that haven't been written yet — so the client
-  // doesn't have to know defaults
-  if (obj.email_invitations_enabled === undefined) obj.email_invitations_enabled = 'true';
-  res.json(obj);
+  const rows = await db.listAuditEvents({
+    action:      req.query.action,
+    target_kind: req.query.target_kind,
+    actor_id:    req.query.actor_id,
+    since:       req.query.since,
+    limit:       +req.query.limit || 200,
+  });
+  res.json(rows);
 }));
 
-app.put('/api/settings', wrap(async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const patch = req.body || {};
-  for (const [key, value] of Object.entries(patch)) {
-    if (key.startsWith('_')) continue;       // ignore diagnostic keys
-    if (typeof value === 'object') continue; // simple scalar values only
-    await db.setSetting(key, String(value), req.user.id);
-  }
-  // Apply known runtime-affecting settings immediately (no restart needed)
-  if ('email_invitations_enabled' in patch) {
-    const on = patch.email_invitations_enabled === true || patch.email_invitations_enabled === 'true';
-    mailer.setAdminEnabled(on);
-    console.log(`[settings] email_invitations_enabled set to ${on} by ${req.user.name}`);
-  }
-  res.json({ ok: true });
-}));
+// (เคยมี handler /api/settings ซ้ำที่ตรงนี้ — admin-only — แต่ Express ใช้
+//  handler ตัวแรกที่ register และตัวข้างบน (บรรทัด 1488) ไม่เช็ค admin →
+//  ตัวซ้ำนี้เป็น dead code + permission bug แฝง. ลบทิ้ง.)
 
 // ===== Leaves (วันลา) =====
 // All authenticated users can read; members create/edit/delete their own; admin can manage all.
@@ -1564,6 +1808,22 @@ app.post('/api/categories', wrap(async (req, res) => {
   if (!name || !String(name).trim()) return res.status(400).json({ error: 'name required' });
   res.status(201).json(await db.createCategory(name));
 }));
+app.put('/api/categories/:id', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const cat = await db.getCategory(req.params.id);
+  if (!cat) return res.status(404).json({ error: 'not found' });
+  const { name } = req.body || {};
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'name required' });
+  try { res.json(await db.updateCategory(req.params.id, name)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+}));
+app.delete('/api/categories/:id', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const cat = await db.getCategory(req.params.id);
+  if (!cat) return res.status(404).json({ error: 'not found' });
+  await db.deleteCategory(req.params.id);
+  res.json({ ok: true });
+}));
 
 app.get('/api/leaves', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
@@ -1574,7 +1834,7 @@ app.post('/api/leaves', wrap(async (req, res) => {
   const { member_id, start_at, end_at, reason } = req.body || {};
   // Members can only create leaves for themselves; admin can create for anyone
   const targetId = member_id || req.user.id;
-  if (req.user.role !== 'admin' && targetId !== req.user.id) {
+  if (!hasAdminPerms(req.user) && targetId !== req.user.id) {
     return res.status(403).json({ error: 'สามารถสร้างวันลาให้ตัวเองเท่านั้น' });
   }
   res.status(201).json(await db.createLeave({ member_id: targetId, start_at, end_at, reason }));
@@ -1583,7 +1843,7 @@ app.put('/api/leaves/:id', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const leave = await db.getLeave(req.params.id);
   if (!leave) return res.status(404).json({ error: 'not found' });
-  if (req.user.role !== 'admin' && leave.member_id !== req.user.id) {
+  if (!hasAdminPerms(req.user) && leave.member_id !== req.user.id) {
     return res.status(403).json({ error: 'แก้ไขได้เฉพาะวันลาของตัวเอง' });
   }
   res.json(await db.updateLeave(req.params.id, req.body || {}));
@@ -1592,7 +1852,7 @@ app.delete('/api/leaves/:id', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const leave = await db.getLeave(req.params.id);
   if (!leave) return res.status(404).json({ error: 'not found' });
-  if (req.user.role !== 'admin' && leave.member_id !== req.user.id) {
+  if (!hasAdminPerms(req.user) && leave.member_id !== req.user.id) {
     return res.status(403).json({ error: 'ลบได้เฉพาะวันลาของตัวเอง' });
   }
   await db.deleteLeave(req.params.id);
@@ -1614,21 +1874,78 @@ app.get('/api/whiteboards/:id', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const b = await db.getWhiteboard(req.params.id);
   if (!b) return res.status(404).json({ error: 'not found' });
+  // ACL — private board ต้องเป็น member ถึงจะอ่านได้
+  if (!await db.whiteboardCanAccess(req.params.id, req.user.id, req.user.role)) {
+    return res.status(403).json({ error: 'no access to this whiteboard' });
+  }
   res.json(b);
 }));
 app.delete('/api/whiteboards/:id', wrap(async (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireAuth(req, res)) return;
+  // Allow board creator to delete their own, OR admin can delete any
+  const board = await db.getWhiteboard(req.params.id);
+  if (!board) return res.status(404).json({ error: 'not found' });
+  if (board.created_by !== req.user.id && !hasAdminPerms(req.user)) {
+    return res.status(403).json({ error: 'creator or admin only' });
+  }
   if (!await db.deleteWhiteboard(req.params.id)) return res.status(404).json({ error: 'not found' });
+  await db.logAudit({
+    actor_id: req.user.id, actor_name: req.user.name,
+    action: 'whiteboard.delete', target_kind: 'whiteboard', target_id: req.params.id,
+    payload: { name: board.name }, ip: req.ip,
+  });
+  res.json({ ok: true });
+}));
+// Whiteboard member management — owner/admin only
+app.get('/api/whiteboards/:id/members', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  if (!await db.whiteboardCanAccess(req.params.id, req.user.id, req.user.role)) {
+    return res.status(403).json({ error: 'no access' });
+  }
+  res.json(await db.whiteboardListMembers(req.params.id));
+}));
+app.post('/api/whiteboards/:id/members', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const board = await db.getWhiteboard(req.params.id);
+  if (!board) return res.status(404).json({ error: 'not found' });
+  if (board.created_by !== req.user.id && !hasAdminPerms(req.user)) {
+    return res.status(403).json({ error: 'owner or admin only' });
+  }
+  const { member_id, role } = req.body || {};
+  if (!member_id) return res.status(400).json({ error: 'member_id required' });
+  await db.whiteboardAddMember(req.params.id, member_id, role);
+  res.json({ ok: true });
+}));
+app.delete('/api/whiteboards/:id/members/:memberId', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const board = await db.getWhiteboard(req.params.id);
+  if (!board) return res.status(404).json({ error: 'not found' });
+  if (board.created_by !== req.user.id && !hasAdminPerms(req.user)) {
+    return res.status(403).json({ error: 'owner or admin only' });
+  }
+  if (!await db.whiteboardRemoveMember(req.params.id, req.params.memberId)) return res.status(404).end();
   res.json({ ok: true });
 }));
 // Inject a task or meeting card onto the whiteboard
+const VALID_INJECT_KINDS = ['task', 'meeting', 'group', 'recording', 'point_request', 'point_decision'];
 app.post('/api/whiteboards/:id/inject', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
   const board = await db.getWhiteboard(req.params.id);
   if (!board) return res.status(404).json({ error: 'not found' });
-  const { kind, data } = req.body || {};  // kind: 'task'|'meeting'|'text', data: object
+  // ACL check — same as opening the board
+  if (!await db.whiteboardCanAccess(req.params.id, req.user.id, req.user.role)) {
+    return res.status(403).json({ error: 'no access to this whiteboard' });
+  }
+  const { kind, data } = req.body || {};
   if (!kind || !data) return res.status(400).json({ error: 'kind and data required' });
-  // Build a Fabric.js-compatible object (will be rendered as a Group client-side)
+  if (!VALID_INJECT_KINDS.includes(kind)) {
+    return res.status(400).json({ error: `unknown kind. Allowed: ${VALID_INJECT_KINDS.join(', ')}` });
+  }
+  // Size limit — กัน DoS via huge base64 image embedded ใน data
+  const payloadSize = JSON.stringify(data).length;
+  if (payloadSize > 256 * 1024) {
+    return res.status(413).json({ error: `inject payload too large (${Math.round(payloadSize/1024)}KB > 256KB)` });
+  }
   const injectOp = { type: 'inject', kind, data, injectedBy: req.user.name };
   wbBroadcast(req.params.id, { type: 'inject', op: injectOp });
   res.json({ ok: true });
@@ -1737,7 +2054,21 @@ process.on('unhandledRejection', (r) => console.error('[unhandledRejection]', r?
     wss.handleUpgrade(request, socket, head, ws => wss.emit('connection', ws, request));
   });
 
+  // Heartbeat — ping ทุก 30 วินาที, ถ้า client ไม่ pong ภายใน interval ถัดไป
+  // = TCP half-open (mobile sleep, WiFi drop, NAT timeout) → terminate.
+  // กันสถานะ "user ค้างใน room" ที่ disconnect ไปแล้วแต่ server ไม่รู้
+  const heartbeat = setInterval(() => {
+    wss.clients.forEach(ws => {
+      if (ws.isAlive === false) return ws.terminate();
+      ws.isAlive = false;
+      try { ws.ping(); } catch {}
+    });
+  }, 30 * 1000);
+  wss.on('close', () => clearInterval(heartbeat));
+
   wss.on('connection', (ws) => {
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
     let clientId = null, boardId = null;
     ws.on('message', async (raw) => {
       let msg;
@@ -1751,6 +2082,9 @@ process.on('unhandledRejection', (r) => console.error('[unhandledRejection]', r?
         if (!member) { ws.send(JSON.stringify({ type: 'error', message: 'unauthorized' })); ws.close(); return; }
         const board = await db.getWhiteboard(msg.boardId);
         if (!board) { ws.send(JSON.stringify({ type: 'error', message: 'board not found' })); ws.close(); return; }
+        // ACL — private board ต้องเป็น member ถึงจะ join WS ได้
+        const canAccess = await db.whiteboardCanAccess(msg.boardId, member.id, member.role);
+        if (!canAccess) { ws.send(JSON.stringify({ type: 'error', message: 'no access to this whiteboard' })); ws.close(); return; }
 
         clientId = `${member.id}_${Date.now()}`;
         boardId = msg.boardId;
@@ -1769,6 +2103,12 @@ process.on('unhandledRejection', (r) => console.error('[unhandledRejection]', r?
       }
 
       else if (msg.type === 'op' && boardId) {
+        // Size guard — กัน DoS via huge canvas blob (เช่น sticky + base64 image)
+        const sz = (msg.op?.canvasJson || '').length;
+        if (sz > 5 * 1024 * 1024) {  // 5 MB cap per op
+          ws.send(JSON.stringify({ type: 'error', message: `canvas too large (${Math.round(sz/1024)}KB > 5MB)` }));
+          return;
+        }
         wbBroadcast(boardId, { type: 'op', clientId, op: msg.op }, clientId);
         // Auto-save to DB (debounced) so reopening the board recovers latest state
         if (msg.op?.canvasJson) {
@@ -1777,6 +2117,11 @@ process.on('unhandledRejection', (r) => console.error('[unhandledRejection]', r?
       }
 
       else if (msg.type === 'confirm' && boardId) {
+        const sz = (msg.canvasJson || '').length;
+        if (sz > 5 * 1024 * 1024) {
+          ws.send(JSON.stringify({ type: 'error', message: `canvas too large (${Math.round(sz/1024)}KB > 5MB)` }));
+          return;
+        }
         await db.updateWhiteboardCanvas(boardId, msg.canvasJson);
         const room = wbRooms.get(boardId);
         const me = room?.get(clientId);
