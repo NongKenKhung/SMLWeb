@@ -13,8 +13,10 @@ each with start/end/text and (when alignment is on) a `words` array with
 per-word timing.
 
 If OLLAMA_URL is set, every /transcribe call also asks Ollama to:
-  1. Summarise the transcript in 2-3 sentences (Thai)
-  2. Extract any action items as a JSON array
+  1. Organise the transcript into a Markdown outline grouped by topic
+     (## หัวข้อ / - bullet point — readable structure, no paraphrasing of intent)
+  2. Extract any explicit action items as a JSON array (kept separate so the
+     UI can show a TODO checklist alongside the outline)
 
 Configuration (env vars)
   WHISPER_MODEL         "tiny" | "base" | "small" (default) | "medium" | "large-v3"
@@ -85,10 +87,28 @@ def _load_main():
         _loading = True
         try:
             print(f"[asr] loading whisperx model='{MODEL_NAME}' device={DEVICE} "
-                  f"compute_type={COMPUTE_TYPE} ...", flush=True)
+                  f"compute_type={COMPUTE_TYPE} lang={DEFAULT_LANG or 'auto'} ...", flush=True)
             t0 = time.time()
             import whisperx  # imported lazily so /health stays responsive on boot
-            _model = whisperx.load_model(MODEL_NAME, DEVICE, compute_type=COMPUTE_TYPE)
+            # Pass `language` at load time so whisperx doesn't run language-
+            # detection on every clip ("No language specified, language will be
+            # detected for each audio file (increases inference time)").
+            load_kwargs = {"compute_type": COMPUTE_TYPE}
+            if DEFAULT_LANG:
+                load_kwargs["language"] = DEFAULT_LANG
+            _model = whisperx.load_model(MODEL_NAME, DEVICE, **load_kwargs)
+            # Enable TF32 *after* whisperx load — pyannote (loaded internally as
+            # the VAD backbone) calls `torch.backends.cuda.matmul.allow_tf32 =
+            # False` during init for reproducibility. Setting it before load
+            # gets clobbered; setting it after sticks for every inference run.
+            # ~1.5–2× speedup on wav2vec2 matmuls (RTX 30/40-series only).
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.backends.cuda.matmul.allow_tf32 = True
+                    torch.backends.cudnn.allow_tf32 = True
+            except Exception:
+                pass
             print(f"[asr] main model ready in {time.time() - t0:.1f}s", flush=True)
         finally:
             _loading = False
@@ -177,10 +197,23 @@ def transcribe_path(src: Path) -> dict:
     t_loaded = time.time()
 
     model = _load_main()
+    # ถ้า vRAM ไม่พอ ctranslate2 จะ throw std::runtime_error("CUDA failed
+    # with error unknown error") (silent OOM) — ตัว C++ ก็ทำให้ Python ตาย
+    # เลย. ตรวจจับไม่ได้ที่ Python; ทำได้แค่ลด batch_size แล้ว retry รอบเดียว
+    # ก่อนยอมแพ้ — แค่นี้ก็ครอบคลุม OOM transient ส่วนใหญ่
     kwargs = {"batch_size": BATCH_SIZE}
     if DEFAULT_LANG:
         kwargs["language"] = DEFAULT_LANG
-    result = model.transcribe(audio, **kwargs)
+    try:
+        result = model.transcribe(audio, **kwargs)
+    except RuntimeError as e:
+        if "CUDA" in str(e) and BATCH_SIZE > 1:
+            fallback = max(1, BATCH_SIZE // 2)
+            print(f"[asr] transcribe failed ({e}); retry with batch={fallback}", flush=True)
+            kwargs["batch_size"] = fallback
+            result = model.transcribe(audio, **kwargs)
+        else:
+            raise
     t_transcribed = time.time()
     detected_lang = result.get("language") or DEFAULT_LANG or "en"
 
@@ -201,6 +234,20 @@ def transcribe_path(src: Path) -> dict:
                 print(f"[asr] align step failed: {e}", flush=True)
 
     full_text = " ".join((s.get("text") or "").strip() for s in aligned_segments).strip()
+
+    # ปล่อย activation buffers ที่ค้างใน vRAM (model weights ยังคงอยู่ — แค่
+    # ปล่อย scratch memory ของ batch ล่าสุด ~2-3 GB). จำเป็นเพราะแชร์ GPU
+    # กับ Ollama ที่ต้องการ ~2 GB สำหรับ Typhoon2 — ถ้าไม่ free Ollama จะ
+    # fall back ไป CPU ใช้เวลา > 5 นาที = backend abort timeout
+    try:
+        import torch, gc
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+    except Exception:
+        pass
+
     t_done = time.time()
 
     return {
@@ -219,8 +266,13 @@ def transcribe_path(src: Path) -> dict:
 
 
 def summarise_with_ollama(text: str, lang_hint: str = "th") -> dict:
-    """Ask Ollama to summarise + extract action items. Returns
-    { summary: str, action_items: [str, ...] } or raises on failure."""
+    """Ask Ollama to organise the transcript into a Markdown outline + extract
+    action items. Returns { summary: str, action_items: [str, ...] } where
+    `summary` is a Markdown outline (## หัวข้อ + - bullet points) rather than a
+    paraphrased sentence — keeps the column name for backward compat but the
+    content shape changed (was a 1-3 sentence summary previously).
+
+    Raises on failure."""
     if not OLLAMA_URL:
         raise RuntimeError("OLLAMA_URL not configured")
     if not text.strip():
@@ -228,10 +280,22 @@ def summarise_with_ollama(text: str, lang_hint: str = "th") -> dict:
 
     lang_label = "Thai" if lang_hint == "th" else lang_hint or "the same language as the input"
     prompt = (
-        f"You are a helpful meeting-notes assistant. Read the transcript below "
-        f"and produce a JSON object with exactly two keys:\n"
-        f'  "summary": a 1-3 sentence summary in {lang_label}\n'
-        f'  "action_items": an array of short action-item strings (in {lang_label}). Empty array if none.\n'
+        f"You are a transcript organiser. Read the transcript below and "
+        f"REORGANISE its content into a clear Markdown outline grouped by "
+        f"topic. Do NOT paraphrase or summarise — keep the speakers' actual "
+        f"points; only restructure them.\n\n"
+        f"Output strictly a JSON object with exactly two keys:\n"
+        f'  "summary": a Markdown string in {lang_label} formatted as:\n'
+        f"      ## Topic heading\n"
+        f"      - Bullet point capturing one idea/statement\n"
+        f"      - Another bullet\n"
+        f"      ## Next topic\n"
+        f"      - ...\n"
+        f"    Use 2-6 topics depending on length. Each bullet ≤ 1 line. "
+        f"Order topics in the same order they appear in the transcript.\n"
+        f'  "action_items": array of short action-item strings (in '
+        f"{lang_label}) — only explicit TODOs / decisions / assignments. "
+        f"Empty array if none.\n\n"
         f"Reply ONLY with the JSON object, no commentary.\n\n"
         f"Transcript:\n\"\"\"\n{text}\n\"\"\"\n"
     )
