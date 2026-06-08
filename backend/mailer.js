@@ -307,7 +307,8 @@ function escapeHtml(s) {
 // Filter assignees → only those with a non-empty email. Logs others.
 function pickRecipients(meeting, override) {
   const list = override || meeting.assignees || [];
-  const haveEmail = list.filter(a => a.email && a.email.trim());
+  // กรองคนที่ปิดรับอีเมล (email_opt_in === 0) ออก — undefined/1 = รับปกติ (fail-safe)
+  const haveEmail = list.filter(a => a.email && a.email.trim() && a.email_opt_in !== 0);
   const skipped = list.length - haveEmail.length;
   if (skipped > 0) {
     console.warn(`[mailer] skipping ${skipped} attendee(s) without email on meeting "${meeting.title}"`);
