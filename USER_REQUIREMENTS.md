@@ -1,1120 +1,860 @@
-# SMLWeb — User Requirements Document
+# SMLWeb — User Requirements Document (ฉบับละเอียด)
 
-> เอกสารระบุความต้องการของผู้ใช้ — ผู้ใช้คือใคร, เขาต้องการทำอะไร, ทำไมต้องการ และเกณฑ์การยอมรับ
+> เอกสารความต้องการระบบฉบับสมบูรณ์ — ครอบคลุม **ทุกหน้า ทุกฟีเจอร์ ทุก popup** พร้อมระบุว่าแต่ละ popup/form ต้องกรอก/แสดงข้อมูลอะไรบ้าง (field, ชนิดข้อมูล, บังคับ/ไม่บังคับ, validation, ใครทำได้)
 >
-> **Document type:** User Requirements Specification (URS)
-> **Project:** SMLWeb (Smart City Lab Web App)
-> **Team:** Smart City Lab @ KMITL
-> **Version:** 2.0
-> **Date:** 2026-05-22
+> **Project:** SMLWeb (Smart City Lab Web App) · **Team:** Smart City Lab @ KMITL
+> **Version:** 3.0 (detailed) · **Date:** 2026-05-22
+> **เอกสารคู่กัน:** `DESIGN_SPEC.md` (UI/UX สำหรับ designer)
 
 ---
 
 ## สารบัญ
 
-1. [บทนำ](#1-บทนำ)
-2. [ผู้ใช้และกลุ่มเป้าหมาย (User Personas)](#2-ผู้ใช้และกลุ่มเป้าหมาย)
-3. [ปัญหาที่ผู้ใช้พบ (Pain Points)](#3-ปัญหาที่ผู้ใช้พบ)
-4. [วัตถุประสงค์หลักของระบบ](#4-วัตถุประสงค์หลักของระบบ)
-5. [User Stories](#5-user-stories)
-6. [Functional Requirements](#6-functional-requirements)
-7. [Non-Functional Requirements](#7-non-functional-requirements)
-8. [Use Cases / Scenarios](#8-use-cases--scenarios)
-9. [Acceptance Criteria](#9-acceptance-criteria)
-10. [Constraints & Assumptions](#10-constraints--assumptions)
-11. [Out of Scope](#11-out-of-scope)
-12. [Success Metrics](#12-success-metrics)
+**ส่วน A — ภาพรวม**
+1. [บทนำ + วิธีอ่านเอกสาร](#1-บทนำ)
+2. [ผู้ใช้ (Personas)](#2-ผู้ใช้-personas)
+3. [Feature Inventory — ฟีเจอร์ทั้งหมด](#3-feature-inventory)
+4. [Role & Permission Matrix](#4-role--permission-matrix)
+5. [Data Dictionary — ฟิลด์ของทุก Entity](#5-data-dictionary)
+
+**ส่วน B — รายละเอียดหน้าจอ**
+6. [Login](#6-login)
+7. [Home](#7-home)
+8. [Tasks / Todo](#8-tasks--todo)
+9. [Calendar](#9-calendar)
+10. [People (Members + Connections)](#10-people)
+11. [Summary](#11-summary)
+12. [Overview (Boss)](#12-overview)
+13. [Profile](#13-profile)
+14. [Whiteboard](#14-whiteboard)
+15. [Dev Tools (/dev)](#15-dev-tools)
+
+**ส่วน C — Popup / Modal ทุกตัว (ละเอียดระดับฟิลด์)**
+16. [Generic Dialogs (Confirm/Prompt/Toast)](#16-generic-dialogs)
+17. [Task Popups](#17-task-popups)
+18. [Meeting Popups](#18-meeting-popups)
+19. [Group Popups](#19-group-popups)
+20. [Member Popups](#20-member-popups)
+21. [Connection Popups](#21-connection-popups)
+22. [Points Workflow Popups](#22-points-workflow-popups)
+23. [Membership Flow Popups](#23-membership-flow-popups)
+24. [Poll Popups](#24-poll-popups)
+25. [Submission / File Popups](#25-submission--file-popups)
+26. [Admin / Settings Popups](#26-admin--settings-popups)
+27. [Notification + Preview Sheets](#27-notification--preview-sheets)
+28. [Whiteboard Popups](#28-whiteboard-popups)
+
+**ส่วน D — กฎเกณฑ์ + ข้อกำหนด**
+29. [Workflows (Points / Group Lifecycle / Invitation)](#29-workflows)
+30. [Validation Rules](#30-validation-rules)
+31. [Notifications Spec](#31-notifications-spec)
+32. [Non-Functional Requirements](#32-non-functional-requirements)
+33. [Constraints + Out of Scope](#33-constraints--out-of-scope)
+34. [Acceptance Criteria](#34-acceptance-criteria)
 
 ---
+
+# ส่วน A — ภาพรวม
 
 ## 1. บทนำ
 
-### 1.1 วัตถุประสงค์ของเอกสาร
-เอกสารนี้ระบุความต้องการของผู้ใช้สำหรับระบบ SMLWeb เพื่อเป็น single source of truth ให้ทีม Product/Design/Engineering ใช้ตัดสินใจ:
-- Feature ไหนต้องมี / ไม่ต้องมี
-- ระบบต้องตอบสนอง user goal อะไร
-- เกณฑ์การ accept feature เป็นอย่างไร
+### 1.1 จุดประสงค์
+ระบุความต้องการของระบบ SMLWeb ในระดับที่ทีม Dev/Design นำไปสร้างได้ทันที — โดยเฉพาะ **รายละเอียดของทุก popup ว่าต้องมีฟิลด์อะไร บังคับไหม validate อย่างไร**
 
-### 1.2 ขอบเขต
-ครอบคลุมระบบบริหารจัดการงานสำหรับทีม Smart City Lab @ KMITL:
-- จัดการสมาชิก, โครงการ, งาน
-- ระบบ Points แบบ workflow
-- ปฏิทินรวม + ประชุม
-- ผู้ติดต่อภายนอก
-- Collaboration tools (whiteboard, comments)
-- Notification + recording
+### 1.2 วิธีอ่านตาราง field ในเอกสารนี้
+ทุก popup จะมีตารางในรูปแบบ:
 
-### 1.3 คำจำกัดความ
+| Field | Type | Req | Validation | Default | คำอธิบาย |
+|---|---|:-:|---|---|---|
+
+- **Type:** ชนิด input (text / number / select / textarea / date / datetime / radio / checkbox / chips / file / color)
+- **Req:** ✅ = บังคับ, — = ไม่บังคับ
+- **Validation:** เงื่อนไขที่ต้องผ่านก่อนบันทึก
+- **Default:** ค่าเริ่มต้น
+
+### 1.3 คำศัพท์
 
 | คำ | ความหมาย |
 |---|---|
-| ทีม | กลุ่มสมาชิกทั้งหมดใน Smart City Lab |
-| สมาชิก / Member | คนที่มี account ในระบบ |
-| โครงการ / Group | งานใหญ่ที่รวม task หลายๆงาน |
-| งาน / Task | งานย่อย 1 ใบ |
-| ประชุม / Meeting | task ประเภท `kind=meeting` |
-| Points | คะแนนสะสมจากการทำงาน |
-| Connection | ผู้ติดต่อภายนอก (บริษัท/หน่วยงาน/lobbyist) |
+| Member / สมาชิก | ผู้ใช้ที่มี account |
+| Group / Project / โครงการ | กลุ่มงานที่รวม task หลายใบ มี leader 1 คน |
+| Task / งาน | งานย่อย 1 ใบ |
+| Meeting / ประชุม | task ชนิด `kind=meeting` ส่ง email invite |
+| Connection | ผู้ติดต่อภายนอก (บริษัท/lobbyist/หน่วยงาน) |
+| Points / คะแนน | คะแนนสะสมจากการทำงานเสร็จ |
 | Phase | ขั้นตอนใน points workflow |
-
----
-
-## 2. ผู้ใช้และกลุ่มเป้าหมาย
-
-### 2.1 Persona 1: อาจารย์ (Boss)
-
-**ชื่อ:** อ.อ๊อด
-**บทบาท:** หัวหน้า lab, อาจารย์ที่ปรึกษา
-**อายุ:** 40+
-**Tech-savviness:** ปานกลาง — ใช้มือถือคล่อง แต่ไม่ลงโค้ด
-
-#### Goals
-- ดู bird's-eye view ของทีม — ใครทำอะไร, โครงการไหนคืบหน้ายังไง
-- รู้สถานะโครงการสำคัญ — งบประมาณ, deadline, ปัญหา
-- ตัดสินใจอนุมัติ — point requests, deadline extensions
-- ไม่ต้องการรายละเอียดงาน task ต่ำๆ
-
-#### Behaviors
-- เปิดแอปวันละ 1-2 ครั้ง (เช้า/เย็น)
-- ใช้ iPad เป็นหลัก (portrait)
-- ชอบข้อมูลเป็นภาพ (chart, badge) มากกว่าข้อความเยอะ
-- ไม่ค่อยพิมพ์ — เน้นแตะ/อ่าน
-
-#### Pain Points
-- ไม่อยากเปิดหลายหน้าเพื่อดูข้อมูล
-- ไม่ชอบ scroll นาน
-- กลัวกดผิดแล้วทำงานเสีย
-
-### 2.2 Persona 2: นักศึกษาพี่ใหญ่ (Admin)
-
-**ชื่อ:** เคน
-**บทบาท:** Lab Manager, นักศึกษา ป.โท
-**อายุ:** 25-30
-**Tech-savviness:** สูง — เขียนโค้ดได้, ใช้ admin tools
-
-#### Goals
-- สร้าง/แก้/ลบ task และโครงการ
-- มอบหมายงานให้น้อง
-- อนุมัติ point/deadline requests
-- จัดการ member + connection
-- ติดตาม progress ของแต่ละโครงการ
-- Debug ระบบเมื่อมีปัญหา
-
-#### Behaviors
-- ใช้แอปทั้งวัน (laptop + มือถือ)
-- ตัวกลางระหว่าง อาจารย์ กับ น้อง
-- พิมพ์เยอะ — สร้าง task, เขียน description
-- ใช้ keyboard shortcuts ได้
-
-#### Pain Points
-- ต้องตอบ request เยอะ
-- สลับ context บ่อย (task → group → member)
-- ต้อง onboard น้องใหม่บ่อย
-
-### 2.3 Persona 3: นักศึกษา (Member)
-
-**ชื่อ:** น้องเจน
-**บทบาท:** นักศึกษา ป.ตรี / ป.โท
-**อายุ:** 20-25
-**Tech-savviness:** สูง — Gen Z, ใช้แอปคล่อง
-
-#### Goals
-- ทำงานที่ได้รับมอบหมายให้ทัน deadline
-- ส่งไฟล์งาน
-- รับ points
-- รู้ว่าทีมประชุมเมื่อไหร่, ไปไหน
-- ติดต่อสมาชิกในทีม
-- ขอเพิ่ม points / ขอเลื่อน deadline เมื่อจำเป็น
-
-#### Behaviors
-- ใช้มือถือเป็นหลัก
-- ตรวจ notification บ่อย
-- ใช้ตอนนอกห้อง lab
-- ทำงานหลายอย่างพร้อมกัน
-
-#### Pain Points
-- ลืม deadline
-- งงว่าจะส่งงานยังไง / ไฟล์ประเภทไหน
-- ไม่รู้ว่า points ของตัวเองได้เท่าไหร่
-- ลืมว่าประชุมที่ไหน
-
-### 2.4 Persona 4: น้องใหม่ (Onboarding Member)
-
-**ชื่อ:** น้องเอม
-**บทบาท:** นักศึกษา ป.ตรี เข้าใหม่
-**อายุ:** 18-22
-**Tech-savviness:** สูง แต่ยังไม่รู้จักทีม
-
-#### Goals
-- รู้จักทีม — สมาชิกมีใครบ้าง
-- รู้ว่า lab ทำโครงการอะไร
-- หา group ที่จะเข้าร่วม
-- เข้าใจ workflow
-
-#### Pain Points
-- ไม่รู้จะเริ่มที่ไหน
-- กลัวกดผิด
-- ไม่กล้าถาม
-
----
-
-## 3. ปัญหาที่ผู้ใช้พบ (Pain Points)
-
-### 3.1 ก่อนมีระบบ
-| ปัญหา | ผลกระทบ |
-|---|---|
-| ใช้ LINE/Email สื่อสาร งานหาย หา history ยาก | ทำงานช้า, ทำซ้ำ |
-| Spreadsheet จัดการ point ไม่ flexible, error เยอะ | ไม่แฟร์, มีดราม่า |
-| ลืม deadline ไม่มีระบบเตือน | งานเสีย |
-| ติดต่อหน่วยงานราชการ — กระจาย contact ในมือถือใครๆ | หาเบอร์ไม่เจอ |
-| ประชุม — ส่ง calendar invite manual, บางคนไม่ได้ | ขาดประชุม |
-| น้องใหม่ — onboard ยาก ไม่รู้ทีมทำอะไร | เข้าทีมช้า |
-| จดประชุม — ใช้ Notes หลายคนแยกกัน | ข้อมูลไม่ตรงกัน |
-
-### 3.2 ปัญหาที่อยากให้ระบบช่วย
-
-| ปัญหา | Feature ที่ตอบ |
-|---|---|
-| ไม่รู้ใครรับผิดชอบงานไหน | Task assignees + group leader |
-| ไม่แฟร์เรื่อง points | 4-phase workflow |
-| ลืม deadline | Notifications + calendar |
-| Connection สับสน | 3-category system |
-| ประชุม — invite manual | Auto iMIP email |
-| น้องไม่กล้าเข้ากลุ่ม | "เสนอตัว" + "หยิบกลุ่ม" |
-| ทีมไม่เห็นภาพรวม | Home + Overview/Summary |
-| ออฟไลน์ — แอปใช้ไม่ได้ | PWA + service worker |
-| ค้นหาหน่วยงานราชการ | Abbreviation search |
-| Brainstorm — กระดาน whiteboard ออนไลน์ | Whiteboard collaborative |
-| ประชุม — จดยาก | Recording + AI summary |
-
----
-
-## 4. วัตถุประสงค์หลักของระบบ
-
-### 4.1 Vision
-**"ที่เดียว — รู้ทุกอย่างเกี่ยวกับทีม + ทำงานร่วมกันได้"**
-
-### 4.2 Mission
-ระบบต้อง:
-1. **ลด friction** ในการทำงานร่วมกัน — ไม่ต้องสลับ tool
-2. **โปร่งใส** เรื่อง points + workload
-3. **เร็ว** — เปิดดูข้อมูลใน 5 วินาที
-4. **ไว้ใจได้** — ไม่หาย, มี backup, มี audit
-5. **ใช้สบาย** — มือถือ + iPad + desktop
-
-### 4.3 Success Definition
-- ทีม 100% ใช้ระบบเป็นหลัก (ไม่ใช้ LINE/Spreadsheet ทำงาน)
-- ลด conflict เรื่อง points → 0
-- ออนบอร์ดน้องใหม่ < 1 วัน
-- ไม่มี deadline missed เพราะลืม
-
----
-
-## 5. User Stories
-
-### 5.1 Authentication & Profile
-
-| ID | Story |
-|---|---|
-| US-AUTH-01 | ในฐานะสมาชิก ฉันต้องการ login ด้วยชื่อ + PIN เพื่อเข้าสู่ระบบ |
-| US-AUTH-02 | ในฐานะสมาชิก ฉันต้องการเปลี่ยน PIN ตัวเองได้ เพื่อความปลอดภัย |
-| US-AUTH-03 | ในฐานะสมาชิก ฉันต้องการอัพโหลด avatar เพื่อให้ทีมจำได้ |
-| US-AUTH-04 | ในฐานะสมาชิก ฉันต้องการเปลี่ยน theme (light/dark/auto) เพื่อใช้สบายตา |
-
-### 5.2 Home Dashboard
-
-| ID | Story |
-|---|---|
-| US-HOME-01 | ในฐานะสมาชิก ฉันต้องการเห็นงานใกล้ deadline ของฉัน ในหน้าแรก เพื่อรู้สิ่งที่ต้องทำ |
-| US-HOME-02 | ในฐานะสมาชิก ฉันต้องการเห็นประชุมใกล้จะถึง ในหน้าแรก เพื่อไม่ลืมประชุม |
-| US-HOME-03 | ในฐานะสมาชิก ฉันต้องการเห็น points ของตัวเอง ในหน้าแรก เพื่อรู้ progress |
-| US-HOME-04 | ในฐานะสมาชิก ฉันต้องการเห็นกลุ่มที่ยังไม่ได้เข้าร่วม เพื่อหาโอกาส contribute |
-| US-HOME-05 | ในฐานะสมาชิก ฉันต้องการเห็น scoreboard ของทีม เพื่อเปรียบเทียบ + จูงใจ |
-| US-HOME-06 | ในฐานะ admin ฉันต้องการเห็น pending requests ในหน้าแรก เพื่อไม่ลืม approve |
-
-### 5.3 Tasks Management
-
-| ID | Story |
-|---|---|
-| US-TASK-01 | ในฐานะ admin/leader ฉันต้องการสร้าง task ใหม่ เพื่อมอบหมายงาน |
-| US-TASK-02 | ในฐานะ admin/leader ฉันต้องการสร้างหลาย task พร้อมกัน เพื่อประหยัดเวลา |
-| US-TASK-03 | ในฐานะสมาชิก ฉันต้องการเห็น task ของฉันทั้งหมด ในรูปแบบ Kanban |
-| US-TASK-04 | ในฐานะสมาชิก ฉันต้องการ drag-drop task เพื่อเปลี่ยน status ได้รวดเร็ว |
-| US-TASK-05 | ในฐานะสมาชิก ฉันต้องการค้นหา task ตามชื่อ/group/หน่วยงาน |
-| US-TASK-06 | ในฐานะสมาชิก ฉันต้องการ filter task ตาม status, group, target |
-| US-TASK-07 | ในฐานะสมาชิก ฉันต้องการ sort task ตาม deadline/points/title |
-| US-TASK-08 | ในฐานะสมาชิก ฉันต้องการเห็นรายละเอียดเต็มของ task เมื่อคลิก |
-| US-TASK-09 | ในฐานะสมาชิก ฉันต้องการ comment ใน task เพื่อสื่อสารกับทีม |
-| US-TASK-10 | ในฐานะสมาชิก ฉันต้องการ @mention เพื่อแจ้งคนเฉพาะ |
-| US-TASK-11 | ในฐานะสมาชิก ฉันต้องการอัพโหลดไฟล์ส่งงาน |
-| US-TASK-12 | ในฐานะสมาชิก ฉันต้องการระบุ doc_type ของไฟล์ที่ส่ง |
-| US-TASK-13 | ในฐานะสมาชิก ฉันต้องการลบ task ที่ไม่ใช้ → ลงถังขยะ |
-| US-TASK-14 | ในฐานะสมาชิก ฉันต้องการกู้คืน task ใน 30 วัน |
-| US-TASK-15 | ในฐานะสมาชิก ฉันต้องการขอเลื่อน deadline พร้อมเหตุผล |
-
-### 5.4 Group / Project Management
-
-| ID | Story |
-|---|---|
-| US-GRP-01 | ในฐานะ admin ฉันต้องการสร้างโครงการใหม่ + กำหนด leader |
-| US-GRP-02 | ในฐานะ leader ฉันต้องการแก้ไขข้อมูลโครงการ |
-| US-GRP-03 | ในฐานะสมาชิก ฉันต้องการเสนอตัวเข้ากลุ่มที่ยังไม่มี leader |
-| US-GRP-04 | ในฐานะ admin/leader ฉันต้องการ "หยิบ" กลุ่มมาเป็น leader |
-| US-GRP-05 | ในฐานะ leader ฉันต้องการเชิญสมาชิกเข้ากลุ่ม |
-| US-GRP-06 | ในฐานะ leader ฉันต้องการ approve/reject ผู้เสนอตัว |
-| US-GRP-07 | ในฐานะสมาชิก ฉันต้องการดูรายละเอียดโครงการ — tasks, files, members |
-| US-GRP-08 | ในฐานะสมาชิก ฉันต้องการเห็นโครงการที่เก็บ (archived) แยก |
-| US-GRP-09 | ในฐานะ admin ฉันต้องการ archive โครงการที่เสร็จแล้ว |
-| US-GRP-10 | ในฐานะ leader ฉันต้องการเปลี่ยนสีโครงการให้เป็น identity ที่จำง่าย |
-| US-GRP-11 | ในฐานะ leader ฉันต้องการผูก connection (หน่วยงาน) กับโครงการ |
-| US-GRP-12 | ในฐานะ admin ฉันต้องการ export โครงการเป็น CSV |
-| US-GRP-13 | ในฐานะสมาชิก ฉันต้องการอ่าน AI summary ของโครงการ |
-
-### 5.5 Points Workflow
-
-| ID | Story |
-|---|---|
-| US-PTS-01 | ในฐานะ assignee ฉันต้องการเสนอ points ของตัวเอง หลังทำงานเสร็จ |
-| US-PTS-02 | ในฐานะ leader ฉันต้องการ review + ปรับ points ของ assignees ก่อนส่งต่อ |
-| US-PTS-03 | ในฐานะ admin/leader ฉันต้องการ confirm points สุดท้าย |
-| US-PTS-04 | ในฐานะ admin/leader ฉันต้องการ reopen ที่ confirm แล้ว ถ้าผิด |
-| US-PTS-05 | ในฐานะสมาชิก ฉันต้องการขอเพิ่ม points พร้อมเหตุผล หลัง confirm |
-| US-PTS-06 | ในฐานะ admin ฉันต้องการเห็น point requests รอ approve |
-| US-PTS-07 | ในฐานะ admin ฉันต้องการ approve/reject point requests |
-| US-PTS-08 | ในฐานะ admin ฉันต้องการดู points ledger ทั้งหมด — table + Gantt timeline |
-| US-PTS-09 | ในฐานะสมาชิก ฉันต้องการเห็น phase ปัจจุบันของแต่ละงาน |
-
-### 5.6 Calendar & Meetings
-
-| ID | Story |
-|---|---|
-| US-CAL-01 | ในฐานะสมาชิก ฉันต้องการเห็นปฏิทินรวม task + meeting + leave |
-| US-CAL-02 | ในฐานะ admin/leader ฉันต้องการสร้างประชุม + ส่ง iMIP email อัตโนมัติ |
-| US-CAL-03 | ในฐานะ admin/leader ฉันต้องการระบุประเภทประชุม (online/onsite_internal/onsite_external) |
-| US-CAL-04 | ในฐานะ attendee ฉันต้องการคลิก URL ใน meeting → เข้า online meeting |
-| US-CAL-05 | ในฐานะ admin/leader ฉันต้องการ resend email invite |
-| US-CAL-06 | ในฐานะ admin/leader ฉันต้องการสร้าง task โดย preset deadline = วันที่เลือก |
-| US-CAL-07 | ในฐานะสมาชิก ฉันต้องการคลิกวันใน calendar → ดูเฉพาะวันนั้น |
-| US-CAL-08 | ในฐานะสมาชิก ฉันต้องการเห็นใครลาวันไหน ในปฏิทิน |
-| US-CAL-09 | ในฐานะสมาชิก ฉันต้องการแจ้งลาวัน → ขึ้นปฏิทินทีม |
-
-### 5.7 People / Members
-
-| ID | Story |
-|---|---|
-| US-PPL-01 | ในฐานะสมาชิก ฉันต้องการดูรายชื่อสมาชิกทั้งหมด |
-| US-PPL-02 | ในฐานะสมาชิก ฉันต้องการค้นหาสมาชิกตามชื่อ/email/เบอร์ |
-| US-PPL-03 | ในฐานะสมาชิก ฉันต้องการ sort/filter ตาม role, points, จำนวนงาน |
-| US-PPL-04 | ในฐานะสมาชิก ฉันต้องการดู profile รายคน — points, tasks, skill radar |
-| US-PPL-05 | ในฐานะสมาชิก ฉันต้องการรู้ว่าใครกำลังลา (ติดต่อไม่ได้) |
-| US-PPL-06 | ในฐานะสมาชิก ฉันต้องการคลิกโทร/อีเมล โดยตรงจากการ์ด |
-| US-PPL-07 | ในฐานะ admin ฉันต้องการสร้าง/แก้/ลบ member |
-| US-PPL-08 | ในฐานะ admin ฉันต้องการ assign role (boss/admin/member) |
-
-### 5.8 Connections
-
-| ID | Story |
-|---|---|
-| US-CON-01 | ในฐานะสมาชิก ฉันต้องการเก็บข้อมูล contact ภายนอก |
-| US-CON-02 | ในฐานะสมาชิก ฉันต้องการแบ่ง connection 3 ประเภท (บริษัท/lobbyist/หน่วยงาน) |
-| US-CON-03 | ในฐานะสมาชิก ฉันต้องการดู connection กรองตามประเภท |
-| US-CON-04 | ในฐานะสมาชิก ฉันต้องการค้นหา connection ตามชื่อ/หน่วยงาน/topic |
-| US-CON-05 | ในฐานะสมาชิก ฉันต้องการเห็นว่า connection นี้ผูกอยู่กับโครงการไหนบ้าง |
-| US-CON-06 | ในฐานะสมาชิก ฉันต้องการค้นหาด้วยตัวย่อราชการ (เช่น "อบจ") |
-| US-CON-07 | ในฐานะ leader ฉันต้องการผูก connection หลายอันกับโครงการเดียว |
-
-### 5.9 Notifications
-
-| ID | Story |
-|---|---|
-| US-NTF-01 | ในฐานะสมาชิก ฉันต้องการเห็น notification รวมจาก 🔔 ในที่เดียว |
-| US-NTF-02 | ในฐานะสมาชิก ฉันต้องการเห็น overdue tasks ของฉัน |
-| US-NTF-03 | ในฐานะสมาชิก ฉันต้องการเห็นเมื่อมีคน @mention ฉัน |
-| US-NTF-04 | ในฐานะ admin ฉันต้องการเห็น pending requests รอ approve |
-| US-NTF-05 | ในฐานะสมาชิก ฉันต้องการเห็นผล decided (approved/rejected) ของ request ฉัน |
-| US-NTF-06 | ในฐานะ leader ฉันต้องการเห็นใครเสนอตัวเข้ากลุ่มฉัน |
-| US-NTF-07 | ในฐานะสมาชิก ฉันต้องการ inline approve/reject ใน notification |
-| US-NTF-08 | ในฐานะสมาชิก ฉันต้องการเห็น notification ใหม่ที่สุดอยู่บน |
-| US-NTF-09 | ในฐานะสมาชิก ฉันต้องการเห็น bell badge แสดงจำนวน unread |
-
-### 5.10 Polls
-
-| ID | Story |
-|---|---|
-| US-PLL-01 | ในฐานะสมาชิก ฉันต้องการสร้าง poll เพื่อให้ทีมตัดสินใจร่วม |
-| US-PLL-02 | ในฐานะสมาชิก ฉันต้องการตั้ง poll เป็น anonymous |
-| US-PLL-03 | ในฐานะสมาชิก ฉันต้องการตั้ง poll เป็น multi-choice |
-| US-PLL-04 | ในฐานะสมาชิก ฉันต้องการตั้งวันหมดอายุ poll |
-| US-PLL-05 | ในฐานะสมาชิก ฉันต้องการโหวต + เปลี่ยนคำตอบได้ |
-| US-PLL-06 | ในฐานะสมาชิก ฉันต้องการดูผล poll เป็น bar chart |
-| US-PLL-07 | ในฐานะ creator/admin ฉันต้องการปิด/ลบ poll |
-
-### 5.11 Whiteboard
-
-| ID | Story |
-|---|---|
-| US-WB-01 | ในฐานะสมาชิก ฉันต้องการสร้าง whiteboard เพื่อ brainstorm |
-| US-WB-02 | ในฐานะสมาชิก ฉันต้องการวาด/เขียนบน whiteboard ด้วย mouse/Apple Pencil |
-| US-WB-03 | ในฐานะสมาชิก ฉันต้องการเลือกขนาดกระดาษ (A4/A3/Letter/infinite) |
-| US-WB-04 | ในฐานะสมาชิก ฉันต้องการเปลี่ยน paper background (blank/grid/dot/lined) |
-| US-WB-05 | ในฐานะสมาชิก ฉันต้องการ collaborate real-time กับสมาชิกอื่น |
-| US-WB-06 | ในฐานะสมาชิก ฉันต้องการ inject task/group/meeting/points จากระบบ |
-| US-WB-07 | ในฐานะสมาชิก ฉันต้องการ record audio ขณะวาด whiteboard (สำหรับประชุม) |
-| US-WB-08 | ในฐานะสมาชิก ฉันต้องการ export whiteboard เป็น PNG |
-| US-WB-09 | ในฐานะสมาชิก ฉันต้องการ auto-save (ไม่ต้องกดเอง) |
-| US-WB-10 | ในฐานะสมาชิก ฉันต้องการ undo/redo |
-
-### 5.12 Recording & Transcription
-
-| ID | Story |
-|---|---|
-| US-REC-01 | ในฐานะสมาชิก ฉันต้องการ record เสียงประชุม |
-| US-REC-02 | ในฐานะสมาชิก ฉันต้องการ import audio file (mp3/m4a/etc.) |
-| US-REC-03 | ในฐานะสมาชิก ฉันต้องการ AI transcribe เสียง → ข้อความ |
-| US-REC-04 | ในฐานะสมาชิก ฉันต้องการ AI summarize transcript |
-| US-REC-05 | ในฐานะ admin ฉันต้องการเห็น recording ของทุกคน |
-
-### 5.13 Admin / Dev Tools
-
-| ID | Story |
-|---|---|
-| US-ADM-01 | ในฐานะ admin ฉันต้องการเข้า /dev เพื่อ debug |
-| US-ADM-02 | ในฐานะ admin ฉันต้องการ test API endpoint |
-| US-ADM-03 | ในฐานะ admin ฉันต้องการ browse raw data |
-| US-ADM-04 | ในฐานะ admin ฉันต้องการดู audit log (real-time SSE) |
-| US-ADM-05 | ในฐานะ admin ฉันต้องการตั้งค่า SMTP + email toggle |
-| US-ADM-06 | ในฐานะ admin ฉันต้องการดู point ledger ทั้งหมด (table + Gantt) |
-| US-ADM-07 | ในฐานะ admin ฉันต้องการออกแบบ floor plan ห้อง |
-| US-ADM-08 | ในฐานะ admin ฉันต้องการ CMS แก้ไข About pages |
-| US-ADM-09 | ในฐานะ admin ฉันต้องการ browse files ทั้งหมดในระบบ |
-
----
-
-## 6. Functional Requirements
-
-### 6.1 ระบบ Authentication
-
-#### FR-AUTH-01: Login
-- **ต้องการ:** ระบบต้องตรวจสอบ name + PIN กับ database
-- **เกณฑ์:** ผ่าน → return JWT token + user object | ไม่ผ่าน → 401 + error message
-- **เวลา:** < 2 วินาที
-
-#### FR-AUTH-02: Session
-- **ต้องการ:** ระบบใช้ JWT bearer ใน Authorization header
-- **เกณฑ์:** Token หมดอายุ → redirect login | Token valid → access ตาม role
-
-#### FR-AUTH-03: Logout
-- **ต้องการ:** ลบ token จาก localStorage + redirect ไป login screen
-
-### 6.2 ระบบ Role-based Access Control
-
-#### FR-RBAC-01: 3 Role
-- **ต้องการ:** boss / admin / member — มี hierarchy ชัดเจน
-- **เกณฑ์:** boss = admin (สิทธิ์), member = น้อยสุด
-
-#### FR-RBAC-02: API Authorization
-- **ต้องการ:** ทุก endpoint ที่เปลี่ยนข้อมูลต้องตรวจ role
-- **เกณฑ์:** member call admin endpoint → 403 Forbidden
-
-#### FR-RBAC-03: UI Visibility
-- **ต้องการ:** ปุ่ม/menu ที่เกินสิทธิ์ต้อง hide
-- **เกณฑ์:** member ไม่เห็น "ลบ", "แก้ไข role"
-
-### 6.3 ระบบ Task Management
-
-#### FR-TASK-01: CRUD Task
-- **ต้องการ:** Create/Read/Update/Delete task
-- **Permission:**
-  - Create: admin หรือ group leader
-  - Update: admin หรือ group leader
-  - Delete: admin หรือ group leader (soft delete)
-- **เกณฑ์:** ลบ → status='cancelled', กู้คืนได้ 30 วัน
-
-#### FR-TASK-02: Status Lifecycle
-- **ต้องการ:** Task มี 10 status (idea → archived)
-- **Transitions:** ไม่บังคับลำดับ — เปลี่ยนข้ามได้
-
-#### FR-TASK-03: Multi-Assignee
-- **ต้องการ:** Task มี assignees หลายคน
-- **Role:** leader (1 คน) / member (หลายคน)
-
-#### FR-TASK-04: Drag-Drop Status Change
-- **ต้องการ:** drag task card → drop ที่ column อื่น → status update
-- **Statuses supported:** on_hold, in_progress, completed
-
-#### FR-TASK-05: Filter / Sort / Search
-- **Filter:** status (multi), group, target
-- **Sort:** 14 options
-- **Search:** ครอบคลุม title, description, group, target — รองรับตัวย่อ
-
-### 6.4 ระบบ Meeting
-
-#### FR-MTG-01: Meeting Creation
-- **ต้องการ:** Task kind='meeting' พร้อม end_time + location
-- **Auto:** ส่ง iMIP email invite พร้อม .ics
-
-#### FR-MTG-02: Re-send Invite
-- **ต้องการ:** Manual button → ส่งอีกครั้ง (auto-bump ICS sequence)
-
-#### FR-MTG-03: Cancel Meeting
-- **ต้องการ:** ลบ meeting → ส่ง CANCEL email อัตโนมัติ
-
-#### FR-MTG-04: Location Types
-- **ต้องการ:** online (URL) / onsite_internal / onsite_external
-- **เกณฑ์:** online → URL ใน chip คลิกได้
-
-### 6.5 ระบบ Points Workflow
-
-#### FR-PTS-01: 4-Phase Workflow
-- **ต้องการ:** proposing → leader_review → final_review → confirmed
-- **เกณฑ์:**
-  - proposing: assignee เสนอ
-  - leader_review: leader approve
-  - final_review: admin confirm
-  - confirmed: locked
-
-#### FR-PTS-02: Self-Proposal
-- **ต้องการ:** assignee ใส่ points ตัวเอง หลัง task completed
-
-#### FR-PTS-03: Reopen
-- **ต้องการ:** admin/leader reopen ที่ confirmed → กลับเป็น final_review
-
-#### FR-PTS-04: Point Request
-- **ต้องการ:** สมาชิกขอเพิ่ม points หลัง confirmed → admin ตัดสิน
-
-### 6.6 ระบบ Group / Project
-
-#### FR-GRP-01: CRUD Group
-- **Permission:**
-  - Create: admin
-  - Update: admin / current leader
-  - Delete: admin (soft)
-  - Restore: admin / leader
-
-#### FR-GRP-02: Leadership
-- **ต้องการ:** group มี leader 1 คน
-- **Transfer:** admin เปลี่ยนได้
-
-#### FR-GRP-03: Member Management
-- **Invite:** admin/leader → multi-select chips
-- **Propose:** member → leader approve
-
-#### FR-GRP-04: Color Identity
-- **ต้องการ:** group ต้องมีสี
-- **Warning:** ถ้าซ้ำกับกลุ่มอื่น → เตือน
-
-#### FR-GRP-05: Connection Link
-- **ต้องการ:** ผูก connection หลายอันกับ group (M2M)
-
-#### FR-GRP-06: Soft-Delete + Restore
-- **ต้องการ:** 30 วัน recovery window
-- **Restore:** cascades to internal tasks
-
-### 6.7 ระบบ Connection
-
-#### FR-CON-01: 3 Types
-- personal (บริษัท)
-- lobbyist (บุคคล)
-- agency (หน่วยงาน)
-
-#### FR-CON-02: Conditional Fields
-- **ต้องการ:** Fields ปรากฏตามประเภท
-  - personal: company + contact_name
-  - lobbyist: liaison_name (no company)
-  - agency: liaison_name + company
-
-#### FR-CON-03: Owner Permission
-- **ต้องการ:** owner หรือ admin แก้ได้
-
-### 6.8 ระบบ Calendar
-
-#### FR-CAL-01: Unified View
-- **ต้องการ:** แสดง task + meeting + leave ในปฏิทินเดียว
-
-#### FR-CAL-02: Day-View Filter
-- **ต้องการ:** คลิกวัน → ดูเฉพาะวันนั้น
-- **Toggle:** คลิกซ้ำ → กลับเดือน
-
-#### FR-CAL-03: Auto-Scroll Today
-- **ต้องการ:** เปิดหน้า → scroll ไปวันนี้
-
-#### FR-CAL-04: Quick Create
-- **ต้องการ:** เลือกวัน → "+ task/meeting" → preset deadline
-
-### 6.9 ระบบ Notifications
-
-#### FR-NTF-01: Aggregator
-- **ต้องการ:** รวม events 10 ประเภทใน bell
-
-#### FR-NTF-02: Real-time SSE
-- **ต้องการ:** notification ใหม่ → bell badge update ทันที (ไม่ต้อง refresh)
-
-#### FR-NTF-03: Inline Actions
-- **ต้องการ:** approve/reject ใน notification ได้
-
-#### FR-NTF-04: Sort Newest First
-- **ต้องการ:** notification ล่าสุดอยู่บน
-
-### 6.10 ระบบ Files / Submission
-
-#### FR-FILE-01: Upload
-- **ต้องการ:** drag-drop หรือ click → choose files (multi)
-
-#### FR-FILE-02: Doc Type Tagging
-- **ต้องการ:** แต่ละไฟล์มี doc_type (เลือกจาก list)
-
-#### FR-FILE-03: URL Link
-- **ต้องการ:** ส่ง URL แทนไฟล์ได้
-
-#### FR-FILE-04: Preview In-App
-- **ต้องการ:** preview image/PDF/video/audio/text/docx/xlsx
-
-#### FR-FILE-05: Thai Filename
-- **ต้องการ:** ดาวน์โหลดได้พร้อม Thai filename (RFC 5987)
-
-### 6.11 ระบบ Whiteboard
-
-#### FR-WB-01: Collaborative Canvas
-- **ต้องการ:** Fabric.js + WebSocket real-time sync
-
-#### FR-WB-02: Multi-User Cursor
-- **ต้องการ:** เห็น cursor ของ collaborator
-
-#### FR-WB-03: Tools
-- Draw / Highlight / Eraser
-- Shapes (line, arrow, rect, circle, triangle, diamond)
-- Text / Sticky / Image
-- Style controls (color, stroke, fill)
-
-#### FR-WB-04: Auto-Save
-- **ต้องการ:** save ทุก 1.5 วินาที
-
-#### FR-WB-05: Inject from System
-- **ต้องการ:** ดึง task/group/meeting/points มาเป็น object บน canvas
-
-#### FR-WB-06: Recorder
-- **ต้องการ:** record audio + transcribe + summarize
-
-### 6.12 ระบบ Poll
-
-#### FR-POLL-01: Create
-- **Fields:** question, options[], multi_choice, anonymous, expires_at
-
-#### FR-POLL-02: Vote / Change
-- **ต้องการ:** โหวต + เปลี่ยนคำตอบได้
-
-#### FR-POLL-03: Anonymous
-- **ต้องการ:** ถ้า anonymous=true → ไม่บันทึก voter_id (privacy)
-
-#### FR-POLL-04: Auto-Close
-- **ต้องการ:** เมื่อถึง expires_at → ปิดอัตโนมัติ
-
-### 6.13 ระบบ Trash / Recovery
-
-#### FR-TRASH-01: Soft-Delete
-- **ต้องการ:** ลบ → deleted_at=NOW (30 วัน)
-
-#### FR-TRASH-02: Categorized Trash
-- **ต้องการ:** 3 sections (โครงการ / งาน / ประชุม)
-
-#### FR-TRASH-03: Restore
-- **ต้องการ:** กู้คืนได้
-- **Cascade:** group restore → tasks ภายใน restore ด้วย
-
-#### FR-TRASH-04: Permanent Delete
-- **Permission:** admin only
-
-### 6.14 ระบบ Admin / Dev Tools
-
-#### FR-DEV-01: Access Gate
-- **ต้องการ:** /dev เปิดเฉพาะ admin/boss
-
-#### FR-DEV-02: 13 Panels
-- API Playground, Data Explorer, System Info, Whiteboard, Component Lab, Room Designer, About Editor, Files Browser, Point Ledger, Activity Log, Dev Notes, Settings, Members
-
-#### FR-DEV-03: Point Ledger Views
-- **Table view:** sortable columns
-- **Gantt view:** timeline ของ points
-
-#### FR-DEV-04: Real-time SSE Log
-- **ต้องการ:** ดู audit events stream real-time
-
----
-
-## 7. Non-Functional Requirements
-
-### 7.1 Performance
-
-| Metric | Target |
-|---|---|
-| Initial page load | < 3 วินาที (3G) |
-| API response (CRUD) | < 500ms |
-| Search response | < 200ms |
-| Drag-drop status change | < 100ms (optimistic update) |
-| Whiteboard cursor sync | < 100ms |
-| Service worker cache hit | < 50ms |
-
-### 7.2 Scalability
-
-| Metric | Target |
-|---|---|
-| Concurrent users | 50+ |
-| Tasks per group | 500+ |
-| Files per task | 100+ |
-| Recording duration | 4 hours |
-| Whiteboard objects | 1000+ |
-
-### 7.3 Availability
-
-| Metric | Target |
-|---|---|
-| Uptime | 99.5% (working hours) |
-| Offline mode | ใช้ระบบ cached ได้เมื่อ offline |
-| Auto-reconnect SSE | yes |
-| Auto-save whiteboard | every 1.5s |
-
-### 7.4 Security
-
-| Requirement | Detail |
-|---|---|
-| Authentication | JWT bearer token |
-| Password storage | bcrypt hashed |
-| Authorization | role-based + ownership check |
-| HTTPS | required ใน production |
-| CORS | restricted to known origins |
-| Rate limiting | per-user API calls |
-| Audit logging | ทุก admin action |
-
-### 7.5 Usability
-
-| Requirement | Detail |
-|---|---|
-| Touch target | min 44×44px |
-| Tap response | visual feedback < 100ms |
-| Language | ภาษาไทย primary |
-| Date format | dd/mm/yyyy + 24-hour |
-| Mobile-first | works on 375px width |
-| Accessibility | WCAG 2.1 AA (target) |
-
-### 7.6 Compatibility
-
-| Platform | Requirement |
-|---|---|
-| Browser | Chrome 100+, Safari 14+, Edge 100+ |
-| iOS Safari | iOS 14+ |
-| Android Chrome | Android 10+ |
-| PWA install | supported |
-| Apple Pencil | supported (Whiteboard) |
-
-### 7.7 Maintainability
-
-| Requirement | Detail |
-|---|---|
-| Code structure | Frontend (vanilla JS) + Backend (Node.js + Express) |
-| Database | PostgreSQL |
-| File storage | local filesystem (containerized) |
-| Deployment | Docker compose |
-| Logging | console + audit table |
-| Backup | manual/automated DB dump |
-
-### 7.8 Localization
-
-| Requirement | Detail |
-|---|---|
-| Primary language | ไทย |
-| Secondary | English (button labels บางจุด) |
-| Abbreviation search | รองรับ 878 รัฐกิจไทย |
-| Filename | Thai support (RFC 5987) |
-| Email subject | Thai support (RFC 2047) |
-
-### 7.9 Privacy
-
-| Requirement | Detail |
-|---|---|
-| Anonymous poll | ไม่บันทึก voter id |
-| Data deletion | soft delete 30 วัน |
-| Audit visibility | admin only |
-| @mention | in-app only (no email leak) |
-| Avatar | user-uploaded, no external |
-
----
-
-## 8. Use Cases / Scenarios
-
-### 8.1 UC-01: น้องใหม่เข้าทีม
-**Actor:** Member (น้องเอม)
-**Preconditions:** Admin สร้าง account แล้ว
-**Steps:**
-1. Login ด้วย name + PIN ที่ admin บอก
-2. หน้า Home — เห็น greeting + role badge "Member"
-3. ไปดู People → เห็นทีมทั้งหมด → คลิก profile แต่ละคน
-4. ไป Summary → เห็นโครงการที่กำลัง active
-5. ไปกลุ่มที่น่าสนใจ → กด "🙋 เสนอตัว"
-6. รอ leader approve → ได้ notification
-7. เปิด task ในกลุ่ม → เริ่มทำ
-
-**Success:** อยู่ในทีมแล้ว เริ่มทำงานได้
-
-### 8.2 UC-02: สร้าง Task ใหม่
-**Actor:** Admin / Group Leader (เคน)
-**Preconditions:** มีโครงการ
-**Steps:**
-1. ไปแท็บ Todo → กดปุ่ม "+"
-2. เลือก "เพิ่มงาน — เลือก Group ก่อน"
-3. เลือกกลุ่มที่ตัวเองนำ
-4. กรอก title, description, deadline, budget, categories
-5. ติ๊ก assignees จาก chip grid
-6. กดบันทึก
-
-**Alternative:** "+ เพิ่มอีก" → batch หลาย task พร้อมกัน
-
-**Success:** Task ขึ้นใน Kanban + assignees ได้ notification
-
-### 8.3 UC-03: ส่งงาน + รับ Points
-**Actor:** Member (น้องเจน)
-**Preconditions:** ได้ assign task
-**Steps:**
-1. เปิด Todo → เลือก task ของฉัน
-2. คลิก task card → เปิด task sheet
-3. กด "📎 ส่งงาน" → submission sheet
-4. Drag-drop ไฟล์ → ติด doc_type
-5. กด "⬆ ส่ง"
-6. Auto: task → completed
-7. Auto: prompt "ใส่ points ของฉัน" → กรอก
-8. รอ leader review → final_review → confirmed
-9. ได้ notification "✅ Points confirmed"
-
-**Edge case:** ถ้าไม่เห็นด้วย points → กด "💎 ขอเพิ่ม Points" → admin ตัดสิน
-
-### 8.4 UC-04: สร้างประชุม
-**Actor:** Admin / Leader
-**Preconditions:** มีโครงการ + email config OK
-**Steps:**
-1. ไป Calendar → เลือกวัน → "+ ประชุม"
-2. หรือ Todo → "+" → meeting
-3. กรอก title, description
-4. เลือก location_type (online/onsite_internal/onsite_external)
-5. กรอก URL / address (ถ้ามี)
-6. เลือก group → ติ๊ก attendees
-7. กรอก start + end time
-8. บันทึก
-9. Auto: ส่ง iMIP email + .ics attachment ไป attendees
-
-**Success:** ประชุมขึ้นในปฏิทิน + attendees ได้ invite
-
-### 8.5 UC-05: Brainstorm บน Whiteboard
-**Actor:** ทั้งทีม (3-4 คน)
-**Preconditions:** มี iPad + Apple Pencil หรือ desktop
-**Steps:**
-1. คนนึงสร้าง whiteboard ใหม่ → ตั้งชื่อ "ระบบ X — brainstorm"
-2. คนอื่นเปิด link เดียวกัน → เห็น real-time
-3. ใช้ตัวเลือก:
-   - ✏️ Draw — วาดอิสระ
-   - 📝 Text — typing
-   - 🟡 Sticky — โน้ตติด
-   - ➡️ Arrow — เชื่อม
-4. กด 📥 Inject → ดึง task/group เก่ามาวาง refer
-5. กด 🎙 Record — อัดเสียงประชุม
-6. จบ — กด 💾 Export PNG → save เป็นรูป
-
-**Success:** ทีมได้ visual brainstorm + recording + transcript
-
-### 8.6 UC-06: ขอเลื่อน Deadline
-**Actor:** Member
-**Preconditions:** Task ใกล้ deadline แต่ทำไม่ทัน
-**Steps:**
-1. เปิด task → คลิก ✏️ แก้ไข → "⏰ ขอเลื่อน Deadline"
-2. กรอก requested_deadline + เหตุผล
-3. ส่ง
-4. Admin/Leader ได้ notification
-5. Admin approve → deadline อัพเดท → member ได้ notification "✅"
-6. หรือ reject → member ได้ "❌" + เหตุผล
-
-**Success:** กระบวนการโปร่งใส, ไม่มีดราม่า
-
-### 8.7 UC-07: ค้นหาหน่วยงานราชการ
-**Actor:** Member
-**Preconditions:** กำลังหา connection ของ "องค์การบริหารส่วนจังหวัด"
-**Steps:**
-1. ไป People → Connections tab
-2. พิมพ์ "อบจ" ในช่องค้นหา
-3. ระบบเข้าใจตัวย่อ → แสดง "องค์การบริหารส่วนจังหวัด..."
-4. คลิก connection → ดูข้อมูลครบ
-
-**Success:** หาเจอเร็ว ไม่ต้องพิมพ์ชื่อเต็ม
-
-### 8.8 UC-08: Admin Approve Requests
-**Actor:** Admin
-**Preconditions:** มี pending requests
-**Steps:**
-1. เปิดแอป → bell มี badge "5"
-2. คลิก 🔔 → notifications sheet
-3. เห็น list:
-   - 💎 น้องเจน ขอเพิ่ม points (15 → 20) เหตุผล: "เพิ่มงานเอกสาร"
-   - ⏰ เคน ขอเลื่อน deadline งาน X
-4. กด ✅ อนุมัติ inline → ทำงานทันที
-5. หรือเข้า Todo → Admin segment → เห็นใน column 3 "รอคอนเฟิร์ม"
-
-**Success:** Admin จัดการ queue เร็ว
-
-### 8.9 UC-09: Boss ดูภาพรวม
-**Actor:** Boss (อ.อ๊อด)
-**Preconditions:** มี role=boss
-**Steps:**
-1. Login → เห็น Home → scoreboard ของทีม
-2. กดแท็บ Overview (position 2)
-3. ดู:
-   - Tasks tab → ตารางทุก task
-   - Groups tab → card view ของทุกโครงการ
-   - Members tab → ใครคะแนนเท่าไหร่
-4. กรอง / sort ตามต้องการ
-
-**Success:** ภาพรวมทีมใน 2-3 คลิก
-
-### 8.10 UC-10: Offline Browse
-**Actor:** Member
-**Preconditions:** เคยใช้แอป online มาก่อน (SW cache แล้ว)
-**Steps:**
-1. ไม่มีเน็ต — เปิดแอป
-2. แอปยังเปิดได้ (HTML cached)
-3. ดู cached data: tasks, groups, calendar
-4. เน็ตกลับมา → SSE reconnect → ข้อมูลใหม่ sync
-
-**Success:** ใช้งานพื้นฐานได้ตลอด
-
----
-
-## 9. Acceptance Criteria
-
-### 9.1 ผ่านเกณฑ์ทั่วไป
-ระบบจะถือว่าผ่าน UAT เมื่อ:
-- ✅ Persona ทั้ง 4 (boss, admin, member, onboard) ทำ user stories ทั้งหมดได้
-- ✅ Performance ตาม non-functional requirements
-- ✅ Browser support ครอบคลุม (Chrome/Safari/Edge latest 2)
-- ✅ Mobile-first responsive ผ่าน
-- ✅ No data loss ใน 30-day trash window
-- ✅ Audit log ครบทุก admin action
-
-### 9.2 ตัวอย่าง Story-level Acceptance Criteria
-
-#### US-TASK-04: Drag-drop status change
-**Given** สมาชิกอยู่ที่ Todo Kanban
-**When** ลาก task card จาก column "กำลังทำ" → drop ที่ "เสร็จแล้ว"
-**Then**
-- task.status อัพเดทเป็น "completed" ใน database
-- card ย้ายไปยัง column ใหม่ทันที (optimistic update)
-- ถ้า server reject → revert + แสดง error toast
-- ถ้าเป็น completed → trigger points workflow
-
-#### US-PTS-01: Self-propose points
-**Given** สมาชิกเป็น assignee + task เพิ่ง completed
-**When** prompt โผล่ "ใส่ points ของฉัน"
-**Then**
-- prompt focused บนช่อง input
-- กรอกตัวเลข + enter → save
-- points_phase → 'proposing'
-- leader ได้ notification
-
-#### US-CAL-02: Meeting iMIP invite
-**Given** admin/leader สร้าง meeting + email_invitations_enabled=true
-**When** บันทึก meeting
-**Then**
-- ทุก attendee ได้ email พร้อม .ics attachment
-- email subject = "📅 [meeting title]" (Thai support)
-- .ics มี SUMMARY, DTSTART, DTEND, LOCATION, ORGANIZER, ATTENDEES
-- ICS sequence = 0
-
-#### US-NTF-03: @mention notification
-**Given** สมาชิก B comment "@A please check"
-**When** comment ถูก save
-**Then**
-- A ได้ notification ใน bell
-- A เปิด bell → เห็น preview comment (80 chars)
-- คลิก → เปิด task sheet ที่ comment นั้น
-- mark as read
-
-#### US-WB-09: Auto-save
-**Given** สมาชิกวาดบน whiteboard
-**When** ทำ action (วาด/ลบ/เพิ่ม object)
-**Then**
-- หลัง 1.5 วินาที → save อัตโนมัติ (debounced)
-- saved indicator แสดง "บันทึกแล้ว"
-- collaborator เห็น change real-time ผ่าน WebSocket
-
----
-
-## 10. Constraints & Assumptions
-
-### 10.1 Technical Constraints
-
-| Constraint | เหตุผล / ผลกระทบ |
-|---|---|
-| ใช้ Node.js + PostgreSQL | infrastructure ที่มีอยู่ |
-| File storage แบบ local | ไม่ใช้ S3 (ราคาประหยัด) |
-| ไม่ใช้ external auth (Google/Microsoft) | ทีมเล็ก, account จัดเอง |
-| ไม่มี mobile native app | PWA พอ |
-| ใช้ vanilla JS frontend (ไม่ใช้ React/Vue) | maintainability + size |
-
-### 10.2 Business Constraints
-
-| Constraint | เหตุผล |
-|---|---|
-| ทีมเล็ก (< 50 คน) | ไม่ต้อง enterprise features |
-| งบประมาณจำกัด | self-host, ไม่ใช่ SaaS |
-| ภาษาไทยเป็นหลัก | ผู้ใช้ทั้งหมดเป็นไทย |
-| ไม่มี dedicated devops | ใช้ Docker compose |
-
-### 10.3 User Constraints
-
-| Constraint | เหตุผล |
-|---|---|
-| มือถือเป็นหลัก | ทีมทำงาน mobile-first |
-| รองรับ Apple Pencil | iPad + จดประชุม |
-| Offline-tolerant | wifi unstable นอกออฟฟิศ |
-| ไม่มี desktop notification | ใช้ in-app เท่านั้น |
-
-### 10.4 Assumptions
-
-| สมมติฐาน | ความเสี่ยงถ้าไม่จริง |
-|---|---|
-| ผู้ใช้มี smartphone | สูง — ระบบ mobile-first |
-| ผู้ใช้รู้จัก concept Kanban | กลาง — ต้อง onboarding ดี |
-| ผู้ใช้ใช้ภาษาไทย | สูง — UI ภาษาไทย |
-| Email SMTP ทำงานเสถียร | กลาง — มี fallback ใน UI |
-| ทีมเล็ก ไม่ scale > 100 คน | กลาง — DB pattern simple |
-
----
-
-## 11. Out of Scope
-
-ระบบ **ไม่** ครอบคลุม:
-
-### 11.1 Features ที่ไม่ทำ
-- ❌ Self-signup — admin ต้องสร้าง account ให้
-- ❌ Social login (Google/Microsoft/Facebook)
-- ❌ Mobile native app (iOS/Android) — ใช้ PWA แทน
-- ❌ Real-time video conferencing — ใช้ external (Zoom/Meet)
-- ❌ Email client integration (Gmail/Outlook)
-- ❌ Payment / billing
-- ❌ Multi-tenant — เป็นระบบ lab เดียว
-- ❌ Internationalization (i18n) — Thai only
-- ❌ Public API for 3rd-party
-- ❌ Markdown editor with WYSIWYG (raw markdown OK)
-- ❌ Time tracking (Pomodoro, timesheets)
-- ❌ Project Gantt chart (มีแต่ใน point ledger)
-- ❌ CRM features (sales pipeline, deals)
-- ❌ Inventory management
-
-### 11.2 Integrations ที่ไม่ทำ
-- ❌ Slack/Discord integration
-- ❌ GitHub/GitLab webhook
-- ❌ Google Drive / OneDrive sync
-- ❌ Microsoft Teams
-- ❌ Trello/Asana import
-- ❌ Calendar sync (Google Calendar/Outlook)
-
-### 11.3 Compliance ที่ไม่บังคับ
-- ❌ GDPR (ไม่มีผู้ใช้ EU)
-- ❌ HIPAA (ไม่ใช่ medical)
-- ❌ PCI-DSS (ไม่มี payment)
-- ✅ PDPA (Thai privacy) — ต้องระวัง
-
----
-
-## 12. Success Metrics
-
-### 12.1 Adoption Metrics
-
-| Metric | Target | Measurement |
-|---|---|---|
-| Daily Active Users | 80%+ ของทีม | login per day |
-| Weekly Active Users | 100% ของทีม | login per week |
-| Task creation rate | 5+ tasks/week/admin | DB query |
-| Comment usage | 50%+ tasks have comments | DB query |
-
-### 12.2 Workflow Metrics
-
-| Metric | Target |
-|---|---|
-| Points workflow completion rate | 95%+ ของ completed tasks |
-| Average phase transition time | < 3 วัน |
-| Point dispute rate | < 5% |
-| Deadline extension request rate | < 10% |
-| Deadline missed | < 5% |
-
-### 12.3 Engagement Metrics
-
-| Metric | Target |
-|---|---|
-| Notification open rate | 80%+ |
-| @mention response time | < 24 ชม. |
-| Meeting acceptance rate | 90%+ |
-| File submission via app | 95%+ (vs email) |
-
-### 12.4 Performance Metrics
-
-| Metric | Target |
-|---|---|
-| Initial page load | < 3s |
-| Time to interactive | < 4s |
-| API p95 latency | < 1s |
-| Error rate | < 1% |
-| SSE uptime | 99%+ |
-
-### 12.5 Quality Metrics
-
-| Metric | Target |
-|---|---|
-| User-reported bugs/month | < 5 |
-| Critical bugs (data loss) | 0 |
-| Onboarding time น้องใหม่ | < 1 วัน |
-| Help requests from members | declining trend |
-
----
-
-## ภาคผนวก
-
-### A. Related Documents
-- `DESIGN_SPEC.md` — Design specification ครบทุกหน้า/section
-- `README.md` — Setup + deployment guide
-
-### B. Glossary
-
-| คำ | ความหมาย |
-|---|---|
-| Boss | role สูงสุด (อาจารย์) |
-| Admin | role กลาง (operator) |
-| Member | role พื้นฐาน |
-| Group / Project | โครงการ — รวมหลาย task |
-| Task | งานย่อย |
-| Meeting | task ประเภท `kind=meeting` |
-| Connection | ผู้ติดต่อภายนอก |
-| Points | คะแนนสะสมจากการทำงาน |
-| Phase | ขั้นตอนใน points workflow |
-| Leader | หัวหน้าโครงการ |
+| Leader / หัวหน้า | ผู้รับผิดชอบโครงการ |
 | Assignee | ผู้รับผิดชอบ task |
-| Lobbyist | บุคคลคนกลางที่ประสานงาน |
-| Agency | หน่วยงานราชการ |
-| iMIP | iCalendar Message-Based Interoperability Protocol (email invite) |
-| SSE | Server-Sent Events (push updates) |
-| PWA | Progressive Web App |
-
-### C. Change Log
-
-| Version | Date | Changes |
-|---|---|---|
-| 1.0 | 2025-12 | Initial spec — basic CRUD |
-| 2.0 | 2026-05 | + Boss role, Connection 3 types, Points workflow, Whiteboard, Recording |
 
 ---
 
-**End of User Requirements Document**
+## 2. ผู้ใช้ (Personas)
 
-**ผู้รับผิดชอบ:**
-- Product Owner: Team Lead
-- Reviewers: Boss, Admin team
-- Approvers: Boss
+| Persona | Role | อุปกรณ์ | เป้าหมายหลัก |
+|---|---|---|---|
+| **อ.อ๊อด** | boss | iPad | ดูภาพรวมทีม, อนุมัติคำขอ |
+| **เคน** | admin | laptop + มือถือ | สร้าง/มอบหมายงาน, จัดการระบบ, อนุมัติ |
+| **น้องเจน** | member | มือถือ | ทำงาน, ส่งงาน, รับ points |
+| **น้องเอม** | member (ใหม่) | มือถือ | รู้จักทีม, หา group เข้าร่วม |
 
-**ใช้คู่กับ:**
-- `DESIGN_SPEC.md` — สำหรับทีม Design
-- Source code repo — สำหรับทีม Engineering
+> **หลักสำคัญ:** ทุกหน้าจอ + popup ต้องใช้งานได้บน **มือถือ + iPad + Apple Pencil** — input ≥16px (กัน iOS zoom), tap target ≥44×44px
+
+---
+
+## 3. Feature Inventory
+
+ฟีเจอร์ทั้งหมดในระบบ (รวมที่เพิ่มเข้ามาภายหลัง):
+
+### 3.1 Core
+- [F-01] Authentication (ชื่อ + PIN)
+- [F-02] Role 3 ระดับ: **boss / admin / member** *(boss เพิ่มภายหลัง — สูงกว่า admin)*
+- [F-03] Task CRUD + Kanban + drag-drop เปลี่ยน status
+- [F-04] Group (โครงการ) CRUD + leader + members
+- [F-05] Meeting + ส่ง iMIP email invite (.ics)
+- [F-06] Calendar รวม task + meeting + leave
+
+### 3.2 Workflow
+- [F-07] **Points workflow 4 phase** (เสนอเอง → leader → final → confirmed)
+- [F-08] Point Request (ขอเพิ่มคะแนนหลัง confirm)
+- [F-09] Deadline Request (ขอเลื่อน + อนุมัติ)
+- [F-10] **Group lifecycle 9 สถานะ** *(เพิ่มภายหลัง)*: idea → proposal → pending_approval → in_progress → delivery → maintenance → completed (+ on_hold / cancelled)
+- [F-11] Group invitation / proposal / claim flow
+
+### 3.3 ข้อมูล + ติดต่อ
+- [F-12] **Connection 3 ประเภท** *(ปรับภายหลัง)*: บริษัท / lobbyist / หน่วยงาน
+- [F-13] **group_connections** — ผูก connection หลายอันกับ group (many-to-many) *(เพิ่มภายหลัง)*
+- [F-14] Category (tag) ของ task + จัดการ inline
+- [F-15] Abbreviation search — ค้นด้วยตัวย่อราชการ 878 รายการ
+
+### 3.4 Collaboration
+- [F-16] Comments + **@mention** + notification *(เพิ่มภายหลัง)*
+- [F-17] File submission + doc_type tagging + URL link
+- [F-18] In-app file preview (image/PDF/video/audio/docx/xlsx)
+- [F-19] Poll / โหวต (anonymous, multi-choice, expires)
+- [F-20] Whiteboard collaborative + Apple Pencil + inject + recorder
+- [F-21] Audio recording + AI transcribe + AI summary
+
+### 3.5 ฟีเจอร์เสริม (เพิ่มภายหลัง)
+- [F-22] **Overview page** (boss) — จัดการทุก entity ในตารางเดียว
+- [F-23] **Multi-select filter** (ติ๊กหลาย status พร้อมกัน) ใน Overview + Todo
+- [F-24] **Sort + Filter** ใน Overview / Todo / People
+- [F-25] **Soft-delete + Trash** (กู้คืนได้ 30 วัน) สำหรับ task/group
+- [F-26] **Custom color picker** กลุ่มงาน (3 tiers อ่อน/กลาง/เข้ม + เลื่อนซ้ายขวา)
+- [F-27] Calendar: 3 รายการต่อประเภท + คลิกวัน + "ดูทั้งเดือน"
+- [F-28] Notification เรียงใหม่สุดบน
+- [F-29] Leave (วันลา) + แสดงในปฏิทิน
+- [F-30] Auto group summary (markdown) + regenerate
+- [F-31] Export CSV (รองรับชื่อไฟล์ไทย)
+- [F-32] Dark mode (Auto/Light/Dark)
+- [F-33] PWA + offline + auto-update (service worker)
+- [F-34] Budget field + k/m/b shorthand
+
+---
+
+## 4. Role & Permission Matrix
+
+### 4.1 ลำดับสิทธิ์
+```
+boss (สีทอง)  ≥  admin (สีฟ้า)  >  member (สีเทา)
+```
+> boss = admin ทุกสิทธิ์ ต่างแค่ label + เห็น Overview แทน Summary
+> `hasAdminPerms()` = role เป็น admin หรือ boss
+
+### 4.2 ตารางสิทธิ์ละเอียด
+
+| ความสามารถ | member | admin/boss | group leader | เจ้าของข้อมูล |
+|---|:-:|:-:|:-:|:-:|
+| ดู task/group/member/connection | ✅ | ✅ | ✅ | ✅ |
+| สร้าง/แก้/ลบ task | ❌ | ✅ | ✅ (กลุ่มตน) | — |
+| สร้าง group | ❌ | ✅ | — | — |
+| แก้ group | ❌ | ✅ | ✅ (ตนนำ) | — |
+| ลบ group | ❌ | ✅ | ❌ | — |
+| เปลี่ยน leader | ❌ | ✅ | ❌ | — |
+| เพิ่ม/ลบ member ในกลุ่ม | ❌ | ✅ | ✅ (ตนนำ) | self ออกเองได้ |
+| สร้าง/แก้/ลบ member | ❌ | ✅ | ❌ | self แก้ profile/PIN ตน |
+| กำหนด role | ❌ | ✅ | ❌ | ❌ |
+| สร้าง/แก้/ลบ connection | self สร้างได้ | ✅ | — | ✅ (เจ้าของ) |
+| Confirm points | ❌ | ✅ | ✅ (กลุ่มตน) | — |
+| อนุมัติ point/deadline request | ❌ | ✅ | ❌ | — |
+| เสนอ points ตัวเอง | ✅ (เป็น assignee) | ✅ | ✅ | — |
+| ขอเพิ่ม points / ขอเลื่อน deadline | ✅ | ✅ | ✅ | — |
+| สร้าง/โหวต poll | ✅ | ✅ | ✅ | ปิด/ลบ = creator/admin |
+| เห็น Overview | ❌ | ✅ (boss) | ❌ | — |
+| เห็น Summary | ✅ | ✅ (admin) | ✅ | — |
+| เข้า /dev + System Settings | ❌ | ✅ | ❌ | — |
+| ลบถาวร (purge trash) | ❌ | ✅ | ❌ | — |
+
+---
+
+## 5. Data Dictionary
+
+ฟิลด์ของทุก entity (อ้างอิง schema จริง) — ใช้เป็นแหล่งความจริงของ validation
+
+### 5.1 Member (สมาชิก)
+| Field | Type | Req | Validation | คำอธิบาย |
+|---|---|:-:|---|---|
+| name | text | ✅ | unique ในระบบ | ชื่อใช้ login |
+| role | enum | ✅ | boss/admin/member | สิทธิ์ |
+| password (PIN) | text | ✅ (ตอนสร้าง) | ≥4 ตัว, default `1234` | เก็บแบบ bcrypt hash |
+| email | email | — | รูปแบบ email | |
+| phone | tel | — | | |
+| prefix | text | — | | คำนำหน้า (อ./ดร.) — แสดงผลแยก |
+| color | color | — | hex, default `#6366f1` | สีประจำตัว/avatar |
+| avatar_url | url | — | | รูปโปรไฟล์ |
+
+### 5.2 Task Group (โครงการ)
+| Field | Type | Req | Validation | คำอธิบาย |
+|---|---|:-:|---|---|
+| name | text | ✅ | | ชื่อโครงการ |
+| description | textarea | — | markdown | |
+| target | text | — | datalist เดิม | หน่วยงานปลายทาง |
+| color | color | — | hex, **ไม่ควรซ้ำกลุ่มอื่น** (เตือน) | identity สี |
+| leader_id | ref member | — | admin/leader ตั้ง | หัวหน้า 1 คน |
+| status | enum | ✅ | 9 สถานะ + archived | lifecycle |
+| start_date | date | — | default = วันสร้าง | |
+| deadline | date | — | | |
+| connection_ids | ref[] | — | many-to-many | connection ที่ผูก |
+| deleted_at | timestamp | — | soft-delete | null = active |
+
+### 5.3 Task (งาน)
+| Field | Type | Req | Validation | คำอธิบาย |
+|---|---|:-:|---|---|
+| title | text | ✅ | | |
+| description | textarea | — | markdown | |
+| kind | enum | ✅ | task / meeting | |
+| group_id | ref group | — | | |
+| target | text | — | | ใช้เมื่อไม่มี group |
+| deadline | date/datetime | ✅* | meeting = datetime | *task ปกติบังคับ |
+| start_date | date | — | | |
+| end_time | datetime | — | meeting เท่านั้น, ≥ start+? | เวลาจบประชุม |
+| location_type | enum | — | online/onsite_internal/onsite_external | meeting |
+| location_detail | text/url | — | online → URL | |
+| budget | number | — | รับ k/m/b shorthand | งบประมาณ |
+| points | number | — | ≥0 | |
+| points_phase | enum | — | none/proposing/leader_review/final_review/confirmed | |
+| status | enum | ✅ | on_hold/in_progress/completed/cancelled (+lifecycle) | |
+| assignee_ids | ref[] | — | | ผู้รับผิดชอบ |
+| category_ids | ref[] | — | | tag |
+| deleted_at | timestamp | — | soft-delete | |
+
+### 5.4 Task Assignee (ผู้รับผิดชอบ)
+| Field | Type | คำอธิบาย |
+|---|---|---|
+| task_id + member_id | composite key | |
+| task_role | enum | leader / member |
+| points_share | number | คะแนนที่ได้จาก task นี้ |
+| assigned_at | timestamp | วันที่ถูกมอบหมาย |
+| proposed_at | timestamp | วันที่เสนอ/เสร็จ (= วันได้ point) |
+
+### 5.5 Connection (ผู้ติดต่อ)
+| Field | Type | Req | เงื่อนไขตาม kind | คำอธิบาย |
+|---|---|:-:|---|---|
+| kind | enum | ✅ | personal/lobbyist/agency | |
+| member_id | ref | — | personal/agency = เจ้าของ | |
+| company | text | ✅ (personal, agency) | personal=บริษัท, agency=ชื่อหน่วยงาน | ห้ามว่างใน 2 ชนิด |
+| liaison_name | text | ✅ (lobbyist, agency) | ชื่อบุคคลผู้ประสาน | |
+| contact_name | text | — | personal เท่านั้น | |
+| contact_role | text | — | ตำแหน่ง | |
+| phone | tel | — | | |
+| email | email | — | | |
+| topics | text | — | หัวข้อที่เกี่ยวข้อง | |
+| notes | textarea | — | | |
+
+### 5.6 Entity อื่น ๆ (สรุป field สำคัญ)
+- **Leave:** member_id, start_at (datetime ✅), end_at (datetime ✅), reason
+- **Poll:** question ✅, options[] ✅ (≥2), multi_choice (bool), anonymous (bool), expires_at, closed
+- **Point Request:** task_id, requested_by, current_points, requested_points (> current), reason, status
+- **Deadline Request:** task_id, requested_by, current_deadline, requested_deadline ✅, reason, status
+- **Comment:** task_id, member_id, body ✅, mentions[], deleted_at
+- **Task File:** task_id, original_name, mimetype, size, doc_type (default 'อื่นๆ'), url (สำหรับ link), label
+- **Whiteboard:** name ✅, canvas_json, created_by, visibility
+- **Recording:** filename, label, duration_ms, transcript, transcript_status, summary, action_items[]
+- **Category:** name ✅ (unique)
+
+---
+
+# ส่วน B — รายละเอียดหน้าจอ
+
+> แต่ละหน้าระบุ: ใช้ทำอะไร · แสดงข้อมูลอะไร · action อะไรได้ · ใครเห็น
+
+## 6. Login
+
+**ใช้ทำอะไร:** เข้าระบบ
+**แสดง:** logo, ชื่อแอป, ฟอร์ม login
+**ฟิลด์:**
+| Field | Type | Req | Validation |
+|---|---|:-:|---|
+| ชื่อผู้ใช้ | text | ✅ | ตรงกับ member.name |
+| PIN | password (numeric) | ✅ | ตรงกับ hash |
+
+**Action:** ปุ่ม "เข้าสู่ระบบ" → ถ้าผิดแสดง error สีแดงใต้ฟอร์ม
+**Requirement:** ห้าม self-signup — admin สร้าง account ให้เท่านั้น
+
+---
+
+## 7. Home
+
+**ใช้ทำอะไร:** dashboard ส่วนตัว — "วันนี้ต้องทำอะไร"
+**แสดงข้อมูล (เรียงบนลงล่าง):**
+
+1. **Greeting banner** — ชื่อผู้ใช้, role badge, "เสร็จ X · กำลังทำ Y", points รวมของตน
+2. **Stats 4 ช่อง** — สมาชิกทั้งหมด / โครงการ / งานเสร็จ / งานเกินกำหนด
+3. **ใกล้ถึง Deadline** — task ≤2 วัน (ไม่รวม meeting/cancelled); non-admin เห็นเฉพาะของตน; แสดง: สีกลุ่ม, ชื่องาน, กลุ่ม, assignees, target, deadline (สีตามความด่วน)
+4. **ประชุมใกล้ถึง** — meeting ≤2 วัน + location chip (online/onsite) + ลิงก์ (ถ้า online)
+5. **กลุ่มที่ยังไม่ได้เข้าร่วม** — leaderless ก่อน, max 6; ปุ่ม "หยิบกลุ่ม"/"เสนอตัว"/"รอพิจารณา"
+6. **Scoreboard** — pie + legend (คนที่ points>0)
+7. **โพล** — poll ที่เปิดอยู่ max 5 + ปุ่มสร้าง
+8. **คำขอเลื่อน Deadline** *(admin/boss เท่านั้น)* — inline อนุมัติ/ปฏิเสธ
+
+---
+
+## 8. Tasks / Todo
+
+**ใช้ทำอะไร:** Kanban จัดการงาน + workflow
+**Toolbar:** ค้นหา (รองรับตัวย่อ) + ปุ่ม filter (มี badge นับ)
+**Segmented 3 มุมมอง:** งานของฉัน / งานที่ฉันเป็นหัวหน้า (leader) / งานของ Admin (admin)
+**Filter sheet:**
+- สถานะ — **multi-select chips** (ติ๊กหลายอันได้; ไม่ติ๊ก=ทั้งหมด)
+- เรียงตาม — 14 ตัวเลือก (deadline/start/points/group/target/budget/status ทั้ง asc/desc)
+- โครงการ (dropdown), Target (dropdown)
+
+**Kanban 4 คอลัมน์:** พักไว้ / กำลังทำ / เสร็จ(รอ confirm) / คอนเฟิร์มแล้ว
+- คอลัมน์ Admin column 3 = mixed queue (point requests + deadline requests + group proposals + final_review tasks)
+- **drag-drop** เปลี่ยน status; งานจัดกลุ่มตามโครงการ (`<details>`) + sum points
+
+**Task card แสดง:** สีกลุ่ม(border-left), ชื่อ, status badge, points pill, กลุ่ม, target, location chip(meeting), desc 2 บรรทัด, assignees, "ของคุณ", deadline(สีด่วน), phase badge
+**Trash bin:** ลาก card มาวาง → ลงถังขยะ (กู้คืน 30 วัน)
+
+---
+
+## 9. Calendar
+
+**ใช้ทำอะไร:** ปฏิทินรวม task + meeting + leave
+**Layout:** desktop 70/30 (ปฏิทิน / รายละเอียด)
+**Cell แต่ละวัน:** เลขวัน + pills (≤3 ต่อประเภท): 📅meeting / 📋task / 👤leave + overflow "+N"; flag today/selected/overdue
+- task แสดงเฉพาะ in_progress; meeting/leave แสดงเสมอ
+**ฝั่งขวา:** create bar (admin/leader — preset deadline=วันที่เลือก) + ปุ่ม "ดูทั้งเดือน" + 3 sections (ประชุม/งาน/วันลา)
+**Interaction:** คลิกวัน→ดูเฉพาะวัน; คลิกซ้ำ→deselect; auto-scroll วันนี้
+
+---
+
+## 10. People
+
+**Segmented 2:** สมาชิก / Connections
+
+### 10.1 สมาชิก
+**Toolbar:** ค้นหา (ชื่อ/email/phone) + sort (points/ชื่อ/role/งาน) + filter (role)
+**Card แสดง:** avatar, ชื่อ + "(คุณ)" + badge "🏖️ลา"(ถ้าลาอยู่), role badge, email(tel), phone, ⭐points · X% · งานเสร็จ/ทั้งหมด; admin มี edit/delete
+**คลิก card →** Member Detail sheet (ดู §20.4)
+
+### 10.2 Connections
+**Toolbar:** ค้นหา (company/contact/phone/email/notes/topics/liaison) + sort + filter (kind)
+**3 sections พับได้:**
+- 🏢 **บริษัท** — group ตามเจ้าของ member; card: company, contact_name·role, phone/email, notes, **chips กลุ่มที่ใช้**
+- 🎯 **Lobbyist** — flat; card: liaison_name, role, contact, notes
+- 🏛️ **หน่วยงาน** — group ตาม company; card: liaison_name(role), เบอร์/อีเมล
+
+---
+
+## 11. Summary
+
+**ใช้ทำอะไร:** มุมมอง project-centric (admin/member; boss ใช้ Overview)
+**Index:** ปุ่มสร้างโครงการ + 3 sections (ฉันเป็นหัวหน้า/สมาชิก/ไม่เกี่ยวข้อง) + 2 พับได้ (archived/completed)
+**Group card:** สีกลุ่ม, ชื่อ, leader, desc, 3 stat (tasks done/total · points · files), progress bar, start/deadline, connection chips, ปุ่ม (หยิบ/เสนอตัว/แก้/archive/ลบ)
+**Detail:** hero(สีกลุ่ม) + 3 stat + join CTA + connections(by kind) + members(leader ทอง) + tasks + files + **auto summary (markdown) + regenerate/download** + Export CSV
+
+---
+
+## 12. Overview
+
+**ใช้ทำอะไร:** Admin/Boss console — จัดการทุก entity (boss เห็นแทน Summary)
+**Toolbar:** ค้นหารวมทุก entity (รองรับตัวย่อ) + 5 tabs (All/Tasks/Groups/Members/Connections) + counter
+**ทุก tab = ตาราง + sort + multi-select filter + CRUD inline**
+
+| Tab | คอลัมน์ | Sort | Filter |
+|---|---|---|---|
+| Tasks | ชื่อ+กลุ่ม, status, deadline, assignees, budget, จัดการ | deadline/title/points/status | status(multi) + group(multi) |
+| Groups | ชื่อ+target, status, leader, จำนวน task, deadline, จัดการ | created/name/status/deadline | status(multi 9 ค่า) |
+| Members | avatar+ชื่อ, role, email, จำนวนงาน, points, จัดการ | role/points/ชื่อ | role + group(multi) |
+| Connections | ชื่อ(ตาม kind), kind, phone, email, "โดย", จัดการ | name/kind | kind |
+
+> **ข้อกำหนดสำคัญ:** Overview ต้อง **เข้าใจง่ายที่สุด** — ทุกคนเปิดมาต้องรู้ว่ากดอะไรได้ ค้นหาตรงไหน
+
+---
+
+## 13. Profile
+
+**แสดง:** avatar(แก้ได้) + ชื่อ + role + email; stats (points/เสร็จ/กำลังทำ/ทั้งหมด); theme toggle (Auto/Light/Dark)
+**Settings list (เปิด popup):** เปลี่ยน PIN / จัดการวันลา / จัดการ Task Groups(admin/leader) / คำขอเลื่อน Deadline / ถังขยะ / ตั้งค่าระบบ(admin) / Dev Tools(admin) / ออกจากระบบ
+
+---
+
+## 14. Whiteboard
+
+**ใช้ทำอะไร:** กระดานวาด collaborative + Apple Pencil + จดประชุม
+**List view:** รายการ board + สร้างใหม่
+**Canvas:** เครื่องมือ (select/lasso/pan, draw/highlight/eraser, shapes, text/sticky/image, color/stroke/fill, undo/redo, zoom, paper type/size, fullscreen, inject, record, export PNG, delete)
+**Real-time:** multi-user cursor + auto-save 1.5 วินาที
+**Inject:** ดึง task/group/meeting/points จากระบบมาวางบน canvas
+**Recorder:** อัดเสียงขณะวาด (ลอยไม่บล็อก canvas)
+
+---
+
+## 15. Dev Tools (/dev)
+
+**เข้าได้:** admin/boss เท่านั้น (auth gate)
+**13 panels:** API Playground · Data Explorer · System Info · Whiteboard · Component Lab · Room Designer · About Editor · Files Browser · **Point Ledger (table + Gantt)** · Activity Log (SSE) · Dev Notes · Settings · Members(read-only)
+
+---
+
+# ส่วน C — Popup / Modal ทุกตัว (ละเอียดระดับฟิลด์)
+
+> **นี่คือส่วนหลักของเอกสาร** — ทุก popup ระบุ: เปิดเมื่อไหร่ · ใครเปิดได้ · ฟิลด์ครบ · ปุ่ม · บันทึกแล้วเกิดอะไร
+
+## 16. Generic Dialogs
+
+### 16.1 Confirm Dialog (`uiConfirm`)
+**ใช้เมื่อ:** ต้องยืนยันก่อนทำ (ลบ, ยกเลิก, reopen)
+**แสดง:** หัวเรื่อง + ข้อความ + ปุ่ม [ยกเลิก] [ยืนยัน]
+**Requirement:** ปุ่มยืนยันสีแดงเมื่อเป็น destructive; Enter=ยืนยัน, Esc=ยกเลิก
+
+### 16.2 Prompt Dialog (`uiPrompt`)
+**ใช้เมื่อ:** ขอข้อความสั้น (ชื่อ category, label)
+**ฟิลด์:** 1 text input + ปุ่ม [ยกเลิก] [ตกลง]
+
+### 16.3 Toast
+**ใช้เมื่อ:** feedback หลัง action (บันทึกแล้ว/ผิดพลาด) — auto หาย, ไม่บล็อก
+
+---
+
+## 17. Task Popups
+
+### 17.1 Create Task Flow (`openCreateTaskFlow`)
+**เปิดเมื่อ:** กด "+" ในหน้า Todo · **ใคร:** admin/leader
+**แสดง:** เลือกกลุ่มก่อน (admin เห็นทุกกลุ่ม, leader เห็นเฉพาะที่ตนนำ) + "สร้างกลุ่มใหม่" + (admin) "งานเดี่ยวไม่อยู่ในกลุ่ม"
+**ไปต่อ:** เปิด Multi-Task modal ของกลุ่มที่เลือก
+
+### 17.2 Create/Edit Task (`openTaskModal` / `openTaskEdit`)
+**เปิดเมื่อ:** สร้าง/แก้ task · **ใคร:** admin หรือ leader ของกลุ่มนั้น
+
+| Field | Type | Req | Validation | Default | คำอธิบาย |
+|---|---|:-:|---|---|---|
+| title | text | ✅ | ไม่ว่าง | | ชื่องาน |
+| description | textarea | — | markdown | | |
+| group_id | select | — | + ปุ่ม "สร้างกลุ่มใหม่" | | ผูกโครงการ |
+| target | text + datalist | — | | | ใช้เมื่อไม่มี group |
+| deadline | date (flatpickr) | ✅ | dd/mm/yyyy | | กำหนดส่ง |
+| budget | text | — | parse k/m/b → number | | งบประมาณ |
+| categories | chips | — | + เพิ่ม/แก้/ลบ inline | | tag |
+| assignees | chips grid | — | "เลือกทุกคน" toggle | | กรองตาม group |
+| status | select | — | on_hold/in_progress/completed/cancelled | on_hold | |
+
+**ปุ่ม (edit mode เพิ่ม):** ⭐แบ่ง Points · 👥จัดการผู้รับผิดชอบ · ⏰ขอเลื่อน Deadline
+**บันทึก:** POST/PUT → ปิด modal → assignees ได้ notification
+
+### 17.3 Multi-Task Create (`openMultiTaskModal`)
+**เปิดเมื่อ:** สร้างหลายงานในกลุ่มเดียว · **ใคร:** admin/leader
+**ต่อแถว:** title ✅ / description / deadline ✅ / budget / category dropdown / assignees chips
+**ปุ่ม:** "เพิ่มประเภทงานใหม่" (category) · "เพิ่มอีก" (แถว) · ✕ลบแถว
+**บันทึก:** POST ทีละแถว
+
+### 17.4 Task Detail Sheet (`openTaskSheet`)
+**เปิดเมื่อ:** คลิก task card · **ใคร:** ทุกคน
+**แสดง:** ชื่อ + status/phase badge + กลุ่ม/target/budget/points + (meeting) location card + desc(markdown) + category tags + วันที่ (task=เริ่ม+deadline, meeting=วันเวลานัด) + รายชื่อ assignees(+points_share) + comments thread
+**ปุ่ม:** 📎ส่งงาน/ดูไฟล์ · ⭐ปุ่ม points (เปลี่ยนชื่อตาม phase) · (meeting)📧ส่งเชิญอีกครั้ง · ✏️แก้ · 🗑ลบ(soft→trash)
+**Comments:** textarea + @mention autocomplete; ผู้ tag ได้ notification
+
+---
+
+## 18. Meeting Popups
+
+### 18.1 Create/Edit Meeting (`openMeetingModal` / `openMeetingEdit`)
+**เปิดเมื่อ:** สร้าง/แก้ประชุม · **ใคร:** admin/leader
+
+| Field | Type | Req | Validation | คำอธิบาย |
+|---|---|:-:|---|---|
+| title | text | ✅ | | หัวข้อประชุม |
+| description | textarea | — | markdown | วาระ |
+| location_type | radio (3) | — | online/onsite_internal/onsite_external | |
+| location_detail | text/url | — (✅ ถ้า online ควรมี URL) | online=URL คลิกได้ | |
+| group_id | select | — | + "ประชุมรวม Lab" (cross-group) | |
+| deadline (start) | datetime | ✅ | dd/mm/yyyy HH:mm | เวลาเริ่ม |
+| end_time | datetime | — | ≥ start (auto-bound start+60min) | เวลาจบ |
+| attendees | chips grid | — | "เลือกทุกคน" | ผู้เข้าร่วม |
+| ส่งอีเมลเชิญ | (auto) | — | ตาม system setting | iMIP .ics |
+
+**บันทึก:** POST/PUT → ถ้าเปิด email → ส่ง .ics ให้ attendees; **ลบประชุม → ส่ง CANCEL email อัตโนมัติ** (confirm ก่อน)
+**Edit mode เพิ่ม:** 👥จัดการผู้เข้าร่วม
+
+---
+
+## 19. Group Popups
+
+### 19.1 Create/Edit Group (`openGroupModal`)
+**เปิดเมื่อ:** สร้าง/แก้โครงการ · **ใคร:** admin (แก้ได้ทั้ง leader ตนเอง)
+
+| Field | Type | Req | Validation | คำอธิบาย |
+|---|---|:-:|---|---|
+| name | text | ✅ | ไม่ว่าง | ชื่อโครงการ |
+| description | textarea | — | markdown | |
+| target | text + datalist | — | | หน่วยงานหลัก |
+| **color** | composite | — | hex `^#[0-9a-f]{6}$`; **เตือนถ้าซ้ำกลุ่มอื่น** | native + hex + palette 3 tiers (อ่อน/กลาง/เข้ม) เลื่อน `<` `>` + จุดบอกหน้า |
+| leader_id | select | — | edit mode / admin | หัวหน้า |
+| members | chips grid | — | create mode; คนแรก=leader(👑); "เลือกทุกคน" | |
+| connection_ids | multi-select 3 sections | — | บริษัท/lobbyist/หน่วยงาน | ผูก connection |
+| status | select | ✅ | 9 lifecycle statuses | |
+
+**บันทึก:** POST/PUT; create แปลง assignee→member_ids, connection_ids string→array
+
+### 19.2 Group List Manager (`openGroupListModal`)
+**เปิดเมื่อ:** Profile → จัดการ Task Groups · **ใคร:** admin/leader
+**แสดง:** card ต่อกลุ่ม (leader, desc, start/deadline, progress) + แก้/ลบ(admin) + "เพิ่มโครงการใหม่"
+
+---
+
+## 20. Member Popups
+
+### 20.1 Create/Edit Member (`openMemberModal`)
+**เปิดเมื่อ:** People/Overview → เพิ่ม/แก้สมาชิก · **ใคร:** admin เท่านั้น
+
+| Field | Type | Req | Validation | Default | คำอธิบาย |
+|---|---|:-:|---|---|---|
+| name | text | ✅ | unique | | ชื่อ login |
+| role | select | ✅ | boss/admin/member | member | |
+| email | email | — | รูปแบบ email | | |
+| phone | tel | — | | | |
+| prefix | text | — | | | คำนำหน้า |
+| color | color | — | hex | #6366f1 | |
+| password | password | ✅(สร้าง) | ≥4 | `1234` | PIN เริ่มต้น |
+
+> **ข้อจำกัดความปลอดภัย:** ระบบ/แอดมินไม่กรอก PIN ของผู้ใช้แทน — ผู้ใช้เปลี่ยน PIN เองภายหลัง
+
+### 20.2 Change PIN
+**เปิดเมื่อ:** Profile → เปลี่ยน PIN · **ใคร:** ทุกคน (ของตน)
+| Field | Type | Req | Validation |
+|---|---|:-:|---|
+| current_password | password | ✅ | ตรงกับปัจจุบัน |
+| new_password | password | ✅ | ≥4 ตัว |
+
+### 20.3 Avatar Upload
+**เปิดเมื่อ:** Profile → 📷 · **ใคร:** ทุกคน
+**Flow:** เลือกรูป → resize 384px WebP ~85% → POST; ลบ → confirm → DELETE
+
+### 20.4 Member Detail Sheet (`openMemberDetail`)
+**เปิดเมื่อ:** คลิก member card · **ใคร:** ทุกคน
+**แสดง:** avatar+email(mailto)+phone(tel); 3 stat (points/เสร็จ/อัตราสำเร็จ); leave banner; วันลาที่จะถึง; **radar 6 แกน** (เอกสาร/ศิลป์/Extrovert/Participation/ม้าเร็ว/Dev); งาน 3 กลุ่ม (กำลังทำ/พักไว้/เสร็จ)
+
+---
+
+## 21. Connection Popups
+
+### 21.1 Create/Edit Connection (`openConnectionModal`)
+**เปิดเมื่อ:** People → เพิ่ม/แก้ connection · **ใคร:** เจ้าของ หรือ admin
+**Kind radio (เปลี่ยนฟิลด์ที่แสดง):** 🏢บริษัท(personal) / 🎯Lobbyist / 🏛️หน่วยงาน(agency)
+
+| Field | personal | lobbyist | agency | Validation |
+|---|:-:|:-:|:-:|---|
+| member_id (เจ้าของ) | ✅(admin เลือก) | ซ่อน | auto=ตัวเอง | |
+| company | ✅ บริษัท | ซ่อน | ✅ ชื่อหน่วยงาน | ห้ามว่าง |
+| liaison_name | ซ่อน | ✅ | ✅ ผู้ประสาน | ห้ามว่าง |
+| contact_name | ✅ | ซ่อน | ซ่อน | |
+| contact_role | — | — | — | ตำแหน่ง |
+| phone | — | — | — | |
+| email | — | — | — | |
+| topics | — | — | — | |
+| notes | — | — | — | |
+
+> **ข้อกำหนด:** ฟิลด์ที่ซ่อนต้อง **disable** ด้วย (กัน 2 ช่องชื่อ company ชนกัน → ส่งค่าผิด)
+> ตัวอย่าง: หน่วยงาน = "อบต. → พี่ตู่(กองช่าง), พี่แหม่ม(ปลัด)" (1 หน่วยงาน หลาย liaison)
+
+---
+
+## 22. Points Workflow Popups
+
+### 22.1 Quick Self-Propose (`promptOwnPointsIfNeeded`)
+**เปิดเมื่อ:** task เพิ่งเสร็จ (ส่งไฟล์แรก) + เป็น assignee ที่ยังไม่เสนอ
+**ฟิลด์:** my_points (number ✅, autofocus) + banner ชื่องาน
+**บันทึก:** POST propose-own → phase=proposing
+
+### 22.2 Allocate Points (`openAllocateModal`)
+**เปิดเมื่อ:** จัดการ points ของ task · **ใคร:** ตาม phase
+**แสดง:** banner phase (4 สี) + ต่อ assignee: avatar, ชื่อ, role, สถานะ("กำหนดแล้ว/รอ"), ช่อง points (แก้ได้ตาม phase) + total สด
+
+| Phase | ใครแก้ได้ | ปุ่ม | API |
+|---|---|---|---|
+| proposing 🟦 | assignee (ของตน) | บันทึก Point ของฉัน | propose-own |
+| leader_review 🟨 | leader/admin | อนุมัติ — ส่งเข้าที่ประชุม | leader-approve |
+| final_review 🟪 | leader/admin | ยืนยัน + แจกให้สมาชิก | confirm |
+| confirmed ✅ | locked | เปิดแก้ไขอีกครั้ง (confirm) | reopen |
+
+**confirmed เพิ่ม:** ช่องขอเพิ่ม points → req-points-new (number, > ปัจจุบัน) + reason → POST points-request
+
+### 22.3 Request Extension (`openRequestExtensionModal`)
+**เปิดเมื่อ:** ทำงานไม่ทัน · **ใคร:** assignee/leader
+| Field | Type | Req | คำอธิบาย |
+|---|---|:-:|---|
+| (แสดง deadline ปัจจุบัน) | — | — | อ้างอิง |
+| requested_deadline | date | ✅ | วันใหม่ |
+| reason | textarea | — | เหตุผล (กันขอพร่ำเพรื่อ) |
+
+---
+
+## 23. Membership Flow Popups
+
+### 23.1 Assign Task (`openAssignTaskModal`)
+**เปิดเมื่อ:** เพิ่มผู้รับผิดชอบ task · **ใคร:** admin/leader
+**ฟิลด์:** select member (เฉพาะคนในกลุ่มที่ยังไม่ได้รับมอบหมาย) → POST assignees
+
+### 23.2 Invite to Group (`openInviteToGroupModal`)
+**เปิดเมื่อ:** เชิญเข้ากลุ่ม · **ใคร:** admin/leader
+**ฟิลด์:** member chips (multi) + "เลือกทุกคน" → POST add-member ต่อคน
+
+### 23.3 Propose to Group (`openProposeGroupModal`)
+**เปิดเมื่อ:** member เสนอตัวเข้ากลุ่ม leaderless
+**ฟิลด์:** message (textarea, optional) → POST propose → leader/admin พิจารณา
+
+---
+
+## 24. Poll Popups
+
+### 24.1 Create Poll (`openCreatePollModal`)
+**ใคร:** ทุกคน
+| Field | Type | Req | Validation |
+|---|---|:-:|---|
+| question | textarea | ✅ | ไม่ว่าง |
+| options[] | text dynamic | ✅ | ≥2 ตัวเลือก + "เพิ่มตัวเลือก" |
+| multi_choice | checkbox | — | เลือกได้หลายข้อ |
+| anonymous | checkbox | — | ไม่เก็บ voter id |
+| expires_at | datetime | — | auto-close เมื่อถึง |
+
+### 24.2 Vote / View (`openPollModal`)
+**แสดง:** คำถาม + options (radio/checkbox ตาม multi) + result bar (หลังโหวต) + จำนวนโหวต
+**ปุ่ม:** โหวต/เปลี่ยนคำตอบ · ปิดโพล(creator/admin) · ลบ(creator/admin)
+**Privacy:** anonymous → ไม่แสดง/เก็บว่าใครโหวต
+
+---
+
+## 25. Submission / File Popups
+
+### 25.1 Submission Sheet (`openSubmissionSheet`)
+**เปิดเมื่อ:** ส่งงาน · **ใคร:** assignee
+**ส่วนประกอบ:**
+- Drop zone (drag-drop / เลือกไฟล์ multiple)
+- รายการไฟล์ staged — ต่อไฟล์: ชื่อ, ขนาด, **dropdown doc_type**, ✕ลบ
+- ปุ่ม "ล้างทั้งหมด" / "ส่ง"
+- ส่วน URL link: url + label + "เพิ่มลิงก์"
+- รายการไฟล์ที่ส่งแล้ว (preview/download/delete)
+**Auto:** ส่งไฟล์แรก → task=completed → prompt own points
+
+### 25.2 Doc Type Picker (`openDocTypePicker`)
+**เปิดเมื่อ:** เลือกประเภทเอกสารของไฟล์
+**แสดง:** list doc_type (TOR/Quotation/MoU/อื่นๆ ...) ✓ ตัวที่เลือก
+
+### 25.3 File Preview (`openPreview`)
+**แสดงตามชนิด:** image / PDF(iframe) / video / audio / text / docx / xlsx(แท็บ sheet) / pptx(download)
+**ปุ่ม:** ดาวน์โหลด *(ต้องขออนุญาตผู้ใช้ก่อน download)*
+
+---
+
+## 26. Admin / Settings Popups
+
+### 26.1 Trash (`openTrashModal`)
+**ใคร:** ทุกคน (ลบถาวร=admin)
+**3 sections:** 📁โครงการ / 📋งาน / 📅ประชุม (group ย่อยตามกลุ่ม)
+**ต่อรายการ:** ชื่อ + เวลาที่ลบ + ↩คืน + 🗑️ลบถาวร(admin, confirm)
+**Group restore → คืน task ภายในด้วย (cascade)**
+
+### 26.2 My Leaves (`openMyLeavesModal`)
+**ใคร:** ทุกคน (ของตน)
+**แสดง:** ประวัติลา (ล่าสุดบน, badge "กำลังลา") + ✕ลบ
+**ฟอร์มเพิ่ม:** start_at (datetime ✅) / end_at (datetime ✅) / reason → ขึ้นปฏิทินทีม
+
+### 26.3 Extension Requests (`openExtensionsModal`)
+**แสดง:** list คำขอ (งาน, ผู้ขอ, เดิม→ใหม่, เหตุผล, status); admin มีปุ่มอนุมัติ/ปฏิเสธ
+
+### 26.4 System Settings (`openSystemSettingsModal`)
+**ใคร:** admin
+**แสดง:** สถานะ SMTP (configured/missing) + toggle `email_invitations_enabled`
+
+---
+
+## 27. Notification + Preview Sheets
+
+### 27.1 Notifications (`openNotifications`)
+**เปิดเมื่อ:** คลิก 🔔 · **เรียงใหม่สุดบน**
+**รวม 10 แหล่ง:**
+1. ⚠️ งานของฉันเกินกำหนด
+2. ⏰ ครบกำหนดวันนี้/≤3 วัน
+3. 🪪 งานยังไม่มีคนรับในกลุ่มที่ฉันนำ
+4. ⏰ คำขอเลื่อน deadline รออนุมัติ (admin)
+5. 💎 คำขอเพิ่ม points รออนุมัติ (admin)
+6. ✅/❌ คำขอของฉันถูกตัดสิน
+7. 📩 คำเชิญเข้ากลุ่มถึงฉัน
+8. 📩 คำเสนอตัวเข้ากลุ่มที่ฉันนำ
+9. ✅/❌ คำเชิญที่ฉันส่งถูกตัดสิน
+10. 💬 มีคน @mention ฉัน (preview 80 ตัว)
+
+**ต่อรายการ:** icon + ข้อความ + เวลา; บางอันมีปุ่ม inline (รับ/ปฏิเสธ คำเชิญ, อนุมัติ/ปฏิเสธ point request); คลิกแถว→ไปหน้าเกี่ยวข้อง
+**Badge:** นับ unread บน 🔔 (สูงสุด "99+")
+
+---
+
+## 28. Whiteboard Popups
+
+### 28.1 Inject Modal
+**Tabs:** 📋งาน / 📁โครงการ / 📅ประชุม / ⭐Points
+**แสดง:** ค้นหา + list + "สร้างใหม่"; Points tab = อนุมัติ/ปฏิเสธ point request inline
+**คลิก →** วาง card บน canvas
+
+### 28.2 Paper Size Popover
+**ตัวเลือก:** A4/A3/A5(ตั้ง/นอน) / Letter / Tabloid / ∞ไม่จำกัด
+
+### 28.3 New Board / Color Picker
+- New board: ขอชื่อ
+- Color: 8 สีด่วน + recent 6 + custom + stroke size + fill toggle
+
+---
+
+# ส่วน D — กฎเกณฑ์ + ข้อกำหนด
+
+## 29. Workflows
+
+### 29.1 Points Workflow (4 phase)
+```
+[งานเสร็จ] → proposing (assignee เสนอเอง)
+           → leader_review (leader ปรับ+อนุมัติ)
+           → final_review (admin ทบทวน)
+           → confirmed (แจก points, ล็อก)
+                ↑ reopen (admin/leader) ถ้าผิด
+                ↓ point-request (member ขอเพิ่ม → admin ตัดสิน)
+```
+**เหตุผล:** เสนอเองก่อน = ลด bias, leader ปรับให้แฟร์, admin ทบทวนรอบสุดท้าย
+
+### 29.2 Group Lifecycle (9 สถานะ)
+```
+idea → proposal → pending_approval → in_progress → delivery → maintenance → completed
+                                          ↓                            ↑
+                                       on_hold                     archived
+                                       cancelled (→ trash)
+```
+
+### 29.3 Invitation Flow
+- **invite:** admin/leader เชิญ → member รับ/ปฏิเสธ
+- **proposal:** member เสนอตัว (กลุ่ม leaderless) → leader/admin พิจารณา
+- **claim:** admin/leader หยิบกลุ่ม leaderless เป็น leader
+
+---
+
+## 30. Validation Rules
+
+| จุด | กฎ |
+|---|---|
+| Task title / Group name / Poll question | ห้ามว่าง |
+| Task deadline (ปกติ) | บังคับ |
+| Meeting | ต้องมี start datetime; end ≥ start |
+| Connection | personal/agency ต้องมี company; lobbyist/agency ต้องมี liaison_name |
+| Connection (ฟิลด์ซ่อน) | ต้อง disable เพื่อกัน name ชนกัน |
+| PIN | ≥4 ตัว |
+| Point request | requested_points > current_points |
+| Poll | ≥2 options |
+| Budget | parse k/m/b เป็นตัวเลข |
+| Group color | hex 6 หลัก; เตือนถ้าซ้ำกลุ่มอื่น |
+| Email/Phone | รูปแบบถูกต้อง (ถ้ากรอก) |
+| ไฟล์อัปโหลด | แสดงชนิด/ขนาด; ต้องขออนุญาตก่อน download |
+
+---
+
+## 31. Notifications Spec
+
+| Trigger | ผู้รับ | ช่องทาง |
+|---|---|---|
+| @mention ใน comment | คนที่ถูก tag | in-app เท่านั้น (ไม่ส่ง email) |
+| สร้าง meeting (email เปิด) | attendees | email iMIP (.ics) |
+| ลบ meeting | attendees | email CANCEL |
+| point/deadline request | admin | in-app (bell + Todo admin) |
+| request ถูกตัดสิน | ผู้ขอ | in-app |
+| invite/proposal | ผู้เกี่ยวข้อง | in-app |
+| งานใกล้/เกิน deadline | assignee | in-app |
+
+---
+
+## 32. Non-Functional Requirements
+
+| ด้าน | ข้อกำหนด |
+|---|---|
+| **Performance** | โหลดหน้าแรก <3s; API CRUD <500ms; search <200ms; drag-drop optimistic <100ms |
+| **Mobile/iPad/Pencil** | input ≥16px (กัน iOS zoom), tap ≥44px, palm rejection บน canvas, รองรับ Apple Pencil |
+| **Offline (PWA)** | service worker; HTML network-first; CSS/JS stale-while-revalidate; ใช้ cached เมื่อ offline |
+| **Update** | bump cache version → auto-reload ทุก client |
+| **Real-time** | SSE `/api/events` push; whiteboard WebSocket cursor |
+| **Security** | JWT bearer; PIN bcrypt; role + ownership check ทุก write; ไม่กรอก PIN แทนผู้ใช้ |
+| **Localization** | ไทยหลัก; dd/mm/yyyy + 24h; abbreviation search; Thai filename (RFC 5987) |
+| **Data safety** | soft-delete 30 วัน; group restore cascade; audit log ทุก admin action |
+| **Theme** | Auto/Light/Dark (ตาม OS หรือเลือกเอง) |
+| **A11y** | tap target, contrast, emoji + ข้อความควบคู่ (ไม่ใช้ emoji ลำพัง) |
+
+---
+
+## 33. Constraints + Out of Scope
+
+### 33.1 Constraints
+- มือถือเป็นหลัก; iPad portrait=bottom tabbar, desktop≥1024=top nav
+- ทุกครั้งที่แก้ → ต้อง deploy ใหม่ (bump SW)
+- Stack: Node + PostgreSQL + Vanilla JS + Tailwind; Docker compose
+- ทีมเล็ก (<50 คน), self-host, งบจำกัด
+
+### 33.2 Out of Scope (ไม่ทำ)
+- Self-signup, social login (Google/MS)
+- Mobile native app (ใช้ PWA)
+- Video conferencing ในตัว (ใช้ Zoom/Meet ภายนอก)
+- Payment / billing
+- Multi-tenant (lab เดียว)
+- i18n (ไทยอย่างเดียว)
+- Calendar sync ภายนอก (Google/Outlook)
+
+---
+
+## 34. Acceptance Criteria
+
+### 34.1 เกณฑ์รวม
+- ✅ ทุก persona ทำงานหลักของตัวเองครบ
+- ✅ ทุก popup มีฟิลด์ + validation ตามตารางในเอกสารนี้
+- ✅ ฟิลด์บังคับว่าง → บล็อก submit + แสดง error inline
+- ✅ ทำงานได้บนมือถือ/iPad/Pencil
+- ✅ ไม่มี data loss ใน 30 วัน (trash)
+- ✅ role ที่ไม่มีสิทธิ์ → ไม่เห็นปุ่ม + API ตอบ 403
+
+### 34.2 ตัวอย่าง (Given/When/Then)
+
+**Create Task**
+> Given admin/leader เปิด Create Task
+> When เว้น title ว่างแล้วกดบันทึก
+> Then บล็อก + ไฮไลต์ title; เมื่อกรอกครบ → POST → card ขึ้น Kanban + assignees ได้ noti
+
+**Connection kind switch**
+> Given เปิด Create Connection เลือก kind=lobbyist
+> Then ซ่อน+disable company/contact_name; แสดง liaison_name (บังคับ)
+> When สลับเป็น personal → แสดง company(บังคับ)+contact_name, ซ่อน liaison_name
+
+**Points confirm**
+> Given task อยู่ final_review, ผู้ใช้เป็น leader/admin
+> When กดยืนยัน → points_phase=confirmed, points_share แจกเข้าแต่ละ assignee, ล็อกแก้ไข
+> And member เห็นปุ่ม "ขอเพิ่ม Points" (req > current)
+
+**Meeting cancel email**
+> Given meeting มี attendees + email เปิด
+> When ลบ meeting (ยืนยัน) → ส่ง CANCEL email ให้ทุก attendee + ลง trash
+
+---
+
+## ภาคผนวก — Change Log ฟีเจอร์ที่เพิ่ม
+
+| รุ่น | เพิ่ม |
+|---|---|
+| 1.0 | Core CRUD: member/group/task/meeting/calendar |
+| 2.0 | boss role, connection 3 ประเภท, points 4-phase, group lifecycle 9 สถานะ, whiteboard, recording, overview, multi-filter, trash, color picker, @mention, leave, dark mode |
+| 3.0 (เอกสารนี้) | รายละเอียดระดับฟิลด์ของทุก popup + validation + workflow |
+
+**ใช้คู่กับ:** `DESIGN_SPEC.md` (UI/UX)
+
+**— จบเอกสาร —**
