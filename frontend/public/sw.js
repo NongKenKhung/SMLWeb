@@ -9,7 +9,7 @@
 //
 // Bump CACHE_VERSION whenever you ship a breaking change so old SW gets evicted.
 
-const CACHE_VERSION = 'sml-v157-2026-05-21';
+const CACHE_VERSION = 'sml-v212-2026-06-02';
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const AUDIO_CACHE   = `${CACHE_VERSION}-audio`;
