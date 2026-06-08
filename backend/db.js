@@ -50,6 +50,8 @@ const VALID_ROLE = ['boss', 'admin', 'member'];
 const VALID_TASK_ROLE = ['leader', 'member'];
 const VALID_KIND = ['task', 'meeting'];
 const VALID_LOCATION_TYPE = ['', 'online', 'onsite_internal', 'onsite_external'];
+// แท็กพิเศษของ task (priority): '' ปกติ | 'urgent' งานด่วน | 'before_morning' ไม่รีบแต่เอาก่อนเช้า
+const VALID_PRIORITY = ['', 'urgent', 'before_morning'];
 
 // 51 สี (3 tier × 17 สี) — ต้องตรงกับ frontend GROUP_PALETTE_TIERS
 const GROUP_PALETTE = [
@@ -120,11 +122,23 @@ async function initSchema() {
       phone         TEXT NOT NULL DEFAULT '',
       color         TEXT NOT NULL DEFAULT '#6366f1',
       avatar_url    TEXT NOT NULL DEFAULT '',
+      email_opt_in  INTEGER NOT NULL DEFAULT 1,
       created_at    TEXT NOT NULL
     );
     -- Migration for DBs created before phone column was added
     ALTER TABLE members ADD COLUMN IF NOT EXISTS phone  TEXT NOT NULL DEFAULT '';
     ALTER TABLE members ADD COLUMN IF NOT EXISTS prefix TEXT NOT NULL DEFAULT '';
+    -- Per-user email opt-in: 1 = รับอีเมลแจ้งเตือน (default), 0 = ปิดรับ
+    ALTER TABLE members ADD COLUMN IF NOT EXISTS email_opt_in INTEGER NOT NULL DEFAULT 1;
+    -- Personal reminders (เตือนความจำ) — แสดงบนปฏิทินของเจ้าของเท่านั้น
+    CREATE TABLE IF NOT EXISTS reminders (
+      id         TEXT PRIMARY KEY,
+      member_id  TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+      date       TEXT NOT NULL,
+      text       TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_reminders_member ON reminders(member_id);
     -- Per-meeting iCalendar SEQUENCE (RFC 5545) — bumps each time we send a REQUEST/CANCEL
     ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS ics_sequence INTEGER NOT NULL DEFAULT 0;
     -- Meeting end time (ISO datetime). Optional — falls back to deadline+60min
@@ -132,6 +146,8 @@ async function initSchema() {
     ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS end_time     TEXT;
     -- Budget — optional งบประมาณของ task (บาท) ใช้ search/sort ได้
     ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS budget       NUMERIC;
+    -- แท็กพิเศษ (priority): '' ปกติ | 'urgent' งานด่วน | 'before_morning' ไม่รีบแต่เอาก่อนเช้า
+    ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS priority     TEXT NOT NULL DEFAULT '';
 
     -- Connection categories:
     --   'personal' (default, existing behavior) — สมาชิก ↔ บริษัทที่ปรึกษา / บุคคลภายนอกส่วนตัว
@@ -514,10 +530,14 @@ async function listMembers() {
             ORDER BY (CASE role WHEN 'boss' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END), created_at ASC`);
 }
 async function getMember(id) {
-  return q1('SELECT id, prefix, name, role, email, phone, color, avatar_url, created_at FROM members WHERE id = $1', [id]);
+  return q1('SELECT id, prefix, name, role, email, phone, color, avatar_url, email_opt_in, created_at FROM members WHERE id = $1', [id]);
 }
 async function getMemberFull(id) {
   return q1('SELECT * FROM members WHERE id = $1', [id]);
+}
+async function countAdmins() {
+  const r = await q1("SELECT COUNT(*)::int AS n FROM members WHERE role IN ('admin','boss')");
+  return r ? r.n : 0;
 }
 async function findMemberByName(name) {
   return q1('SELECT * FROM members WHERE LOWER(name) = LOWER($1)', [name]);
@@ -566,8 +586,25 @@ async function updateMember(id, patch) {
 async function setMemberPassword(id, password_hash) {
   await exec('UPDATE members SET password_hash = $1 WHERE id = $2', [password_hash, id]);
 }
+async function setMemberEmailPref(id, optIn) {
+  await exec('UPDATE members SET email_opt_in = $1 WHERE id = $2', [optIn ? 1 : 0, id]);
+  return getMember(id);
+}
 async function deleteMember(id) {
   return (await exec('DELETE FROM members WHERE id = $1', [id])) > 0;
+}
+// ===== Reminders (เตือนความจำ) — personal, calendar-only =====
+async function listReminders(memberId) {
+  return q('SELECT * FROM reminders WHERE member_id = $1 ORDER BY date ASC, created_at ASC', [memberId]);
+}
+async function createReminder({ member_id, date, text }) {
+  const r = { id: uid(), member_id, date: String(date || '').slice(0, 10), text: String(text || '').trim(), created_at: nowIso() };
+  await exec('INSERT INTO reminders (id, member_id, date, text, created_at) VALUES ($1,$2,$3,$4,$5)',
+    [r.id, r.member_id, r.date, r.text, r.created_at]);
+  return r;
+}
+async function deleteReminder(id, memberId) {
+  return (await exec('DELETE FROM reminders WHERE id = $1 AND member_id = $2', [id, memberId])) > 0;
 }
 
 // ===== Groups =====
@@ -1012,7 +1049,7 @@ async function listTasks(filter = {}) {
                 json_build_object(
                   'id', m.id, 'name', m.name, 'role', m.role,
                   'email', m.email, 'phone', m.phone,
-                  'color', m.color, 'avatar_url', m.avatar_url,
+                  'color', m.color, 'avatar_url', m.avatar_url, 'email_opt_in', m.email_opt_in,
                   'task_role', ta.task_role, 'is_supreme', ta.is_supreme,
                   'points_share', ta.points_share, 'claimed_self', ta.claimed_self,
                   'assigned_at', ta.assigned_at, 'proposed_at', ta.proposed_at
@@ -1138,6 +1175,7 @@ async function createTask(input, opts = {}) {
     const b = Number(input.budget);
     if (Number.isFinite(b) && b >= 0) budget = b;
   }
+  const priority = VALID_PRIORITY.includes(input.priority) ? input.priority : '';
   const t = {
     id: uid(),
     title: String(input.title || '').trim(),
@@ -1154,6 +1192,7 @@ async function createTask(input, opts = {}) {
     kind,
     location_type,
     location_detail,
+    priority,
     created_by: opts.created_by || null,
     created_at: nowIso(),
     completed_at: status === 'completed' ? nowIso() : null,
@@ -1176,10 +1215,10 @@ async function createTask(input, opts = {}) {
     await tx.exec(
       `INSERT INTO tasks
        (id, title, description, group_id, points, budget, start_date, deadline, end_time, status, target, points_phase,
-        kind, location_type, location_detail, created_by, created_at, completed_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+        kind, location_type, location_detail, created_by, created_at, completed_at, priority)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
       [t.id, t.title, t.description, t.group_id, t.points, t.budget, t.start_date, t.deadline, t.end_time, t.status, t.target, t.points_phase,
-       t.kind, t.location_type, t.location_detail, t.created_by, t.created_at, t.completed_at]
+       t.kind, t.location_type, t.location_detail, t.created_by, t.created_at, t.completed_at, t.priority]
     );
     for (const spec of validSpecs) {
       const points_share = (points_phase === 'confirmed' && Number.isFinite(+spec.points_share))
@@ -1268,10 +1307,12 @@ async function updateTask(id, patch) {
     }
   }
 
+  const nextPriority = (patch.priority !== undefined && VALID_PRIORITY.includes(patch.priority))
+                         ? patch.priority : (cur.priority || '');
   await exec(
     `UPDATE tasks SET title=$1, description=$2, group_id=$3, points=$4, start_date=$5, deadline=$6,
                       status=$7, target=$8, points_phase=$9, kind=$10, location_type=$11,
-                      location_detail=$12, completed_at=$13, end_time=$14, budget=$15 WHERE id=$16`,
+                      location_detail=$12, completed_at=$13, end_time=$14, budget=$15, priority=$16 WHERE id=$17`,
     [
       patch.title       !== undefined ? String(patch.title).trim()       : cur.title,
       patch.description !== undefined ? String(patch.description).trim() : cur.description,
@@ -1288,6 +1329,7 @@ async function updateTask(id, patch) {
       completed_at,
       nextEndTime,
       nextBudget,
+      nextPriority,
       id,
     ]
   );
@@ -1534,7 +1576,7 @@ async function updateConnection(id, patch) {
     `UPDATE connections SET member_id=$1, company=$2, contact_name=$3, contact_role=$4,
                             phone=$5, email=$6, notes=$7, kind=$8, topics=$9, liaison_name=$10 WHERE id=$11`,
     [
-      patch.member_id    !== undefined ? patch.member_id : cur.member_id,
+      cur.member_id,   // ไม่ให้เปลี่ยนเจ้าของผ่าน update (กัน IDOR โอนเจ้าของ connection ให้คนอื่น)
       nextCompany,
       patch.contact_name !== undefined ? String(patch.contact_name).trim() : cur.contact_name,
       patch.contact_role !== undefined ? String(patch.contact_role).trim() : cur.contact_role,
@@ -2633,7 +2675,8 @@ module.exports = {
   init, initSchema, seedDefaults, close, pool, sqlite: null,
   VALID_STATUS, VALID_ROLE, VALID_TASK_ROLE, UPLOAD_DIR, GROUP_PALETTE,
   listMembers, getMember, getMemberFull, findMemberByName,
-  createMember, updateMember, setMemberPassword, setMemberAvatar, deleteMember,
+  createMember, updateMember, setMemberPassword, setMemberAvatar, setMemberEmailPref, deleteMember, countAdmins,
+  listReminders, createReminder, deleteReminder,
   listGroups, getGroup, createGroup, updateGroup, deleteGroup, isGroupLeader,
   softDeleteGroup, restoreGroup, purgeGroup, listTrashedGroups,
   listTasks, getTask, createTask, updateTask, deleteTask, bumpIcsSequence,
