@@ -9,7 +9,7 @@ body.modal-open {
   overflow: hidden !important;
 }
 html.modal-open { overflow: hidden; }
-html, body { font-family: 'Prompt', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif; }
+html, body { font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif; }
 body { color: var(--text, #0f172a); -webkit-font-smoothing: antialiased; overscroll-behavior-y: contain; background: var(--bg, #fff); }
 
 /* ========================================================================
@@ -827,6 +827,24 @@ body { color: var(--text, #0f172a); -webkit-font-smoothing: antialiased; overscr
   transition: transform .15s ease;
 }
 .summary-collapsible[open] > summary .summary-collapsible-caret { transform: rotate(90deg); }
+/* Summary section dropdown header (caret + icon + ชื่อ + "X โครงการ") */
+.summary-sec-summary {
+  display: flex; align-items: flex-start; gap: 0.5rem;
+  padding-top: 0.15rem; padding-bottom: 0.15rem;
+  border-radius: 0.5rem;
+}
+.summary-sec-summary:hover { background: rgba(15,23,42,0.03); }
+.summary-sec-summary .summary-collapsible-caret { margin-top: 0.4rem; font-size: 0.8rem; }
+.summary-sec-titles { display: flex; flex-direction: column; min-width: 0; }
+.summary-sec-title {
+  font-weight: 600; font-size: 1rem; color: #0f172a;
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.summary-sec-count { font-size: 0.75rem; color: #64748b; margin-top: 0.1rem; }
+.summary-sec-dim { color: #94a3b8 !important; }
+.theme-dark .summary-sec-summary:hover { background: rgba(255,255,255,0.04); }
+.theme-dark .summary-sec-title { color: var(--text); }
+.theme-dark .summary-sec-count { color: var(--text-muted); }
 /* Meeting status — single badge replacing regular status for kind='meeting'.
    Picks up the meeting's group color via --m-color (set inline by JS). Fallback purple. */
 .status-meeting {
@@ -2050,7 +2068,7 @@ body { color: var(--text, #0f172a); -webkit-font-smoothing: antialiased; overscr
 .kanban-board {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(240px, 1fr);
+  grid-auto-columns: minmax(300px, 1fr);
   justify-content: start;
   /* แต่ละคอลัมน์ใช้ความสูงตามเนื้อหาเอง — ไม่ stretch ตาม column ที่ยาวที่สุด
    * (ก่อนหน้านี้ grid default align-items:stretch ทำให้คอลัมน์ว่างก็สูงเท่าคอลัมน์เต็ม) */
@@ -2059,50 +2077,142 @@ body { color: var(--text, #0f172a); -webkit-font-smoothing: antialiased; overscr
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scroll-snap-type: x proximity;
-  /* Break out of parent's max-width constraint */
-  width: 100vw;
-  margin-left: calc(-50vw + 50%);
-  padding: 0.25rem 1rem 0.75rem;
+  /* อยู่ในกรอบ page-container (ไม่ full-bleed) → บีบเข้าซ้าย-ขวา สมดุล + responsive */
+  padding: 0.25rem 0 0.75rem;
   box-sizing: border-box;
 }
 @media (min-width: 1024px) {
+  /* หน้า Todo + Summary: ขยายกรอบเป็น 1440px (กว้างกว่า content ปกติ 1200) แล้ว center
+     → บนจอใหญ่มี margin ซ้าย-ขวา (บีบเข้า ไม่ชิดขอบ), จอกลางเต็มพอดี */
+  .page-container:has(#page-tasks:not(.hidden)),
+  .page-container:has(#page-summary:not(.hidden)) {
+    max-width: 1440px;
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
   .kanban-board {
-    padding: 0.5rem 1.5rem 1rem;
-    /* Center columns when there's room (≤6 cols); scroll horizontally otherwise */
-    justify-content: center;
-    grid-auto-columns: minmax(220px, 280px);
+    padding: 0.5rem 0 1.25rem;
+    justify-content: start;
+    grid-auto-columns: minmax(300px, 1fr);
+    gap: 1.25rem;
   }
 }
 .kanban-board::-webkit-scrollbar { height: 8px; }
 .kanban-board::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 .kanban-col {
-  background: #f1f5f9;
-  border-radius: 0.85rem;
-  padding: 0.55rem;
+  /* คอลัมน์ = track โปร่งใส; header เป็นการ์ดสีลอยแยกอยู่ด้านบน (สไตล์ reference) */
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   min-width: 0;
   scroll-snap-align: start;
 }
+.theme-dark .kanban-col { background: transparent !important; border: none !important; box-shadow: none; }
 .kanban-header {
+  /* การ์ด header สีลอยแยก (rounded + tint สถานะ) มี gap ใต้ก่อนกองการ์ด */
   display: flex; align-items: center; justify-content: space-between;
   gap: 0.4rem;
-  padding: 0.25rem 0.4rem 0.55rem;
-  font-weight: 600;
-  font-size: 0.85rem;
+  padding: 0.8rem 0.65rem 0.8rem 1rem;
+  background: rgba(var(--col-rgb, 100,116,139), 0.14);
+  border-radius: 1rem;
+  margin-bottom: 0.8rem;
+  font-weight: 700;
+  font-size: 0.95rem;
 }
+.kanban-header-right { display: flex; align-items: center; gap: 0.3rem; flex-shrink: 0; }
 .kanban-count {
-  font-size: 0.7rem;
+  font-size: 0.74rem;
   font-weight: 700;
   border-radius: 9999px;
-  padding: 1px 8px;
+  padding: 2px 10px;
+  background: #fff !important;                   /* pill ขาว (reference) */
+  border: 1px solid rgba(15,23,42,0.06);
+}
+.theme-dark .kanban-count { background: var(--bg-elevated) !important; border-color: var(--border); }
+.kanban-col-menu {                              /* ⋮ column options (decorative affordance) */
+  color: rgba(var(--col-rgb, 100,116,139), 0.6);
+  font-size: 1.15rem; line-height: 1;
+  padding: 0 4px; letter-spacing: -1px;
+  user-select: none;
 }
 .kanban-cards {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
   min-height: 60px;
+  padding: 0;
 }
+/* List view — งานจัดกลุ่มตามโครงการในคอลัมน์เดียว เต็มความกว้าง */
+.task-list-view { max-width: 760px; margin: 0 auto; padding: 0.25rem; }
+.task-list-view > .confirmed-group,
+.task-list-view > details { margin-bottom: 0.5rem; }
+
+/* ── View switcher (Kanban / การ์ด / รายการย่อ) — segmented icon control ── */
+.task-view-switch {
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-soft, #f1f5f9);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 0.6rem;
+  padding: 3px;
+}
+.task-view-switch button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 30px;
+  border-radius: 0.45rem;
+  color: var(--text-muted, #64748b);
+  background: transparent;
+  transition: background .15s ease, color .15s ease;
+}
+.task-view-switch button:hover { color: var(--text, #0f172a); }
+.task-view-switch button.active {
+  background: var(--bg-elevated, #fff);
+  color: var(--accent, #4f46e5);
+  box-shadow: 0 1px 2px rgba(15,23,42,.10);
+}
+
+/* ── Compact view (รายการย่อ) — one row per task ── */
+.task-compact-list { max-width: 920px; margin: 0 auto; display: flex; flex-direction: column; gap: 4px; }
+.task-compact-row {
+  display: flex; align-items: center; gap: 0.6rem;
+  width: 100%; text-align: left;
+  padding: 0.6rem 0.85rem;
+  background: var(--bg-elevated, #fff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-left: 3px solid var(--group-color, transparent);
+  border-radius: 0.6rem;
+  transition: background .12s ease, box-shadow .12s ease;
+}
+.task-compact-row:hover { background: var(--bg-soft, #f8fafc); box-shadow: 0 1px 3px rgba(15,23,42,.06); }
+.tcr-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--group-color, #94a3b8); flex-shrink: 0; }
+.tcr-title { font-weight: 600; font-size: 0.9rem; color: var(--text, #0f172a); flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tcr-group { font-size: 0.76rem; color: var(--text-muted, #64748b); flex-shrink: 0; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tcr-pts { font-size: 0.76rem; color: #b45309; font-weight: 600; flex-shrink: 0; }
+.tcr-dl { font-size: 0.76rem; flex-shrink: 0; white-space: nowrap; }
+.theme-dark .task-compact-row { background: var(--bg-elevated); border-color: var(--border); }
+.theme-dark .task-compact-row:hover { background: var(--bg-hover); }
+.theme-dark .tcr-pts { color: #fbbf24; }
+/* Compact: ซ่อน group/points บนจอแคบ กันล้น */
+@media (max-width: 600px) {
+  .tcr-group { display: none; }
+}
+
+/* ── แท็กพิเศษ (priority) badge ── */
+.prio-badge {
+  display: inline-flex; align-items: center; gap: 0.2rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.7rem; font-weight: 700;
+  white-space: nowrap; flex-shrink: 0;
+}
+.prio-urgent  { background: #fee2e2; color: #b91c1c; }
+.prio-morning { background: #fef3c7; color: #b45309; }
+.theme-dark .prio-urgent  { background: rgba(239,68,68,.20);  color: #fca5a5; }
+.theme-dark .prio-morning { background: rgba(245,158,11,.20); color: #fcd34d; }
 .kanban-cards .task-card { padding: 0.7rem 0.8rem; cursor: grab; }
 .kanban-cards .task-card:active { cursor: grabbing; }
 /* Admin approval cards aren't draggable — show default cursor + softer bg */
@@ -2514,51 +2624,76 @@ body { color: var(--text, #0f172a); -webkit-font-smoothing: antialiased; overscr
 .multi-remove:hover { background: #fee2e2; }
 .multi-title { font-size: 1rem; font-weight: 600; }
 
-/* Connection picker (group form) — 3 sections (บริษัท / Lobbyist / หน่วยงาน)
-   chips multi-select toggle, ใช้ใน .group-form ตอนสร้าง/แก้ไข group */
-.conn-pick-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  margin-top: 0.3rem;
-}
-.conn-pick-section {
-  border: 1px solid #e2e8f0;
-  border-radius: 0.65rem;
-  padding: 0.5rem 0.6rem;
-  background: #f8fafc;
-}
-.theme-dark .conn-pick-section { border-color: var(--border); background: var(--bg-soft); }
-.conn-pick-head {
-  display: flex; align-items: center; gap: 0.4rem;
-  font-size: 0.78rem; font-weight: 600; color: #475569;
-  margin-bottom: 0.4rem;
-}
-.theme-dark .conn-pick-head { color: var(--text); }
-.conn-chip-grid { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.conn-chip {
-  display: inline-flex; align-items: center; gap: 0.35rem;
-  padding: 0.35rem 0.7rem;
+/* Connection dropdown (group form) — collapsible multi-select grouped by kind
+   (บริษัท / Lobbyist / หน่วยงาน). Trigger looks like .ios-select; panel expands inline.
+   ใช้ใน groupFormFields ตอนสร้าง/แก้ไข group แทน chip sections แบบกางตลอดเดิม */
+.conn-dd { position: relative; margin-top: 0.3rem; }
+.conn-dd-trigger {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
   background: #fff;
-  border: 1.5px dashed #cbd5e1;
-  border-radius: 9999px;
-  font-size: 0.78rem;
-  color: #475569;
-  cursor: pointer;
-  user-select: none;
-  transition: border-color .12s ease, background .12s ease, transform .08s ease;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 0.7rem;
+  font-size: 0.9rem; color: #1e293b;
+  cursor: pointer; text-align: left;
+  transition: border-color .12s ease, box-shadow .12s ease;
 }
-.theme-dark .conn-chip { background: var(--bg-elevated); border-color: var(--border); color: var(--text); }
-.conn-chip:hover { border-color: #94a3b8; transform: translateY(-1px); }
-.conn-chip.selected {
-  border-style: solid;
-  border-color: #6366f1;
-  background: rgba(99,102,241,0.12);
-  color: #4338ca;
-  font-weight: 600;
+.conn-dd-trigger:hover { border-color: #cbd5e1; }
+.conn-dd.open .conn-dd-trigger { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+.theme-dark .conn-dd-trigger { background: var(--bg-elevated); border-color: var(--border); color: var(--text); }
+.conn-dd-summary { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conn-dd.open .conn-dd-summary:empty::before { content: ''; }
+.conn-dd-caret { font-size: 0.7rem; color: #94a3b8; transition: transform .15s ease; flex-shrink: 0; }
+.conn-dd.open .conn-dd-caret { transform: rotate(180deg); }
+.conn-dd-panel {
+  display: none;
+  margin-top: 0.4rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.7rem;
+  background: #fff;
+  padding: 0.4rem;
+  max-height: 260px; overflow-y: auto; -webkit-overflow-scrolling: touch;
 }
-.theme-dark .conn-chip.selected { background: rgba(99,102,241,0.25); color: #c7d2fe; border-color: #818cf8; }
-.conn-chip-sub { font-size: 0.7rem; opacity: 0.7; font-weight: 400; margin-left: 0.15rem; }
+.conn-dd.open .conn-dd-panel { display: block; }
+.theme-dark .conn-dd-panel { background: var(--bg-soft); border-color: var(--border); }
+.conn-dd-group { padding: 0.15rem 0; }
+.conn-dd-group + .conn-dd-group { border-top: 1px solid #f1f5f9; margin-top: 0.15rem; padding-top: 0.35rem; }
+.theme-dark .conn-dd-group + .conn-dd-group { border-top-color: var(--border); }
+.conn-dd-group-head {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.72rem; font-weight: 700; color: #64748b;
+  padding: 0.25rem 0.5rem;
+}
+.theme-dark .conn-dd-group-head { color: var(--text); opacity: 0.75; }
+.conn-dd-group-count {
+  margin-left: auto; font-size: 0.65rem; font-weight: 600;
+  background: #f1f5f9; color: #64748b; border-radius: 9999px; padding: 0.05rem 0.4rem;
+}
+.theme-dark .conn-dd-group-count { background: var(--bg-elevated); color: var(--text); }
+.conn-dd-opt {
+  width: 100%;
+  display: flex; align-items: center; gap: 0.55rem;
+  padding: 0.5rem; background: transparent; border: none; border-radius: 0.5rem;
+  font-size: 0.85rem; color: #334155; text-align: left; cursor: pointer;
+  transition: background .1s ease;
+}
+.conn-dd-opt:hover { background: #f8fafc; }
+.theme-dark .conn-dd-opt { color: var(--text); }
+.theme-dark .conn-dd-opt:hover { background: var(--bg-elevated); }
+.conn-dd-check {
+  flex-shrink: 0; width: 18px; height: 18px;
+  border: 1.5px solid #cbd5e1; border-radius: 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .1s ease, border-color .1s ease;
+}
+.conn-dd-opt.selected .conn-dd-check { background: #6366f1; border-color: #6366f1; }
+.conn-dd-opt.selected .conn-dd-check::after { content: '✓'; color: #fff; font-size: 0.7rem; font-weight: 700; line-height: 1; }
+.conn-dd-opt.selected { color: #4338ca; font-weight: 600; }
+.theme-dark .conn-dd-opt.selected { color: #c7d2fe; }
+.conn-dd-opt-label { flex: 1; min-width: 0; }
+.conn-dd-opt-sub { font-size: 0.72rem; opacity: 0.65; font-weight: 400; margin-left: 0.2rem; }
+.conn-dd-empty { padding: 0.8rem 0.6rem; font-size: 0.8rem; color: #94a3b8; text-align: center; }
 
 /* Member chips — vertical card layout: big circular avatar on top, name below.
    Chips wrap to multiple lines if there are too many for one row. */
@@ -3530,7 +3665,7 @@ input.flatpickr-input {
   border-radius: 0.85rem !important;
   box-shadow: 0 6px 22px rgba(15,23,42,0.18) !important;
   border: 1px solid #e2e8f0 !important;
-  font-family: 'Prompt', sans-serif !important;
+  font-family: 'Sarabun', sans-serif !important;
 }
 .flatpickr-day.selected,
 .flatpickr-day.selected:hover,
@@ -3586,7 +3721,7 @@ input.flatpickr-input {
   padding: .5rem .9rem;
   background: #f1f5f9;
   color: #475569;
-  font-family: 'Prompt', sans-serif; font-size: .8rem; font-weight: 500;
+  font-family: 'Sarabun', sans-serif; font-size: .8rem; font-weight: 500;
   border: none;
   border-right: 1px solid #cbd5e1;
   border-bottom: 2px solid transparent;
@@ -3638,7 +3773,7 @@ input.flatpickr-input {
   font-weight: 600; color: #475569;
   text-align: center;
   position: sticky; top: 0; z-index: 2;
-  font-family: 'Prompt', sans-serif;
+  font-family: 'Sarabun', sans-serif;
 }
 .xlsx-table .xlsx-corner {
   position: sticky; top: 0; left: 0; z-index: 3;
@@ -3650,6 +3785,363 @@ input.flatpickr-input {
   text-align: center;
   position: sticky; left: 0; z-index: 1;
   min-width: 2.5rem;
-  font-family: 'Prompt', sans-serif;
+  font-family: 'Sarabun', sans-serif;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+ * Summary group card (sg-*) — scoped redesign per user image (2026-05-30)
+ *   • หัวการ์ด = พื้นสีกลุ่มจาง (rgba 8%)  • status = pill ขาว + จุดสีสถานะ
+ *   • stat tiles = กล่องขอบบางเหมือนกัน    • progress + dot = สีกลุ่ม
+ * ════════════════════════════════════════════════════════════════════════ */
+.group-card.sg-card {
+  background: var(--bg-elevated, #fff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-left: 1px solid var(--border, #e2e8f0);   /* ลบแถบซ้าย 6px เดิม → ใช้ dot แทน */
+  border-radius: 1rem;
+  padding: 0;                                       /* head/body จัดการ padding เอง */
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.05);
+  transition: box-shadow .15s ease;
+}
+.group-card.sg-card::before { display: none; }      /* ลบแถบบน 3px เดิม */
+.group-card.sg-card:hover {
+  box-shadow: 0 2px 6px rgba(15,23,42,0.08), 0 8px 20px rgba(15,23,42,0.05);
+}
+
+/* ── หัวการ์ด (พื้นสีกลุ่ม) ── */
+.sg-card-head {
+  background: rgba(var(--group-rgb, 99,102,241), 0.16);
+  border-bottom: 1px solid rgba(var(--group-rgb, 99,102,241), 0.12);
+  padding: 0.85rem 1rem 0.7rem;
+}
+.sg-card-top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.5rem; margin-bottom: 0.55rem;
+}
+.sg-card-top-left { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.sg-card-dot {
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--group-color, #94a3b8);
+  flex-shrink: 0;
+}
+/* status pill ขาว + จุดสีตามสถานะ */
+.sg-status {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  background: #fff;
+  border: 1px solid rgba(15,23,42,0.08);
+  border-radius: 9999px;
+  padding: 0.15rem 0.6rem 0.15rem 0.5rem;
+  font-size: 0.74rem; font-weight: 600; color: #334155;
+  box-shadow: 0 1px 1.5px rgba(15,23,42,0.05);
+  white-space: nowrap;
+}
+.sg-status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.sg-card-frac {
+  font-size: 0.82rem; color: #64748b; font-weight: 600;
+  flex-shrink: 0; white-space: nowrap;
+}
+.sg-card-title {
+  font-size: 1.1rem; font-weight: 700;
+  color: #0f172a; line-height: 1.3;
+  margin-bottom: 0.5rem;
+}
+.sg-card-leader { display: flex; align-items: center; gap: 0.45rem; min-width: 0; }
+.sg-leader-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  color: #fff; font-size: 0.7rem; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.sg-leader-crown { font-size: 0.9rem; line-height: 1; flex-shrink: 0; }
+.sg-leader-name {
+  font-size: 0.86rem; color: #334155; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.sg-leader-empty { font-size: 0.86rem; color: #94a3b8; font-style: italic; }
+
+/* ── body (ขาว) ── */
+.sg-card-body { padding: 0.8rem 1rem 0.9rem; }
+.sg-card-desc {
+  font-size: 0.84rem; color: #64748b;
+  line-height: 1.55; margin-bottom: 0.8rem;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sg-stat-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem; margin-bottom: 0.8rem;
+}
+.sg-stat-tile {
+  background: var(--bg-elevated, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 0.6rem;
+  padding: 0.5rem 0.7rem 0.55rem;
+  min-width: 0;
+}
+.sg-stat-label {
+  font-size: 0.7rem; color: #64748b; font-weight: 500;
+  margin-bottom: 0.2rem;
+}
+.sg-stat-value {
+  font-size: 1.05rem; font-weight: 700; color: #0f172a;
+  line-height: 1.1;
+}
+.sg-stat-star { color: #f59e0b; }
+.sg-progress {
+  height: 6px; background: #eef2f7;
+  border-radius: 9999px; overflow: hidden;
+  margin-bottom: 0.6rem;
+}
+.sg-progress-fill {
+  height: 100%;
+  background: var(--group-color, #6366f1);
+  border-radius: 9999px;
+  transition: width .3s ease;
+}
+.sg-card-foot {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.76rem; color: #64748b; gap: 0.5rem;
+}
+.sg-card-foot > span {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+/* connection chips + ปุ่ม claim/actions ที่อยู่ใน body ให้มี spacing บน */
+.sg-card-body .group-card-conns { margin-top: 0.7rem; }
+.group-card.sg-card > .ios-btn-primary,
+.group-card.sg-card > .group-card-actions,
+.group-card.sg-card > div:not(.sg-card-head):not(.sg-card-body) {
+  margin-left: 1rem; margin-right: 1rem; margin-bottom: 0.85rem;
+}
+
+/* ── Dark mode ── */
+.theme-dark .group-card.sg-card { background: var(--bg-elevated); border-color: var(--border); border-left-color: var(--border); box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+.theme-dark .sg-card-head { background: rgba(var(--group-rgb, 129,140,248), 0.24); border-bottom-color: rgba(var(--group-rgb, 129,140,248), 0.18); }
+.theme-dark .sg-status { background: var(--bg-elevated); border-color: var(--border); color: var(--text); box-shadow: none; }
+.theme-dark .sg-card-title { color: var(--text); }
+.theme-dark .sg-card-frac,
+.theme-dark .sg-leader-name,
+.theme-dark .sg-card-desc,
+.theme-dark .sg-card-foot,
+.theme-dark .sg-stat-label { color: var(--text-muted); }
+.theme-dark .sg-stat-tile { background: var(--bg-soft); border-color: var(--border); }
+.theme-dark .sg-stat-value { color: var(--text); }
+.theme-dark .sg-progress { background: var(--bg-hover); }
+.theme-dark .sg-leader-empty { color: #64748b; }
+
+/* ════════════════════════════════════════════════════════════════════════
+ * ▼▼▼  TECHNICAL PRECISION — live design layer  ▼▼▼
+ * ขอบเขต: Home / Todo / Profile / upper-navbar (ตามที่ผู้ใช้อนุมัติจาก preview)
+ * Appended สุดท้าย → override กฎก่อนหน้าด้วย source order.
+ * Theme-safe: chrome + hero เป็น dark ink เสมอ (ปลอดภัยทั้ง light/dark);
+ * surface อื่นใช้ token --bg-elevated/--border/--text ของแอป → dark mode ไม่พัง.
+ * ▶ วิธี REVERT: ลบทุกบรรทัดใต้ banner นี้ (จนจบไฟล์) + คืน font link/?v ใน index.html
+ * ════════════════════════════════════════════════════════════════════════ */
+:root{
+  --tp-ink:#0a0e1c; --tp-accent:#5b54ff; --tp-accent2:#22d3ee; --tp-glow:rgba(91,84,255,.5);
+  --tp-mono:'IBM Plex Mono',ui-monospace,monospace;
+  --tp-grid:repeating-linear-gradient(90deg,rgba(255,255,255,.05) 0 1px,transparent 1px 34px),repeating-linear-gradient(0deg,rgba(255,255,255,.05) 0 1px,transparent 1px 34px);
+}
+/* ── Display font (Kanit) — เฉพาะ navbar + 3 หน้าในขอบเขต ── */
+#topbar-title,
+#page-home h1, #page-home h2, #page-home h3, #home-greeting, #home-points,
+#page-tasks h1, #page-tasks h2, #page-tasks h3, .kanban-header,
+#page-profile h1, #page-profile h2, #page-profile h3, #me-name {
+  font-family:'Kanit',sans-serif; letter-spacing:-.01em;
+}
+
+/* ── Chrome: navbar สีตาม "ธีมของผู้ใช้" ──
+ *   โหมดสว่าง  → bar สว่าง (ใช้สไตล์เดิม: พื้นขาว blur + แท็บ indigo) — ไม่ override
+ *   โหมดมืด    → bar dark ink + blueprint grid (Technical Precision)
+ * ผูกกับ .theme-dark (applyTheme() toggle ให้ตามธีม light/dark/auto) → เปลี่ยนตามทันที */
+.theme-dark .ios-topbar {
+  background:#0a0e1c; background-image:var(--tp-grid);
+  backdrop-filter:none; -webkit-backdrop-filter:none;
+  border-bottom:1px solid #1a2240;
+}
+.theme-dark #topbar-title { color:#fff; }
+.theme-dark .dt-tab { color:#a7afc6; }
+.theme-dark .dt-tab:hover { background:rgba(255,255,255,.06); color:#fff; }
+.theme-dark .dt-tab.active, .theme-dark .dt-tab.active:hover {
+  background:rgba(91,84,255,.24); color:#fff; box-shadow:inset 0 0 0 1px rgba(125,118,255,.5);
+}
+.theme-dark .ios-topbar .ios-btn-icon { color:#dfe4f0; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); }
+.theme-dark .ios-topbar .ios-btn-icon:active { background:rgba(255,255,255,.14); }
+/* avatar = rounded-square gradient (เอกลักษณ์ดีไซน์ ไม่ขึ้นกับธีม ใช้ได้ทั้งสองโหมด) */
+.ios-avatar-btn { border-radius:12px; background:linear-gradient(135deg,#6d66ff,#22d3ee); }
+
+/* ── Navbar layout (concept): SML brand + เมนูหน้าต่างๆ ชิดซ้าย, actions ชิดขวา ──
+ *   Desktop (lg+) : [SML] [Home Todo … Profile] ........ [🔔 ＋ avatar]
+ *   Mobile (<lg)  : [icon + ชื่อหน้า] ........ [🔔 ＋ avatar]   (nav อยู่ที่ tabbar ล่าง)
+ *   สีของ bar/brand ขึ้นกับธีม (light bar+ตัวเข้ม / dark ink bar+ตัวขาว) */
+.topbar-inner { justify-content:flex-start; gap:1.1rem; }
+.tp-bar-actions { margin-left:auto; }
+.tp-brand { display:none; align-items:center; gap:.55rem; font-family:'Kanit',sans-serif; font-weight:700; font-size:1.3rem; line-height:1; letter-spacing:-.01em; color:var(--text,#0f172a); background:transparent; border:0; padding:0; cursor:pointer; }
+.tp-brand-dot { width:.8rem; height:.8rem; border-radius:.35rem; background:linear-gradient(135deg,#7d76ff,#22d3ee); box-shadow:0 0 14px var(--tp-glow); flex-shrink:0; }
+.theme-dark .tp-brand { color:#fff; }
+@media (min-width:1024px) {
+  .tp-brand { display:inline-flex; }
+  .tp-mobtitle { display:none !important; }   /* !important: ชนะ Tailwind .flex (inject ทีหลัง) */
+}
+
+/* ── Home hero (Technical Precision) — eyebrow + ชื่อ + chips + points ── */
+#page-home .tp-hero {
+  position:relative; overflow:hidden; color:#fff;
+  border-radius:1.25rem; padding:1.6rem 1.8rem; border:1px solid #1a2240;
+  background:radial-gradient(130% 150% at 0 0,#1c2654,var(--tp-ink) 60%);
+  box-shadow:0 18px 44px -22px rgba(10,14,28,.6);
+}
+#page-home .tp-hero::before {
+  content:""; position:absolute; inset:0; background:var(--tp-grid); opacity:.6; z-index:0; pointer-events:none;
+  -webkit-mask:radial-gradient(85% 140% at 90% 6%,#000,transparent 72%);
+          mask:radial-gradient(85% 140% at 90% 6%,#000,transparent 72%);
+}
+#page-home .tp-hero > *:not(.tp-hglow) { position:relative; z-index:1; }   /* ยกเว้น glow ให้คง position:absolute (ไม่งั้นดันเนื้อหา → hero สูงเกิน) */
+.tp-hglow { position:absolute; z-index:0 !important; width:340px; height:340px; border-radius:50%; right:-90px; top:-130px;
+  background:radial-gradient(circle,var(--tp-glow),transparent 65%); filter:blur(16px); pointer-events:none; }
+.tp-eyebrow { font-family:var(--tp-mono); font-size:.62rem; letter-spacing:.14em; text-transform:uppercase; color:var(--tp-accent2); }
+.tp-hero-row { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; margin-top:.5rem; }
+.tp-hero-hi { font-size:.95rem; color:#b3bbcf; }
+.tp-hero-name { font-family:'Kanit',sans-serif; font-weight:600; font-size:1.9rem; line-height:1.15; letter-spacing:-.01em; color:#fff; }
+.tp-hero-sub { color:#b3bbcf; font-size:.9rem; margin-top:.35rem; max-width:48ch; }
+.tp-hero-chips { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.7rem; }
+.tp-hchip { background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.13); border-radius:.7rem; padding:.32rem .7rem; font-size:.8rem; color:#dfe4f0; }
+.tp-hchip b { font-family:'Kanit',sans-serif; font-weight:600; color:#fff; }
+.tp-hero-role { display:inline-block; margin-top:.45rem; font-family:var(--tp-mono); font-size:.6rem; font-weight:700; letter-spacing:.08em; padding:.28rem .6rem; border-radius:.5rem; background:rgba(255,255,255,.18); color:#fff; }
+.tp-hero-role.role-boss { background:linear-gradient(135deg,#fde68a,#fbbf24); color:#7c2d12; }
+.tp-hero-role.role-admin { background:#dbeafe; color:#1d4ed8; }
+.tp-hero-pts { text-align:right; flex-shrink:0; }
+.tp-hero-ptsnum { font-family:'Kanit',sans-serif; font-weight:700; font-size:2.6rem; line-height:1; color:#fff;
+  background:linear-gradient(135deg,#fff,#9db4ff); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+#page-home h2 { font-family:'Kanit',sans-serif; }
+
+/* ── Home stat cards (Technical Precision) — แถบสี + mono label + เลขใหญ่ ── */
+.tp-stat { position:relative; overflow:hidden; background:var(--bg-elevated,#fff); border:1px solid var(--border,#e2e8f0);
+  border-radius:1rem; padding:.95rem 1.05rem; box-shadow:0 1px 2px rgba(15,23,42,.04),0 4px 12px rgba(15,23,42,.04); }
+.tp-stat::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--c,#5b54ff); }
+.tp-stat-ic { position:absolute; right:.7rem; top:.7rem; font-size:1.05rem; opacity:.45; }
+.tp-stat-lab { font-family:var(--tp-mono); font-size:.6rem; letter-spacing:.08em; color:var(--text-muted,#64748b); text-transform:uppercase; }
+.tp-stat-n { font-family:'Kanit',sans-serif; font-weight:700; font-size:1.9rem; line-height:1.05; margin-top:.2rem; color:var(--text,#0f172a); }
+.tp-stat-sub { font-size:.72rem; color:var(--text-muted,#64748b); margin-top:.1rem; }
+
+/* ── Home task rows → bordered .trow cards (--group-color มาจาก app.js) ── */
+.tp-rowlist { padding:.3rem 1rem 1rem; }
+.tp-rowlist .home-task-row {
+  border:1px solid var(--border,#e2e8f0) !important;
+  border-left:3px solid var(--group-color,#5b54ff) !important;
+  border-radius:.8rem; margin-bottom:.55rem; min-height:0; padding:.7rem .8rem;
+  background:var(--bg-elevated,#fff); transition:transform .14s, box-shadow .14s;
+}
+.tp-rowlist .home-task-row:last-child { margin-bottom:0; }
+.tp-rowlist .home-task-row:hover { transform:translateX(3px); box-shadow:0 6px 18px -10px rgba(15,23,42,.3); }
+/* ซ่อนแถบ ::before เดิม (absolute 4px ขอบเหลี่ยม) — การ์ดใหม่ใช้ border-left สีกลุ่มอยู่แล้ว กัน background โผล่ทับขอบมน */
+.tp-rowlist .home-task-row::before { display:none; }
+
+/* ── Navbar: ลบ icon หน้า title บนมือถือ (navbar text-only ตามคำขอ) ── */
+.tp-mobtitle #topbar-icon { display:none; }
+
+/* ── Home scoreboard donut ring (concept) — วงแหวน conic + กลาง TOTAL PTS + legend ── */
+#scoreboard-legend:empty { display:none; }
+#scoreboard-chart { display:block; }   /* เลิก justify-center ของ Tailwind → donut ชิดซ้าย ไม่ลอยกลาง */
+.tp-donut-wrap { display:flex; align-items:center; gap:.9rem; width:100%; }
+.tp-donut { width:118px; height:118px; border-radius:50%; flex-shrink:0; position:relative; }
+.tp-donut::after { content:""; position:absolute; inset:15px; border-radius:50%; background:var(--bg-elevated,#fff); }
+.tp-donut-c { position:absolute; inset:0; display:grid; place-content:center; text-align:center; z-index:1; }
+.tp-donut-c b { font-family:'Kanit',sans-serif; font-weight:700; font-size:1.55rem; line-height:1; color:var(--text,#0f172a); display:block; }
+.tp-donut-c span { font-family:var(--tp-mono); font-size:.52rem; letter-spacing:.08em; color:var(--text-muted,#64748b); }
+/* legend: grid ไหลหลายคอลัมน์ตามที่ว่าง → 10 คนไม่ยาวล้น (ชื่อยาวตัด … + hover เห็นเต็มผ่าน title) */
+.tp-donut-lb { flex:1; min-width:0; display:grid; grid-template-columns:repeat(auto-fill, minmax(108px, 1fr)); gap:.45rem .7rem; align-content:center; }
+.tp-lbr { display:flex; align-items:center; gap:.6rem; font-size:.9rem; }
+.tp-lbr-d { width:.7rem; height:.7rem; border-radius:.25rem; flex-shrink:0; }
+.tp-lbr-nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text,#0f172a); }
+.tp-lbr-v { font-family:var(--tp-mono); font-weight:700; font-size:.85rem; color:var(--tp-accent); }
+
+/* ── Profile 4 stat tiles ── */
+.tp-pfst { display:grid; grid-template-columns:repeat(4,1fr); gap:.5rem; }
+.tp-pfst > div { border:1px solid var(--border,#e2e8f0); border-radius:.7rem; padding:.6rem .3rem; text-align:center; }
+.tp-pfst .v { font-family:'Kanit',sans-serif; font-weight:700; font-size:1.3rem; line-height:1; color:var(--text,#0f172a); }
+.tp-pfst .l { font-family:var(--tp-mono); font-size:.58rem; letter-spacing:.06em; color:var(--text-muted,#64748b); margin-top:.25rem; }
+
+/* ── Todo: kanban header Kanit + mono count (โครงสร้างเดิม v177) ── */
+.kanban-header { letter-spacing:-.01em; }
+.kanban-count { font-family:var(--tp-mono); font-size:.68rem; letter-spacing:.04em; }
+
+/* ── Profile: dark band บนการ์ด avatar (concept signature) ── */
+#page-profile > .space-y-4 > .ios-card:first-child { position:relative; overflow:hidden; }
+#page-profile > .space-y-4 > .ios-card:first-child::before {
+  content:""; position:absolute; left:0; right:0; top:0; height:78px; z-index:0;
+  background:linear-gradient(135deg, var(--me-color,#5b54ff), color-mix(in srgb, var(--me-color,#5b54ff) 55%, #000));
+}
+#page-profile > .space-y-4 > .ios-card:first-child > * { position:relative; z-index:1; }
+#me-avatar-big { border:4px solid var(--bg-elevated,#fff); box-shadow:0 8px 22px -10px rgba(10,14,28,.5); }
+#me-name { color:var(--text,#0f172a); }
+
+/* ── Calendar — Technical Precision skin (เอาสไตล์ตกแต่งจาก _calendar มาใส่; การจัดเรียง/render คงเดิม) ── */
+/* container ปฏิทิน — shadow เด่นชัดเจน (การ์ด full-bleed ใหญ่ → ใช้เงาเข้ม+กว้าง) */
+#page-calendar .cal-card-big { box-shadow:0 2px 8px -2px rgba(15,23,42,.08), 0 12px 28px -10px rgba(15,23,42,.15) !important; }
+.theme-dark #page-calendar .cal-card-big { box-shadow:0 2px 8px -2px rgba(0,0,0,.4), 0 12px 28px -10px rgba(0,0,0,.55) !important; }
+#page-calendar #cal-title { font-family:'Kanit',sans-serif; letter-spacing:-.01em; }
+#page-calendar h2, #page-calendar h3 { font-family:'Kanit',sans-serif; }
+#page-calendar .cal-cell {
+  border:1px solid var(--border,#e4e8f0);
+  border-radius:12px;
+  transition:box-shadow .14s ease, border-color .12s ease, background .1s ease;
+}
+#page-calendar .cal-cell:hover { box-shadow:0 6px 16px -6px rgba(15,23,42,.16); }
+#page-calendar .cal-cell.muted { border-color:transparent !important; box-shadow:none; }
+#page-calendar .cal-cell.today {           /* today = accent ring (glow) ตาม concept */
+  border-color:var(--tp-accent,#5b54ff) !important;   /* !important: ชนะ .theme-dark .cal-cell border !important */
+  box-shadow:0 0 0 2px rgba(91,84,255,.20), 0 1px 2px rgba(15,23,42,.05);
+}
+#page-calendar .cal-cell.today:not(.selected) { background:rgba(91,84,255,.05); }
+#page-calendar .cal-cell-num { font-family:'Kanit',sans-serif; }
+#page-calendar .cal-pill { border-radius:6px; }   /* มุมโค้งขึ้นเล็กน้อยตาม concept (.cal-ev) */
+/* pill เตือนความจำ (reminder) — amber */
+.cal-pill.cal-pill-reminder { background:#fef3c7; color:#b45309; border-left:3px solid #f59e0b; }
+.theme-dark .cal-pill.cal-pill-reminder { background:rgba(245,158,11,.16); color:#fcd34d; border-left-color:#f59e0b; }
+
+/* ── People (สมาชิก) — เพิ่มสีสัน: stripe สีสมาชิก + avatar ring + tint จาง + points pill (คงโครง/การจัดเรียงเดิม) ── */
+#page-people .member-card {
+  border-left:4px solid var(--m-color,#cbd5e1);   /* คงแค่แถบสีซ้าย — ไม่มีสีพื้นหลังการ์ด */
+}
+#page-people .member-card .ios-avatar { box-shadow:0 0 0 3px color-mix(in srgb, var(--m-color,#94a3b8) 22%, transparent); }
+#page-people .member-pts {
+  display:inline-block; font-weight:800; font-size:.92rem;
+  color:#b45309; background:#fef3c7; border:1px solid #fde68a;
+  padding:.12rem .55rem; border-radius:999px;
+}
+.theme-dark #page-people .member-pts { color:#fcd34d; background:rgba(245,158,11,.16); border-color:rgba(245,158,11,.4); }
+
+/* ── Summary — หัวข้อ section เด่นแบบ _summary (.pg-title: Kanit 600 28px) ── */
+#page-summary .summary-sec-title { font-family:'Kanit',sans-serif; font-weight:600; font-size:22px; letter-spacing:-.01em; }
+#page-summary .summary-sec-summary .summary-collapsible-caret { margin-top:0.5rem; }   /* จัด caret ให้ตรงกับหัวข้อ */
+
+/* ── People → Connections: แยกลำดับชั้นให้ชัด (หัวข้อหมวดเด่นแบบ summary + การ์ดย่อยมี shadow) ── */
+/* หัวข้อหมวด (parent): บริษัท / Lobbyist / หน่วยงาน — เด่นแบบหน้า Summary */
+#page-people .conn-section-summary { padding-top:.55rem; padding-bottom:.45rem; }
+#page-people .conn-section-summary > .text-base { font-size:1.3rem; }
+#page-people .conn-section-summary > .font-semibold { font-family:'Kanit',sans-serif; font-weight:600; font-size:20px; letter-spacing:-.01em; }
+/* การ์ดหน่วยงาน/บริษัทย่อย (child): กล่องแยกชัด + shadow ให้เห็นว่าเป็นข้อย่อย */
+#page-people .conn-section-body .conn-subgroup {
+  background:var(--bg-elevated,#fff);
+  border:1px solid var(--border,#e2e8f0);
+  border-radius:12px;
+  box-shadow:0 2px 6px -1px rgba(15,23,42,.10), 0 10px 24px -10px rgba(15,23,42,.14);
+  margin-bottom:.55rem;
+  overflow:hidden;
+}
+#page-people .conn-section-body .conn-subgroup:last-child { margin-bottom:0; }
+.theme-dark #page-people .conn-section-body .conn-subgroup { box-shadow:0 2px 6px -1px rgba(0,0,0,.45), 0 10px 24px -10px rgba(0,0,0,.65); }
+
+/* ── Toggle switch (settings เช่น รับอีเมล) ── */
+.tp-switch { appearance:none; -webkit-appearance:none; width:42px; height:24px; border-radius:999px; background:#cbd5e1; position:relative; cursor:pointer; transition:background .2s; flex-shrink:0; margin:0; }
+.tp-switch:checked { background:#4f46e5; }
+.tp-switch::after { content:""; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:#fff; transition:transform .2s; box-shadow:0 1px 2px rgba(0,0,0,.25); }
+.tp-switch:checked::after { transform:translateX(18px); }
+.theme-dark .tp-switch { background:#475569; }
+.theme-dark .tp-switch:checked { background:#818cf8; }
+
+/* a11y: focus-visible บนคอนโทรลใหม่ (คีย์บอร์ดมองเห็นว่าโฟกัสอยู่ไหน) */
+.tp-switch:focus-visible, .tp-brand:focus-visible, .dt-tab:focus-visible, .theme-opt:focus-visible,
+#task-view-switch button:focus-visible { outline:2px solid var(--tp-accent,#5b54ff); outline-offset:2px; border-radius:8px; }
+/* ▲▲▲  TECHNICAL PRECISION — end live design layer  ▲▲▲ */
 
