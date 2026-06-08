@@ -1615,7 +1615,7 @@ async function loadAll() {
   // First-time load → show skeletons so the screen isn't blank for 1-2 sec
   if (!state.tasks.length && !state.members.length) showInitialSkeletons();
   try {
-    const [members, groups, tasks, stats, connections, extensions, files, groupInvitations, pointRequests, leaves, categories, mentions] = await Promise.all([
+    const [members, groups, tasks, stats, connections, extensions, files, groupInvitations, pointRequests, leaves, categories, mentions, reminders] = await Promise.all([
       api.get('/api/members'),
       api.get('/api/groups'),
       api.get('/api/tasks'),
@@ -1628,6 +1628,7 @@ async function loadAll() {
       api.get('/api/leaves').catch(() => []),
       api.get('/api/categories').catch(() => []),
       api.get('/api/comments/mentions/me').catch(() => []),
+      api.get('/api/reminders').catch(() => []),
     ]);
     state.members = members; state.groups = groups; state.tasks = tasks; state.stats = stats;
     state.connections = connections; state.extensions = extensions || []; state.files = files || [];
@@ -1635,6 +1636,7 @@ async function loadAll() {
     state.leaves = leaves || [];
     state.categories = categories || [];
     state.mentions = mentions || [];
+    state.reminders = reminders || [];
     renderAll();
     renderBellBadge();
     await Promise.all([loadWhiteboards(), loadPolls()]);
@@ -1704,6 +1706,9 @@ function renderMe() {
     big.textContent = initials(state.user.name);
     big.style.background = state.user.color;
   }
+  // แถบบนการ์ด avatar (::before) ใช้สีประจำตัวของผู้ใช้
+  const meCard = document.querySelector('#page-profile > .space-y-4 > .ios-card');
+  if (meCard && state.user.color) meCard.style.setProperty('--me-color', state.user.color);
 }
 
 // ============== Home ==============
@@ -1720,6 +1725,28 @@ function renderHome() {
   document.getElementById('home-done').textContent = me?.completed_tasks ?? 0;
   document.getElementById('home-todo').textContent = me?.in_progress_tasks ?? 0;
   document.getElementById('home-role-badge').textContent = state.user.role.toUpperCase();
+  // ── Technical Precision hero extras: eyebrow+เดือน · subtitle · urgent chip · role color ──
+  try {
+    const _rb = document.getElementById('home-role-badge');
+    if (_rb) _rb.className = 'tp-hero-role role-' + state.user.role;
+    const _eb = document.getElementById('home-eyebrow');
+    if (_eb) {
+      const _M = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+      const _n = new Date();
+      _eb.textContent = `SMART CITY LAB · KMITL · ${_M[_n.getMonth()]} ${_n.getFullYear()}`;
+    }
+    const _mine = t => isAdmin() || (t.assignees || []).some(a => a.id === state.user.id) ||
+      (t.group_id && state.groups.some(g => g.leader_id === state.user.id && g.id === t.group_id));
+    const _urgent = (state.tasks || []).filter(t => t.priority === 'urgent' &&
+      !['completed', 'confirmed', 'cancelled'].includes(t.status) && _mine(t)).length;
+    const _uEl = document.getElementById('home-urgent'); if (_uEl) _uEl.textContent = _urgent;
+    const _dl = (state.stats?.upcoming || []).filter(t => !isMeeting(t) &&
+      Number.isFinite(t.days_left) && t.days_left <= 2 && _mine(t)).length;
+    const _sub = document.getElementById('home-hero-sub');
+    if (_sub) _sub.textContent = (_dl || _urgent)
+      ? `วันนี้มี ${_dl} งานใกล้กำหนดส่ง${_urgent ? ` · ${_urgent} งานด่วน` : ''} — ลุยกันเลย 💪`
+      : 'วันนี้ยังไม่มีงานเร่งด่วน — เยี่ยมมาก 🎉';
+  } catch (e) { /* hero extras เป็นส่วนเสริม ไม่ critical */ }
 
   // Upcoming deadlines — only urgent items (overdue / today / ≤ 2 days away).
   // Visibility:
@@ -1752,6 +1779,7 @@ function renderHome() {
             ${g ? `<div class="text-xs font-semibold truncate mb-0.5" style="color:${gColor}">📁 ${escapeHtml(g.name)}</div>` : ''}
             <div class="font-medium text-base truncate">${escapeHtml(t.title)}</div>
             <div class="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+              ${priorityBadgeHtml(t)}
               ${assigneeStack(t.assignees)}
               ${t.target ? `<span class="target-chip">→ ${escapeHtml(t.target)}</span>` : ''}
             </div>
@@ -1852,45 +1880,34 @@ function renderScoreboard() {
   const board = (state.stats?.scoreboard || []).filter(r => r.points > 0);
   const chartEl = document.getElementById('scoreboard-chart');
   const legendEl = document.getElementById('scoreboard-legend');
+  if (legendEl) legendEl.innerHTML = '';   // legend ย้ายไปอยู่ใน donut-wrap แล้ว
   if (!board.length) {
-    chartEl.innerHTML = `<div class="text-sm text-slate-400 py-8">ยังไม่มีคะแนนสะสม</div>`;
-    legendEl.innerHTML = '';
+    chartEl.innerHTML = `<div class="text-sm text-slate-400 py-8 text-center w-full">ยังไม่มีคะแนนสะสม</div>`;
     return;
   }
-  // assign colors
+  // assign colors + build conic-gradient ring (cumulative %)
   board.forEach((r, i) => r._color = r.member.color || PIE_COLORS[i % PIE_COLORS.length]);
-  chartEl.innerHTML = pieChartSvg(board.map(r => ({ value: r.points, color: r._color, label: r.member.name + ` (${r.percent}%)` })));
-  legendEl.innerHTML = board.map(r => `
-    <div class="legend-row">
-      <div class="legend-swatch" style="background:${r._color}"></div>
-      <div class="flex-1 min-w-0 truncate text-xs">${escapeHtml(r.member.name)}</div>
-      <div class="legend-bar"><span style="width:${r.percent}%; background:${r._color}"></span></div>
-      <div class="text-xs font-semibold w-12 text-right">${r.percent}%</div>
-    </div>
-  `).join('');
-}
-
-function pieChartSvg(slices) {
-  const total = slices.reduce((s, x) => s + x.value, 0);
-  if (total === 0) return '';
-  const r = 80, cx = 100, cy = 100;
-  // single slice = full circle
-  if (slices.length === 1 || slices.filter(s => s.value > 0).length === 1) {
-    const s = slices.find(x => x.value > 0);
-    return `<svg viewBox="0 0 200 200" width="180" height="180"><circle cx="${cx}" cy="${cy}" r="${r}" fill="${s.color}"></circle><text x="${cx}" y="${cy+5}" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">100%</text></svg>`;
-  }
-  let cum = -Math.PI / 2;
-  const paths = [];
-  for (const s of slices) {
-    if (s.value <= 0) continue;
-    const ang = (s.value / total) * 2 * Math.PI;
-    const x1 = cx + r * Math.cos(cum), y1 = cy + r * Math.sin(cum);
-    const x2 = cx + r * Math.cos(cum + ang), y2 = cy + r * Math.sin(cum + ang);
-    const large = ang > Math.PI ? 1 : 0;
-    paths.push(`<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z" fill="${s.color}"><title>${escapeHtml(s.label)}</title></path>`);
-    cum += ang;
-  }
-  return `<svg viewBox="0 0 200 200" width="180" height="180">${paths.join('')}<circle cx="${cx}" cy="${cy}" r="35" fill="#fff"></circle><text x="${cx}" y="${cy-2}" text-anchor="middle" fill="#0f172a" font-size="10">รวม</text><text x="${cx}" y="${cy+12}" text-anchor="middle" fill="#0f172a" font-size="14" font-weight="700">${total} pts</text></svg>`;
+  const total = board.reduce((s, r) => s + r.points, 0);
+  let acc = 0;
+  const segs = board.map(r => {
+    const start = acc;
+    acc += (r.points / total) * 100;
+    return `${r._color} ${start.toFixed(2)}% ${acc.toFixed(2)}%`;
+  }).join(', ');
+  chartEl.innerHTML = `
+    <div class="tp-donut-wrap">
+      <div class="tp-donut" style="background:conic-gradient(${segs})">
+        <div class="tp-donut-c"><b>${total.toLocaleString()}</b><span>TOTAL PTS</span></div>
+      </div>
+      <div class="tp-donut-lb">
+        ${board.map(r => `
+          <div class="tp-lbr">
+            <span class="tp-lbr-d" style="background:${r._color}"></span>
+            <span class="tp-lbr-nm" title="${escapeHtml(r.member.name)}">${escapeHtml(r.member.name)}</span>
+            <span class="tp-lbr-v">${r.points.toLocaleString()}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
 }
 
 // Wire "+ สร้างใหม่" button on the polls widget (idempotent — re-bound every render is harmless)
@@ -1966,6 +1983,14 @@ document.querySelectorAll('#task-segmented button').forEach(b => {
 });
 // Filter sheet
 document.getElementById('task-filter-btn').addEventListener('click', openFilterSheet);
+document.getElementById('task-create-btn')?.addEventListener('click', openCreateTaskFlow);
+document.querySelectorAll('#task-view-switch button').forEach(b => {
+  b.addEventListener('click', () => {
+    state.taskView = b.dataset.view;
+    document.querySelectorAll('#task-view-switch button').forEach(x => x.classList.toggle('active', x === b));
+    renderTasks();
+  });
+});
 document.getElementById('filter-close').addEventListener('click', closeFilterSheet);
 _bindBackdropClose('filter-sheet', closeFilterSheet);
 document.getElementById('filter-clear').addEventListener('click', () => {
@@ -2060,6 +2085,8 @@ function syncTaskSegmentVisibility() {
   const seg = document.getElementById('task-segmented');
   if (seg) seg.style.gridTemplateColumns = `repeat(${visibleCount}, 1fr)`;
   document.querySelectorAll('#task-segmented button').forEach(b => b.classList.toggle('active', b.dataset.seg === state.taskSeg));
+  // "+ สร้างงาน" (มุมบนขวา) — แสดงเฉพาะ admin หรือหัวหน้ากลุ่ม
+  document.getElementById('task-create-btn')?.classList.toggle('hidden', !(isAdmin() || leadsAnyGroup()));
 }
 
 async function renderTasks() {
@@ -2145,15 +2172,38 @@ async function renderTasks() {
     return;
   }
 
+  // List view (มุมมอง "การ์ด") — งานทั้งหมดจัดกลุ่มตามโครงการในคอลัมน์เดียว
+  if (state.taskView === 'list') {
+    const matched = visible.filter(t => cols.some(c => c.match(t)));
+    el.innerHTML = `<div class="task-list-view">${tasksGroupedHtml(matched, { showPoints: false, defaultOpen: true })}</div>`;
+    return;
+  }
+
+  // Compact view (มุมมอง "รายการย่อ") — แถวเดียวต่องาน เรียงตาม deadline
+  if (state.taskView === 'compact') {
+    const matched = visible.filter(t => cols.some(c => c.match(t)));
+    matched.sort((a, b) => {
+      if (!a.deadline && !b.deadline) return 0;
+      if (!a.deadline) return 1;
+      if (!b.deadline) return -1;
+      return a.deadline < b.deadline ? -1 : 1;
+    });
+    el.innerHTML = `<div class="task-compact-list">${matched.map(taskCompactRowHtml).join('')}</div>`;
+    return;
+  }
+
   el.innerHTML = `<div class="kanban-board">${
     cols.map(c => {
       const tasks = visible.filter(t => c.match(t));
       const dropAttr = c.acceptsDrop ? `data-drop-status="${c.dropStatus}"` : '';
       return `
-        <div class="kanban-col" data-col-id="${c.id}" ${dropAttr}>
+        <div class="kanban-col" data-col-id="${c.id}" ${dropAttr} style="--col-rgb:${({on_hold:'139,92,246',in_progress:'59,130,246',completed_pending:'16,185,129',confirmed:'245,158,11',leader_review:'168,85,247'})[c.id] || '100,116,139'}">
           <div class="kanban-header ${c.headerCls}">
-            <span class="flex items-center gap-1.5"><span>${c.icon}</span>${c.label}</span>
-            <span class="kanban-count ${c.headerCls} ${c.countBg}">${tasks.length}</span>
+            <span class="flex items-center gap-1.5 min-w-0"><span>${c.icon}</span><span class="truncate">${c.label}</span></span>
+            <span class="kanban-header-right">
+              <span class="kanban-count ${c.headerCls}">${tasks.length}</span>
+              <span class="kanban-col-menu" aria-hidden="true">⋮</span>
+            </span>
           </div>
           <div class="kanban-cards">
             ${tasksGroupedHtml(tasks, {
@@ -2232,7 +2282,13 @@ function tasksGroupedHtml(tasks, { showPoints = false, defaultOpen = false, open
   const isUrgent = (t) => !!deadlineClass(t.deadline, t.status);
   const groupHasUrgent = (groupTasks) => groupTasks.some(isUrgent);
 
-  return groupedByGroupHtml(tasks, {
+  // เรียงงานในแต่ละกลุ่มให้แท็กพิเศษอยู่บนสุด: 🌅 เอาก่อนเช้า → 🔥 ด่วน → ปกติ
+  // (Array.sort เสถียร → งาน priority เดียวกันคงลำดับเดิมจาก query)
+  const prioRank = { before_morning: 0, urgent: 1 };
+  const sortedTasks = tasks.slice().sort((a, b) =>
+    (prioRank[a.priority] ?? 2) - (prioRank[b.priority] ?? 2));
+
+  return groupedByGroupHtml(sortedTasks, {
     getGroupId: t => t.group_id,
     renderItem: t => taskCardHtml(t),
     metaText: list => {
@@ -2266,7 +2322,7 @@ function confirmedGroupedHtml(tasks) { return tasksGroupedHtml(tasks, { showPoin
 function pipelineColumnsForUser(seg) {
   const baseStatusCols = (allowDropOnCompleted) => ([
     { id: 'on_hold', label: 'พักไว้', icon: '⏸️',
-      headerCls: 'text-amber-700', countBg: 'bg-amber-100',
+      headerCls: 'text-violet-700', countBg: 'bg-violet-100',
       acceptsDrop: true, dropStatus: 'on_hold',
       match: t => t.status === 'on_hold' },
     { id: 'in_progress', label: 'กำลังดำเนินการ', icon: '⏳',
@@ -2312,6 +2368,24 @@ function pipelineColumnsForUser(seg) {
 async function renderAdminApprovals() {
   const el = document.getElementById('tasks-list');
 
+  // View switcher รองรับใน Admin ด้วย: list/compact = เรียกดูงานทั้งระบบ (เปลี่ยน format ได้),
+  // kanban (default) = บอร์ดอนุมัติ 4 คอลัมน์ด้านล่าง
+  const allSysTasks = state.tasks.filter(t => !isMeeting(t) && t.status !== 'cancelled');
+  if (state.taskView === 'list') {
+    el.innerHTML = `<div class="task-list-view">${tasksGroupedHtml(allSysTasks, { showPoints: false, defaultOpen: true })}</div>`;
+    return;
+  }
+  if (state.taskView === 'compact') {
+    const sorted = allSysTasks.slice().sort((a, b) => {
+      if (!a.deadline && !b.deadline) return 0;
+      if (!a.deadline) return 1;
+      if (!b.deadline) return -1;
+      return a.deadline < b.deadline ? -1 : 1;
+    });
+    el.innerHTML = `<div class="task-compact-list">${sorted.map(taskCompactRowHtml).join('')}</div>`;
+    return;
+  }
+
   // Status-based columns — every sub-task system-wide. Meetings are excluded
   // (they have their own surfaces on Home + Calendar).
   const notMeeting = (t) => !isMeeting(t);
@@ -2351,37 +2425,37 @@ async function renderAdminApprovals() {
   });
 
   el.innerHTML = `<div class="kanban-board">
-    <div class="kanban-col" data-col-id="on_hold" data-drop-status="on_hold">
-      <div class="kanban-header text-amber-700">
-        <span class="flex items-center gap-1.5"><span>⏸️</span>พักไว้ · ทุกงานในระบบ</span>
-        <span class="kanban-count text-amber-700 bg-amber-100">${onHold.length}</span>
+    <div class="kanban-col" data-col-id="on_hold" data-drop-status="on_hold" style="--col-rgb:139,92,246">
+      <div class="kanban-header text-violet-700">
+        <span class="flex items-center gap-1.5 min-w-0"><span>⏸️</span><span class="truncate">พักไว้ · ทุกงานในระบบ</span></span>
+        <span class="kanban-header-right"><span class="kanban-count text-violet-700">${onHold.length}</span><span class="kanban-col-menu" aria-hidden="true">⋮</span></span>
       </div>
       <div class="kanban-cards">
         ${tasksGroupedHtml(onHold)}
       </div>
     </div>
-    <div class="kanban-col" data-col-id="in_progress" data-drop-status="in_progress">
+    <div class="kanban-col" data-col-id="in_progress" data-drop-status="in_progress" style="--col-rgb:59,130,246">
       <div class="kanban-header text-blue-700">
-        <span class="flex items-center gap-1.5"><span>⏳</span>กำลังดำเนินการ · ทุกงานในระบบ</span>
-        <span class="kanban-count text-blue-700 bg-blue-100">${inProgress.length}</span>
+        <span class="flex items-center gap-1.5 min-w-0"><span>⏳</span><span class="truncate">กำลังดำเนินการ · ทุกงานในระบบ</span></span>
+        <span class="kanban-header-right"><span class="kanban-count text-blue-700">${inProgress.length}</span><span class="kanban-col-menu" aria-hidden="true">⋮</span></span>
       </div>
       <div class="kanban-cards">
         ${tasksGroupedHtml(inProgress)}
       </div>
     </div>
-    <div class="kanban-col" data-col-id="admin_pending">
+    <div class="kanban-col" data-col-id="admin_pending" style="--col-rgb:244,63,94">
       <div class="kanban-header text-rose-700">
-        <span class="flex items-center gap-1.5"><span>🏛️</span>รอคอนเฟิร์ม</span>
-        <span class="kanban-count text-rose-700 bg-rose-100">${pendingCount}</span>
+        <span class="flex items-center gap-1.5 min-w-0"><span>🏛️</span><span class="truncate">รอคอนเฟิร์ม</span></span>
+        <span class="kanban-header-right"><span class="kanban-count text-rose-700">${pendingCount}</span><span class="kanban-col-menu" aria-hidden="true">⋮</span></span>
       </div>
       <div class="kanban-cards">
         ${pendingHtml}
       </div>
     </div>
-    <div class="kanban-col" data-col-id="admin_confirmed">
+    <div class="kanban-col" data-col-id="admin_confirmed" style="--col-rgb:245,158,11">
       <div class="kanban-header text-amber-700">
-        <span class="flex items-center gap-1.5"><span>🏆</span>คอนเฟิร์มแล้ว</span>
-        <span class="kanban-count text-amber-700 bg-amber-100">${confirmedTasks.length}</span>
+        <span class="flex items-center gap-1.5 min-w-0"><span>🏆</span><span class="truncate">คอนเฟิร์มแล้ว</span></span>
+        <span class="kanban-header-right"><span class="kanban-count text-amber-700">${confirmedTasks.length}</span><span class="kanban-col-menu" aria-hidden="true">⋮</span></span>
       </div>
       <div class="kanban-cards">
         ${confirmedGroupedHtml(confirmedTasks)}
@@ -2452,6 +2526,32 @@ function adminGroupProposalCardHtml(i) {
     </div>`;
 }
 
+// Compact one-line row for the "รายการย่อ" view. Uses data-task-detail so the
+// existing document-level click delegation opens the task sheet.
+function taskCompactRowHtml(t) {
+  const g = groupById(t.group_id);
+  const color = groupColor(t.group_id);
+  const dl = t.deadline ? deadlineText(t.deadline, t.status) : '';
+  const dlCls = t.deadline ? deadlineClass(t.deadline, t.status) : '';
+  const pts = (t.status === 'completed') ? earnedPoints(t) : 0;
+  return `<button class="task-compact-row" data-task-detail="${t.id}" style="--group-color:${color}">
+    <span class="tcr-dot"></span>
+    <span class="tcr-title">${escapeHtml(t.title)}</span>
+    ${priorityBadgeHtml(t)}
+    ${g ? `<span class="tcr-group">📁 ${escapeHtml(g.name)}</span>` : ''}
+    <span class="status-badge status-${t.status}">${statusLabel(t.status)}</span>
+    ${pts ? `<span class="tcr-pts">⭐ ${pts}</span>` : ''}
+    ${dl ? `<span class="tcr-dl ${dlCls}">⏰ ${dl}</span>` : ''}
+  </button>`;
+}
+
+// แท็กพิเศษ (priority) badge — โชว์บนการ์ด/แถว/detail
+function priorityBadgeHtml(t) {
+  if (t.priority === 'urgent')         return `<span class="prio-badge prio-urgent">🔥 งานด่วน</span>`;
+  if (t.priority === 'before_morning') return `<span class="prio-badge prio-morning">🌅 เอาก่อนเช้า</span>`;
+  return '';
+}
+
 function taskCardHtml(t) {
   const g = groupById(t.group_id);
   const meeting = isMeeting(t);
@@ -2475,6 +2575,7 @@ function taskCardHtml(t) {
             ${meeting ? '<span class="meeting-icon" title="การประชุม">📅</span> ' : ''}${escapeHtml(t.title)}
           </div>
           <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+            ${priorityBadgeHtml(t)}
             ${g ? `<span class="text-[11px] font-semibold" style="color:${gColor}">📁 ${escapeHtml(g.name)}</span>`
                 : (meeting ? '<span class="text-[11px] font-semibold text-purple-700">🔬 ประชุมรวม Lab</span>' : '')}
             ${t.target ? `<span class="target-chip">→ ${escapeHtml(t.target)}</span>` : ''}
@@ -2577,6 +2678,7 @@ async function openTaskSheet(id) {
             : `<span class="status-badge status-${t.status}">${statusLabel(t.status)}</span>`}
         </div>
         <div class="flex flex-wrap gap-2 mt-1">
+          ${priorityBadgeHtml(t)}
           ${g ? `<span class="text-xs text-indigo-600">📁 ${escapeHtml(g.name)}</span>`
               : (isMeeting(t) ? '<span class="text-xs font-semibold text-purple-700">🔬 ประชุมรวม Lab</span>' : '')}
           ${t.target ? `<span class="target-chip">→ ${escapeHtml(t.target)}</span>` : ''}
@@ -3891,18 +3993,37 @@ function uiPrompt(message, opts = {}) {
     setTimeout(() => { _promptInput.focus(); _promptInput.select(); }, 0);
   });
 }
-// Toggle connection chips ใน group form — multi-select per kind
-// อัพเดต hidden input ทันทีเมื่อ toggle → submit handler ดึง connection_ids ออกได้ตรง ๆ
+// Connection dropdown ใน group form — collapsible multi-select grouped by kind.
+//   คลิก trigger → เปิด/ปิด panel · คลิก option → toggle เลือก (panel ยังเปิด) ·
+//   คลิกที่อื่นในฟอร์ม → ปิด panel · ทุกครั้งที่ toggle อัพเดต hidden input + ข้อความสรุป
 modalForm.addEventListener('click', e => {
-  const cchip = e.target.closest('.conn-chip[data-conn-id]');
-  if (!cchip) return;
-  e.preventDefault();
-  cchip.classList.toggle('selected');
-  const hidden = modalForm.querySelector('#group-conn-ids');
-  if (hidden) {
-    const ids = Array.from(modalForm.querySelectorAll('.conn-chip.selected'))
+  const dd = modalForm.querySelector('[data-conn-dd]');
+  if (!dd) return;
+  const trigger = e.target.closest('[data-conn-dd-trigger]');
+  if (trigger && dd.contains(trigger)) {
+    e.preventDefault();
+    const open = dd.classList.toggle('open');
+    trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    return;
+  }
+  const opt = e.target.closest('.conn-dd-opt[data-conn-id]');
+  if (opt && dd.contains(opt)) {
+    e.preventDefault();
+    const on = opt.classList.toggle('selected');
+    opt.setAttribute('aria-selected', on ? 'true' : 'false');
+    const ids = Array.from(dd.querySelectorAll('.conn-dd-opt.selected'))
       .map(c => c.dataset.connId).filter(Boolean);
-    hidden.value = ids.join(',');
+    const hidden = modalForm.querySelector('#group-conn-ids');
+    if (hidden) hidden.value = ids.join(',');
+    const summary = dd.querySelector('[data-conn-dd-summary]');
+    if (summary) summary.textContent = ids.length > 0 ? `เลือกแล้ว ${ids.length} อย่าง` : 'เลือก Connection ที่เกี่ยวข้อง';
+    return;
+  }
+  // คลิกนอก dropdown → ปิด panel
+  if (dd.classList.contains('open') && !e.target.closest('[data-conn-dd]')) {
+    dd.classList.remove('open');
+    const t = dd.querySelector('[data-conn-dd-trigger]');
+    if (t) t.setAttribute('aria-expanded', 'false');
   }
 });
 // Toggle member chips inside any modal form (single source — works for taskFormFields, multi-task etc.)
@@ -4439,6 +4560,15 @@ function taskFormFields(t = {}) {
       <div class="text-[11px] text-slate-400">เว้นว่างได้ · รองรับ <b>k</b>=พัน, <b>m</b>=ล้าน, <b>b</b>=พันล้าน</div>
     </div>
 
+    <div class="form-section">
+      <div class="form-section-title">🏷️ แท็กพิเศษ (ไม่บังคับ)</div>
+      <select class="ios-select" name="priority">
+        <option value=""               ${!t.priority ? 'selected' : ''}>— ปกติ —</option>
+        <option value="urgent"         ${t.priority === 'urgent' ? 'selected' : ''}>🔥 งานด่วน</option>
+        <option value="before_morning" ${t.priority === 'before_morning' ? 'selected' : ''}>🌅 ไม่รีบ แต่เอาก่อนเช้า</option>
+      </select>
+    </div>
+
     ${_formCategoriesSection(t)}
 
     <div class="form-section">
@@ -4604,7 +4734,6 @@ function groupFormFields(g = {}) {
          ${state.members.map(m => `<option value="${m.id}" ${m.id===g.leader_id?'selected':''}>${escapeHtml(m.name)} (${m.role==='boss'?'Boss':(m.role==='admin'?'Admin':'Member')})</option>`).join('')}
        </select>`
     : `<div class="text-sm text-slate-700">${state.user.name} <span class="text-[11px] text-slate-500">(คุณจะเป็นหัวหน้า Group โดยอัตโนมัติ)</span></div>`;
-  const existingTargets = Array.from(new Set(state.groups.map(x => x.target).filter(Boolean))).sort();
 
   // Member chips — for new groups, default to selecting the leader (admin's choice or self).
   // For editing, we DON'T pre-fill from existing members (those are managed separately via
@@ -4613,14 +4742,20 @@ function groupFormFields(g = {}) {
   const defaultLeaderId = isAdmin() ? (g.leader_id || state.user.id) : state.user.id;
   // Pre-select the leader when creating; for editing show no preselected (existing members already in)
   const preselectedIds = editing ? [] : [defaultLeaderId];
+  // Track selection order so the group form assigns the FIRST-selected chip as leader.
+  // The pre-selected default leader must count as "first" (order 1) — otherwise it has no
+  // data-select-order (=> Infinity) and the FIRST member the user clicks (order 1) would
+  // sort ahead of it and steal leadership. (bug: "กดทุกคนมันไปล็อกหัวหน้าแทน")
+  let _preselOrder = 0;
   const chipsHtml = state.members.map(m => {
     const selected = preselectedIds.includes(m.id);
+    const orderAttr = selected ? ` data-select-order="${++_preselOrder}"` : '';
     const avatarInner = m.avatar_url
       ? `<img class="member-chip-avatar member-chip-avatar-img" src="${escapeHtml(m.avatar_url)}" alt="">`
       : `<span class="member-chip-avatar">${escapeHtml(initials(m.name))}</span>`;
     return `
       <button type="button" class="member-chip ${selected?'selected':''}"
-              data-member-id="${m.id}" style="--m-color:${m.color}">
+              data-member-id="${m.id}"${orderAttr} style="--m-color:${m.color}">
         ${avatarInner}
         <span class="member-chip-name">${escapeHtml(m.name)}</span>
       </button>`;
@@ -4672,12 +4807,6 @@ function groupFormFields(g = {}) {
     <div><label class="ios-label">ชื่อโครงการ *</label><input class="ios-input" name="name" value="${escapeHtml(g.name||'')}" required></div>
     <div><label class="ios-label">รายละเอียด</label><textarea class="ios-textarea" name="description">${escapeHtml(g.description||'')}</textarea></div>
     <div>
-      <label class="ios-label">📤 ส่งให้ใคร (Target)</label>
-      <input class="ios-input" name="target" value="${escapeHtml(g.target||'')}" placeholder="เช่น อบจ.ฉะเชิงเทรา / กระทรวงคมนาคม" list="group-target-list">
-      <datalist id="group-target-list">${existingTargets.map(t => `<option value="${escapeHtml(t)}">`).join('')}</datalist>
-      <div class="text-[11px] text-slate-400 mt-1">งานทั้งหมดในกลุ่มนี้จะถูกส่งให้ที่เดียวกัน</div>
-    </div>
-    <div>
       <label class="ios-label">🎨 สีกลุ่มงาน</label>
       <div class="flex items-center gap-2 mb-2">
         <input type="color" id="group-color-native" class="color-pick-native" value="${currentColor}" aria-label="เลือกสีอิสระ">
@@ -4700,43 +4829,52 @@ function groupFormFields(g = {}) {
         <label class="ios-label" style="margin:0">👥 เพิ่มสมาชิกเริ่มต้น</label>
         <button type="button" class="ios-btn-ghost text-xs" id="group-select-all">เลือกทุกคน</button>
       </div>
-      <div class="member-chip-grid">${chipsHtml}</div>
+      <div class="member-chip-grid" data-chip-counter="${_preselOrder}">${chipsHtml}</div>
       <div class="text-[11px] text-slate-400 mt-1">เพิ่มได้เลยโดยไม่ต้องรอเพื่อนกดยอมรับ · 👑 <b>คนแรกที่เลือก = หัวหน้ากลุ่ม</b></div>
     </div>`}
     ${(() => {
-      // Connection picker — 3 sections (บริษัท / Lobbyist / หน่วยงาน). multi-select.
-      // chain ตัวอย่าง: พี่นัท(lobbyist) → พี่เค(lobbyist) → อบจ(หน่วยงาน) → บริษัท BS(บริษัท)
+      // Connection picker — collapsible multi-select dropdown grouped by kind
+      // (บริษัท / Lobbyist / หน่วยงาน). Selected ids เก็บใน #group-conn-ids (comma-sep)
+      // เพื่อให้ submit handler อ่าน connection_ids ได้เหมือนเดิม
       const preSel = new Set(g.connection_ids || []);
-      const renderChip = (c) => {
-        const sel = preSel.has(c.id);
+      const labelParts = (c) => {
         const labelText = (c.kind === 'lobbyist' || c.kind === 'agency')
           ? (c.liaison_name || c.company) : c.company;
         const sub = (c.kind === 'lobbyist' || c.kind === 'agency')
           ? (c.company ? ` (${c.company})` : '')
           : (c.member_name ? ` · ${c.member_name}` : '');
-        return `<button type="button" class="conn-chip ${sel?'selected':''}" data-conn-id="${c.id}" title="${escapeHtml(labelText + sub)}">
-          ${escapeHtml(labelText)}${sub ? `<span class="conn-chip-sub">${escapeHtml(sub)}</span>` : ''}
+        return { labelText: labelText || '(ไม่มีชื่อ)', sub };
+      };
+      const renderOpt = (c) => {
+        const sel = preSel.has(c.id);
+        const { labelText, sub } = labelParts(c);
+        return `<button type="button" class="conn-dd-opt ${sel?'selected':''}" data-conn-id="${c.id}" role="option" aria-selected="${sel?'true':'false'}" title="${escapeHtml(labelText + sub)}">
+          <span class="conn-dd-check" aria-hidden="true"></span>
+          <span class="conn-dd-opt-label">${escapeHtml(labelText)}${sub ? `<span class="conn-dd-opt-sub">${escapeHtml(sub)}</span>` : ''}</span>
         </button>`;
       };
       const companyConns = state.connections.filter(c => (c.kind||'personal')==='personal');
       const lobbyistConns = state.connections.filter(c => c.kind==='lobbyist');
       const agencyConns = state.connections.filter(c => c.kind==='agency');
-      const section = (icon, title, list) => {
-        if (list.length === 0) {
-          return `<div class="conn-pick-section"><div class="conn-pick-head"><span>${icon}</span><span>${title}</span><span class="text-[11px] text-slate-400">(ยังไม่มี)</span></div></div>`;
-        }
-        return `<div class="conn-pick-section">
-          <div class="conn-pick-head"><span>${icon}</span><span>${title}</span><span class="text-[11px] text-slate-500">${list.length} รายการ</span></div>
-          <div class="conn-chip-grid">${list.map(renderChip).join('')}</div>
-        </div>`;
-      };
+      const group = (icon, title, list) => list.length === 0 ? '' : `<div class="conn-dd-group">
+        <div class="conn-dd-group-head"><span>${icon}</span><span>${title}</span><span class="conn-dd-group-count">${list.length}</span></div>
+        ${list.map(renderOpt).join('')}
+      </div>`;
+      const total = state.connections.length;
+      const selCount = preSel.size;
+      const summaryText = selCount > 0 ? `เลือกแล้ว ${selCount} อย่าง` : 'เลือก Connection ที่เกี่ยวข้อง';
+      const bodyHtml = total === 0
+        ? `<div class="conn-dd-empty">ยังไม่มี Connection — สร้างในหน้า "ความเชื่อมโยง" ก่อน</div>`
+        : `${group('🏢','บริษัท',companyConns)}${group('🎯','Lobbyist',lobbyistConns)}${group('🏛️','หน่วยงาน',agencyConns)}`;
       return `
         <div>
           <label class="ios-label">🤝 Connection ที่เกี่ยวข้อง <span class="text-[11px] text-slate-400 font-normal">(เลือกได้หลายอย่าง)</span></label>
-          <div class="conn-pick-wrap">
-            ${section('🏢', 'บริษัท', companyConns)}
-            ${section('🎯', 'Lobbyist', lobbyistConns)}
-            ${section('🏛️', 'หน่วยงาน', agencyConns)}
+          <div class="conn-dd" data-conn-dd>
+            <button type="button" class="conn-dd-trigger" data-conn-dd-trigger aria-haspopup="listbox" aria-expanded="false">
+              <span class="conn-dd-summary" data-conn-dd-summary>${summaryText}</span>
+              <span class="conn-dd-caret" aria-hidden="true">▾</span>
+            </button>
+            <div class="conn-dd-panel" role="listbox" aria-multiselectable="true">${bodyHtml}</div>
           </div>
           <input type="hidden" name="connection_ids" id="group-conn-ids" value="${(g.connection_ids||[]).join(',')}">
         </div>
@@ -5266,9 +5404,25 @@ function openGroupModal(g, afterSave) {
   const selectAllBtn = modalForm.querySelector('#group-select-all');
   if (selectAllBtn) {
     selectAllBtn.onclick = () => {
+      const grid = modalForm.querySelector('.member-chip-grid');
       const chips = modalForm.querySelectorAll('.member-chip[data-member-id]');
       const allSelected = Array.from(chips).every(c => c.classList.contains('selected'));
-      chips.forEach(c => c.classList.toggle('selected', !allSelected));
+      if (allSelected) {
+        // ล้างทั้งหมด — เคลียร์ทั้ง selection และลำดับการเลือก (รีเซ็ตหัวหน้าให้สะอาด)
+        chips.forEach(c => { c.classList.remove('selected'); delete c.dataset.selectOrder; });
+        if (grid) grid.dataset.chipCounter = '0';
+      } else {
+        // เลือกทุกคน — คงลำดับเดิมไว้ (หัวหน้าที่เลือกอยู่แล้ว = order 1 ยังเป็นคนแรก)
+        // แล้วไล่ลำดับต่อให้เฉพาะ chip ที่เพิ่งถูกเลือก จึงไม่แย่งตำแหน่งหัวหน้า
+        let counter = +(grid?.dataset.chipCounter || '0');
+        chips.forEach(c => {
+          if (!c.classList.contains('selected')) {
+            c.classList.add('selected');
+            c.dataset.selectOrder = String(++counter);
+          }
+        });
+        if (grid) grid.dataset.chipCounter = String(counter);
+      }
       selectAllBtn.textContent = allSelected ? 'เลือกทุกคน' : 'ล้างทั้งหมด';
       _updateGroupLeaderCrown();
     };
@@ -5791,7 +5945,7 @@ function renderPeople() {
   if (!ml) return;
   const lb = state.stats?.scoreboard || [];
   const q = (state.peopleMembersQuery || '').toLowerCase().trim();
-  const sortKey = state.peopleMembersSort || 'points_desc';
+  const sortKey = state.peopleMembersSort || 'role';   // default: boss → admin → member
   const filterRole = state.peopleMembersFilter || 'all';
   const ptsOf = (id) => (lb.find(s => s.member?.id === id)?.points || 0);
   const tasksOf = (id) => state.tasks.filter(t => (t.assignees||[]).some(a => a.id === id)).length;
@@ -5806,7 +5960,8 @@ function renderPeople() {
     if (sortKey === 'name')        return (a.name||'').localeCompare(b.name||'', 'th');
     if (sortKey === 'role') {
       const rank = { boss: 0, admin: 1, member: 2 };
-      return (rank[a.role]??9) - (rank[b.role]??9);
+      const d = (rank[a.role]??9) - (rank[b.role]??9);
+      return d !== 0 ? d : ptsOf(b.id) - ptsOf(a.id);   // role เดียวกัน → points มาก→น้อย
     }
     if (sortKey === 'tasks_desc') return tasksOf(b.id) - tasksOf(a.id);
     return 0;
@@ -5818,7 +5973,7 @@ function renderPeople() {
     const isMe = m.id === state.user.id;
     const onLeaveNow = !!memberLeaveAt(m.id, new Date().toISOString());
     return `
-      <div class="member-card">
+      <div class="member-card" style="--m-color:${m.color || '#94a3b8'}">
         <button type="button" class="flex items-center gap-3 w-full text-left member-card-main" data-act="member-detail" data-id="${m.id}">
           ${avatarHtml(m, 48)}
           <div class="flex-1 min-w-0">
@@ -5830,7 +5985,7 @@ function renderPeople() {
             </div>
           </div>
           <div class="text-right">
-            <div class="font-bold text-amber-600">${r.points} pts</div>
+            <div class="member-pts">${r.points} pts</div>
             <div class="text-[11px] text-slate-500">${r.percent || 0}% · ${r.completed_tasks}/${r.total_tasks}</div>
           </div>
         </button>
@@ -6224,6 +6379,7 @@ function openMemberDetail(memberId) {
           <div class="min-w-0 flex-1">
             <div class="font-semibold text-sm leading-snug truncate">${escapeHtml(t.title)}</div>
             <div class="flex items-center gap-2 mt-0.5 flex-wrap text-[11px]">
+              ${priorityBadgeHtml(t)}
               ${g ? `<span class="font-semibold" style="color:${gColor}">📁 ${escapeHtml(g.name)}</span>` : ''}
               ${t.deadline ? `<span class="${dlCls}">⏰ ${deadlineText(t.deadline, t.status)}</span>` : ''}
               ${mine ? `<span class="text-[10px] text-indigo-600 font-semibold">• ของคุณ</span>` : ''}
@@ -6368,10 +6524,12 @@ function renderProfile() {
   rb.classList.toggle('role-badge-boss', state.user.role === 'boss');
   rb.className = `inline-block mt-1 text-xs px-2 py-0.5 rounded-full role-badge ${state.user.role}`;
   const me = state.stats?.scoreboard.find(r => r.member.id === state.user.id) || {};
-  document.getElementById('me-pts').textContent = `${me.points || 0} pts`;
+  document.getElementById('me-pts').textContent = `${me.points || 0}`;
   document.getElementById('me-done').textContent = me.completed_tasks || 0;
   document.getElementById('me-doing').textContent = me.in_progress_tasks || 0;
   document.getElementById('me-all').textContent = me.total_tasks || 0;
+  const _emEl = document.getElementById('me-email-optin');
+  if (_emEl) _emEl.checked = state.user.email_opt_in !== 0;   // default (undefined/1) = เปิด
   document.getElementById('btn-manage-groups').classList.toggle('hidden', !(isAdmin() || leadsAnyGroup()));
   // System settings — admin only
   const sysBtn = document.getElementById('btn-system-settings');
@@ -6494,6 +6652,15 @@ document.getElementById('btn-change-pw').onclick = () => {
     <div><label class="ios-label">PIN ใหม่ (อย่างน้อย 4 ตัว)</label><input class="ios-input" type="password" name="new_password" minlength="4" required></div>
   `, async data => { await api.put('/api/me/password', data); toast('เปลี่ยน PIN แล้ว', 'success'); });
 };
+// Email opt-in toggle — บันทึกทันทีเมื่อสลับ
+document.getElementById('me-email-optin')?.addEventListener('change', async (e) => {
+  const enabled = e.target.checked;
+  try {
+    await api.put('/api/me/email-pref', { enabled });
+    if (state.user) state.user.email_opt_in = enabled ? 1 : 0;
+    toast(enabled ? 'เปิดรับอีเมลแล้ว' : 'ปิดรับอีเมลแล้ว', 'success');
+  } catch (err) { toast(err.message, 'error'); e.target.checked = !enabled; }
+});
 document.getElementById('btn-manage-groups').onclick = () => openGroupListModal();
 document.getElementById('btn-extensions').onclick = () => openExtensionsModal();
 document.getElementById('btn-trash').onclick = () => openTrashModal();
@@ -6694,6 +6861,14 @@ function renderCalendar() {
       leaveBuckets.get(k).push(l);
     }
   }
+  // Index personal reminders by date (YYYY-MM-DD)
+  const reminderBuckets = new Map();
+  for (const r of (state.reminders || [])) {
+    if (!r.date) continue;
+    const k = r.date.slice(0, 10);
+    if (!reminderBuckets.has(k)) reminderBuckets.set(k, []);
+    reminderBuckets.get(k).push(r);
+  }
 
   const today = new Date(); today.setHours(0,0,0,0);
   const cells = [];
@@ -6740,6 +6915,10 @@ function renderCalendar() {
       pills.push(`<span class="cal-pill cal-pill-leave" title="${escapeHtml(tip)}">${avatarMarkup}${escapeHtml(l.member_name)}${l.reason?' · '+escapeHtml(l.reason):''}</span>`);
     }
     if (dayLeaves.length > MAX_PER_TYPE) pills.push(`<span class="cal-pill cal-pill-more">+${dayLeaves.length - MAX_PER_TYPE} ลา</span>`);
+    // 4) Reminders (เตือนความจำ, max 3)
+    const dayReminders = reminderBuckets.get(key) || [];
+    for (const r of dayReminders.slice(0, MAX_PER_TYPE)) pills.push(`<span class="cal-pill cal-pill-reminder" title="${escapeHtml(r.text)}">🔔 ${escapeHtml(r.text)}</span>`);
+    if (dayReminders.length > MAX_PER_TYPE) pills.push(`<span class="cal-pill cal-pill-more">+${dayReminders.length - MAX_PER_TYPE} เตือน</span>`);
 
     const cls = ['cal-cell'];
     if (isToday)    cls.push('today');
@@ -6834,6 +7013,38 @@ function renderCalendar() {
       : `<div class="text-center text-slate-400 text-xs py-3 italic">— ไม่มีวันลาในช่วงนี้ —</div>`;
   }
 
+  // ===== Reminders list (เตือนความจำ) — scope follows selected day or month =====
+  const remEl = document.getElementById('cal-reminders-list');
+  const remLabelEl = document.getElementById('cal-reminders-label');
+  if (remEl) {
+    let rems;
+    if (state.cal.selected) {
+      rems = (state.reminders || []).filter(r => r.date === state.cal.selected);
+      if (remLabelEl) remLabelEl.textContent = `🔔 เตือนความจำวันที่ ${fmtDate(state.cal.selected)}`;
+    } else {
+      rems = (state.reminders || []).filter(r => r.date && r.date.startsWith(state.cal.ym));
+      if (remLabelEl) remLabelEl.textContent = '🔔 เตือนความจำเดือนนี้';
+    }
+    rems.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    remEl.innerHTML = rems.length
+      ? rems.map(r => `
+          <div class="leave-row">
+            <div class="flex items-center gap-2 flex-1 min-w-0">
+              <span class="text-base leading-none">🔔</span>
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-medium truncate">${escapeHtml(r.text)}</div>
+                <div class="text-[11px] text-slate-500">${fmtDate(r.date)}</div>
+              </div>
+            </div>
+            <button class="text-rose-500 text-sm px-1.5" data-del-reminder="${r.id}" title="ลบ">🗑</button>
+          </div>`).join('')
+      : `<div class="text-center text-slate-400 text-xs py-3 italic">— ไม่มีเตือนความจำในช่วงนี้ —</div>`;
+    remEl.querySelectorAll('[data-del-reminder]').forEach(b => b.onclick = async () => {
+      try { await api.del('/api/reminders/' + b.dataset.delReminder); await loadAll(); }
+      catch (e) { toast(e.message, 'error'); }
+    });
+  }
+
   // ===== Create-bar (right column top) =====
   // Updates hint based on selected date + shows/hides task/meeting buttons by role.
   const hint = document.getElementById('cal-create-hint');
@@ -6862,6 +7073,18 @@ document.body.addEventListener('click', e => {
     openTaskModal({ ...preset, status: 'in_progress', points: 0 });
   } else if (kind === 'meeting') {
     openMeetingModal({ ...preset });
+  } else if (kind === 'reminder') {
+    const _t = new Date();
+    const defDate = selectedDate || `${_t.getFullYear()}-${String(_t.getMonth() + 1).padStart(2, '0')}-${String(_t.getDate()).padStart(2, '0')}`;
+    openModal('🔔 เตือนความจำ', `
+      <div><label class="ios-label">วันที่ *</label><input class="ios-input" type="date" name="date" value="${defDate}" required></div>
+      <div><label class="ios-label">ข้อความ *</label><input class="ios-input" name="text" placeholder="เช่น ไป ทอ." required></div>
+    `, async data => {
+      if (!data.date) { toast('ต้องระบุวันที่', 'error'); return; }
+      await api.post('/api/reminders', { date: data.date, text: data.text });
+      toast('เพิ่มเตือนความจำแล้ว', 'success');
+      await loadAll();
+    });
   }
 });
 
@@ -6908,27 +7131,56 @@ function renderGroupCard(g) {
   const canManage = isAdmin() || g.leader_id === state.user.id;
   const isArchived = g.status === 'archived';
   const isCompleted = g.status === 'completed';
+  // status → สีจุด (semantic) สำหรับ pill ขาว
+  const STATUS_DOT = { idea:'#94a3b8', proposal:'#3b82f6', pending_approval:'#f59e0b', in_progress:'#f97316', delivery:'#10b981', maintenance:'#3b82f6', completed:'#10b981', on_hold:'#94a3b8', cancelled:'#f43f5e', archived:'#64748b' };
+  const sDot = STATUS_DOT[g.status] || '#94a3b8';
+  // group color → "r,g,b" สำหรับ tint หัวการ์ด (ใช้ rgba ทำงานได้ทั้ง light/dark)
+  const _h = String(gColor).replace('#','');
+  const _rgb = _h.length === 6 ? `${parseInt(_h.slice(0,2),16)},${parseInt(_h.slice(2,4),16)},${parseInt(_h.slice(4,6),16)}` : '99,102,241';
   return `
-    <div class="group-card text-left ${isArchived || isCompleted ? 'group-card-faded' : ''}" style="--group-color:${gColor}">
+    <div class="group-card sg-card text-left ${isArchived || isCompleted ? 'group-card-faded' : ''}" style="--group-color:${gColor};--group-rgb:${_rgb}">
       <button class="block w-full text-left" data-summary-group="${g.id}">
-        <div class="flex items-start justify-between gap-2">
-          <div class="min-w-0 flex-1">
-            <div class="font-semibold flex items-center gap-1.5"><span style="color:${gColor}">📁</span><span>${escapeHtml(g.name)}</span></div>
-            <div class="text-[11px] text-slate-600 mt-0.5">👑 ${escapeHtml(g.leader_name || '— ยังไม่มีหัวหน้า —')}</div>
-            ${g.description ? `<div class="text-[11px] text-slate-500 mt-1 line-clamp-2">${escapeHtml(g.description)}</div>` : ''}
+        <div class="sg-card-head">
+          <div class="sg-card-top">
+            <div class="sg-card-top-left">
+              <span class="sg-card-dot"></span>
+              <span class="sg-status"><span class="sg-status-dot" style="background:${sDot}"></span>${statusLabel(g.status)}</span>
+            </div>
+            <span class="sg-card-frac">${completed}/${total}</span>
           </div>
-          <span class="status-badge status-${g.status}">${statusLabel(g.status)}</span>
+          <div class="sg-card-title">${escapeHtml(g.name)}</div>
+          <div class="sg-card-leader">
+            ${(() => {
+              if (!g.leader_id) return `<span class="sg-leader-empty">👑 — ยังไม่มีหัวหน้า —</span>`;
+              const leader = (state.members || []).find(m => m.id === g.leader_id);
+              const lc = leader && leader.color ? leader.color : '#94a3b8';
+              const ln = (leader && leader.name) || g.leader_name || '?';
+              const ini = (function(s){ const p = String(s).trim().split(/\s+/).filter(Boolean); return p.length>=2 ? ((p[0][0]||'') + (p[1][0]||'')) : String(s).slice(0,2); })(ln);
+              return `<span class="sg-leader-avatar" style="background:${lc}">${escapeHtml(ini)}</span><span class="sg-leader-crown">👑</span><span class="sg-leader-name">${escapeHtml(ln)}</span>`;
+            })()}
+          </div>
         </div>
-        <div class="grid grid-cols-3 gap-2 mt-3 text-center">
-          <div class="bg-slate-50 rounded-lg py-1.5"><div class="text-[10px] text-slate-500 uppercase">Tasks</div><div class="font-bold text-sm">${completed}/${total}</div></div>
-          <div class="bg-amber-50 rounded-lg py-1.5"><div class="text-[10px] text-amber-700 uppercase">Points</div><div class="font-bold text-sm text-amber-700">${earned}</div></div>
-          <div class="bg-indigo-50 rounded-lg py-1.5"><div class="text-[10px] text-indigo-700 uppercase">Files</div><div class="font-bold text-sm text-indigo-700">${filesCount}</div></div>
+        <div class="sg-card-body">
+        ${g.description ? `<div class="sg-card-desc">${escapeHtml(g.description)}</div>` : ''}
+        <div class="sg-stat-grid">
+          <div class="sg-stat-tile">
+            <div class="sg-stat-label">Tasks</div>
+            <div class="sg-stat-value">${completed}/${total}</div>
+          </div>
+          <div class="sg-stat-tile">
+            <div class="sg-stat-label">Points</div>
+            <div class="sg-stat-value"><span class="sg-stat-star">★</span> ${earned}</div>
+          </div>
+          <div class="sg-stat-tile">
+            <div class="sg-stat-label">Files</div>
+            <div class="sg-stat-value">${filesCount}</div>
+          </div>
         </div>
-        <div class="mt-2 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-          <div class="h-full bg-emerald-500" style="width:${pct}%"></div>
+        <div class="sg-progress">
+          <div class="sg-progress-fill" style="width:${pct}%"></div>
         </div>
-        <div class="flex justify-between mt-1.5 text-[11px] text-slate-500">
-          <span>📅 ${fmtDate(g.start_date)}</span>
+        <div class="sg-card-foot">
+          ${g.target ? `<span>→ ${escapeHtml(g.target)}</span>` : '<span></span>'}
           <span class="${dlCls}">⏰ ${g.deadline ? deadlineText(g.deadline, g.status) : '—'}</span>
         </div>
         ${(() => {
@@ -6952,6 +7204,7 @@ function renderGroupCard(g) {
               ${overflow > 0 ? `<span class="group-card-conn-chip group-card-conn-more">+${overflow}</span>` : ''}
             </div>`;
         })()}
+        </div>
       </button>
       ${canClaim ? `<button class="ios-btn-primary w-full text-sm mt-3" data-claim-group="${g.id}">✋ หยิบกลุ่มนี้ — เป็นหัวหน้างาน</button>` : ''}
       ${myPendingProposal ? `<div class="text-center text-[11px] text-amber-700 bg-amber-50 rounded-lg py-1.5 mt-2">⏳ คำขอเข้ากลุ่มของคุณรอพิจารณา</div>` : ''}
@@ -6995,64 +7248,44 @@ function renderSummaryIndex() {
   const memberGroups = activeGroups.filter(g => g.leader_id !== me && g.am_member);
   const otherGroups  = activeGroups.filter(g => g.leader_id !== me && !g.am_member);
 
-  // Section header — title + count + optional hint บนบรรทัดล่าง
-  // (เลิก float hint ด้วย ml-auto เพราะ wrap แล้วดูเหมือนคำลอย)
-  const section = (title, icon, hint, list) => {
-    if (list.length === 0) {
-      return `
-        <div class="mb-5">
-          <div class="px-1 mb-2">
-            <div class="flex items-baseline gap-2">
-              <h3 class="font-semibold text-sm flex items-center gap-2 text-slate-400"><span>${icon}</span>${escapeHtml(title)}</h3>
-              <span class="text-[11px] text-slate-400 font-normal">(0)</span>
-            </div>
-            ${hint ? `<div class="text-[11px] text-slate-400 mt-0.5">${escapeHtml(hint)}</div>` : ''}
-          </div>
-          <div class="text-xs text-slate-400 italic px-3 py-3 bg-slate-50 rounded-xl">— ไม่มีกลุ่มในหมวดนี้ —</div>
-        </div>`;
-    }
-    return `
-      <div class="mb-5">
-        <div class="px-1 mb-2">
-          <div class="flex items-baseline gap-2">
-            <h3 class="font-semibold text-sm flex items-center gap-2"><span>${icon}</span>${escapeHtml(title)}</h3>
-            <span class="text-[11px] text-slate-500 font-normal">(${list.length})</span>
-          </div>
-          ${hint ? `<div class="text-[11px] text-slate-400 mt-0.5">${escapeHtml(hint)}</div>` : ''}
-        </div>
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">${list.map(renderGroupCard).join('')}</div>
-      </div>`;
+  // เปิด/ปิด section — จำสถานะใน localStorage
+  // (default: 3 หัวข้อหลักเปิด, archived/completed ปิด)
+  const secOpen = (key, def) => {
+    try { const v = localStorage.getItem('sml_sum_sec_' + key); return v === null ? def : v === '1'; }
+    catch (e) { return def; }
   };
-
-  // Archived + Completed — แยกเป็น 2 collapsible sections ที่มี header styling
-  // เหมือน 3 sections ด้านบน (consistent: icon + ชื่อ + count) แต่กดยุบ/ขยายได้
-  const archivedGroups  = doneGroups.filter(g => g.status === 'archived');
-  const completedGroups = doneGroups.filter(g => g.status === 'completed');
-  const collapsibleSection = (title, icon, list) => {
-    if (list.length === 0) return '';
+  // ทุก section เป็น dropdown (พับได้) — header: caret + icon + ชื่อ + "X โครงการ"
+  const section = (title, icon, key, list, defOpen) => {
+    const dim = list.length === 0;
+    const body = dim
+      ? `<div class="text-xs text-slate-400 italic px-3 py-3 bg-slate-50 rounded-xl mt-2 ml-1">— ไม่มีกลุ่มในหมวดนี้ —</div>`
+      : `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">${list.map(renderGroupCard).join('')}</div>`;
     return `
-      <details class="mb-5 summary-collapsible">
-        <summary class="px-1">
-          <div class="flex items-baseline gap-2">
-            <span class="summary-collapsible-caret">▸</span>
-            <h3 class="font-semibold text-sm flex items-center gap-2"><span>${icon}</span>${escapeHtml(title)}</h3>
-            <span class="text-[11px] text-slate-500 font-normal">(${list.length})</span>
-          </div>
+      <details class="mb-6 summary-collapsible summary-section" data-sec-key="${key}" ${secOpen(key, defOpen) ? 'open' : ''}>
+        <summary class="summary-sec-summary px-1">
+          <span class="summary-collapsible-caret">▸</span>
+          <span class="summary-sec-titles">
+            <span class="summary-sec-title ${dim ? 'summary-sec-dim' : ''}"><span>${icon}</span>${escapeHtml(title)}</span>
+            <span class="summary-sec-count ${dim ? 'summary-sec-dim' : ''}">${list.length} โครงการ</span>
+          </span>
         </summary>
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-2">${list.map(renderGroupCard).join('')}</div>
+        ${body}
       </details>`;
   };
+
+  const archivedGroups  = doneGroups.filter(g => g.status === 'archived');
+  const completedGroups = doneGroups.filter(g => g.status === 'completed');
 
   return `
     <div class="flex items-center justify-between mb-3 px-1 flex-wrap gap-2">
       <div class="text-sm text-slate-600">กลุ่มงานของคุณ — แบ่งตามบทบาท</div>
       ${createBtn}
     </div>
-    ${section('งานที่ฉันเป็นหัวหน้า', '👑', 'จัดการงานในกลุ่มได้เต็มที่', leaderGroups)}
-    ${section('งานที่ฉันเป็นสมาชิก', '👥', 'รอหัวหน้ามอบหมายงาน', memberGroups)}
-    ${section('งานที่ไม่มีส่วนเกี่ยวข้อง', '🔍', '', otherGroups)}
-    ${collapsibleSection('โครงการที่เก็บ', '📦', archivedGroups)}
-    ${collapsibleSection('โครงการที่เสร็จแล้ว', '✅', completedGroups)}
+    ${section('งานที่ฉันเป็นหัวหน้า', '👑', 'leader', leaderGroups, true)}
+    ${section('งานที่ฉันเป็นสมาชิก', '👥', 'member', memberGroups, true)}
+    ${section('งานที่ไม่มีส่วนเกี่ยวข้อง', '🔍', 'other', otherGroups, true)}
+    ${archivedGroups.length  ? section('โครงการที่เก็บ', '📦', 'archived', archivedGroups, false) : ''}
+    ${completedGroups.length ? section('โครงการที่เสร็จแล้ว', '✅', 'completed', completedGroups, false) : ''}
   `;
 }
 
@@ -7072,6 +7305,12 @@ function wireSummaryIndex() {
   // Create new group
   document.getElementById('summary-create-group')?.addEventListener('click', () => {
     openGroupModal();
+  });
+  // จำสถานะเปิด/ปิดของแต่ละ section (dropdown) ลง localStorage
+  document.querySelectorAll('details[data-sec-key]').forEach(d => {
+    d.addEventListener('toggle', () => {
+      try { localStorage.setItem('sml_sum_sec_' + d.dataset.secKey, d.open ? '1' : '0'); } catch (e) {}
+    });
   });
   // Edit group
   document.querySelectorAll('[data-edit-group]').forEach(b => {
@@ -7361,9 +7600,12 @@ function _renderOverviewTasks(q) {
   let filtered = sf.length === 0 ? all.slice() : all.filter(t => sf.includes(t.status));
   // Apply search
   filtered = filtered.filter(t => !q || searchMatches(q, _taskHaystack(t)));
-  // Apply sort
+  // Apply sort — งาน priority (🔥 ด่วน → 🌅 เอาก่อนเช้า) ลอยบนสุดเสมอ แล้วค่อยเรียงตาม sort ที่เลือก
   const sortKey = _overviewState.taskSort;
+  const prioRank = t => (t.priority === 'before_morning' ? 0 : t.priority === 'urgent' ? 1 : 2);
   filtered.sort((a, b) => {
+    const pr = prioRank(a) - prioRank(b);
+    if (pr !== 0) return pr;
     if (sortKey === 'deadline_asc')  return (a.deadline||'9999').localeCompare(b.deadline||'9999');
     if (sortKey === 'deadline_desc') return (b.deadline||'0').localeCompare(a.deadline||'0');
     if (sortKey === 'title')         return (a.title||'').localeCompare(b.title||'', 'th');
@@ -7381,7 +7623,7 @@ function _renderOverviewTasks(q) {
     return `
       <div class="ov-row ov-task-row" style="--group-color:${gColor}">
         <div class="ov-cell ov-title" data-task-detail="${t.id}">
-          <div class="font-medium text-sm truncate">${escapeHtml(t.title)}</div>
+          <div class="flex items-center gap-1.5 min-w-0"><span class="font-medium text-sm truncate min-w-0">${escapeHtml(t.title)}</span>${priorityBadgeHtml(t)}</div>
           ${g ? `<div class="text-[11px] text-slate-500 truncate">📁 ${escapeHtml(g.name)}</div>` : ''}
         </div>
         <div class="ov-cell ov-status">
@@ -7827,6 +8069,7 @@ function renderSummaryDetail(g, groupMembers = []) {
               <div class="min-w-0 flex-1">
                 <div class="font-medium text-[14px] leading-snug">${escapeHtml(t.title)}</div>
                 <div class="flex flex-wrap gap-1.5 mt-1 items-center">
+                  ${priorityBadgeHtml(t)}
                   <span class="status-badge status-${t.status}">${statusLabel(t.status)}</span>
                   ${fcount > 0 ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold">📎 ${fcount} ไฟล์ · ส่งแล้ว ✓</span>` : ''}
                   ${pointsPillHtml(t)}
