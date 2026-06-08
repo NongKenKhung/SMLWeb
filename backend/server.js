@@ -75,7 +75,9 @@ app.use((req, res, next) => {
     if (req.path === '/healthz' || req.path === '/api/events') return;
     const ms = Date.now() - start;
     const ip = req.ip || req.connection?.remoteAddress || '-';
-    console.log(`${new Date().toISOString()} ${ip} ${req.method} ${req.originalUrl} → ${res.statusCode} (${ms}ms)`);
+    // Redact bearer token / signature in query string so session tokens don't land in logs
+    const safeUrl = req.originalUrl.replace(/([?&](?:token|sig)=)[^&]*/gi, '$1[REDACTED]');
+    console.log(`${new Date().toISOString()} ${ip} ${req.method} ${safeUrl} → ${res.statusCode} (${ms}ms)`);
   });
   next();
 });
@@ -406,7 +408,7 @@ app.post('/api/login', wrap(async (req, res) => {
   const { name, password } = req.body || {};
   if (!name || !password) return res.status(400).json({ error: 'name + password required' });
   const lock = _checkLock(name);
-  if (lock.locked) return res.status(429).json({ error: `บัญชีนี้ถูกล็อกชั่วคราว — รอ ${lock.secs} วินาทีแล้วลองใหม่` });
+  if (lock.locked) return res.status(429).json({ error: `พยายามเข้าสู่ระบบบ่อยเกินไป — รอ ${lock.secs} วินาทีแล้วลองใหม่` });
   const m = await db.findMemberByName(String(name).trim());
   if (!m || !auth.verifyPassword(password, m.password_hash)) {
     _recordFail(name);
@@ -426,6 +428,33 @@ app.put('/api/me/password', wrap(async (req, res) => {
   const full = await db.getMemberFull(req.user.id);
   if (!auth.verifyPassword(current_password || '', full.password_hash)) return res.status(401).json({ error: 'current password incorrect' });
   await db.setMemberPassword(req.user.id, auth.hashPassword(new_password));
+  res.json({ ok: true });
+}));
+
+// Per-user email opt-in toggle — controls whether THIS user receives system emails
+// (meeting invites / .ics). Default on; setting to false skips them in mailer.pickRecipients.
+app.put('/api/me/email-pref', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const enabled = !!(req.body && req.body.enabled);
+  const m = await db.setMemberEmailPref(req.user.id, enabled);
+  res.json({ ok: true, email_opt_in: m ? m.email_opt_in : (enabled ? 1 : 0) });
+}));
+
+// Personal reminders (เตือนความจำ) — แต่ละคนเห็น/จัดการของตัวเองเท่านั้น
+app.get('/api/reminders', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  res.json(await db.listReminders(req.user.id));
+}));
+app.post('/api/reminders', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const { date, text } = req.body || {};
+  if (!date) return res.status(400).json({ error: 'ต้องระบุวันที่' });
+  if (!String(text || '').trim()) return res.status(400).json({ error: 'ต้องระบุข้อความ' });
+  res.json(await db.createReminder({ member_id: req.user.id, date, text }));
+}));
+app.delete('/api/reminders/:id', wrap(async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  await db.deleteReminder(req.params.id, req.user.id);
   res.json({ ok: true });
 }));
 
@@ -477,6 +506,15 @@ app.post('/api/members', wrap(async (req, res) => {
 }));
 app.put('/api/members/:id', wrap(async (req, res) => {
   if (!requireAdmin(req, res)) return;
+  // เฉพาะ boss เท่านั้นที่ตั้ง/เลื่อนคนเป็น 'boss' ได้ — admin ทั่วไปทำไม่ได้ (กัน privilege escalation)
+  if (req.body && req.body.role === 'boss' && req.user.role !== 'boss') delete req.body.role;
+  // ต้องเหลือผู้ดูแล (admin/boss) อย่างน้อย 1 คน — ห้ามลดบทบาทคนสุดท้ายเป็น member
+  if (req.body && req.body.role && req.body.role !== 'admin' && req.body.role !== 'boss') {
+    const _cur = await db.getMember(req.params.id);
+    if (_cur && (_cur.role === 'admin' || _cur.role === 'boss') && (await db.countAdmins()) <= 1) {
+      return res.status(400).json({ error: 'ต้องมีผู้ดูแล (admin/boss) อย่างน้อย 1 คน — เปลี่ยนบทบาทคนสุดท้ายไม่ได้' });
+    }
+  }
   // Same min-length policy as the self-service /api/me/password — applies
   // when admin resets a user's PIN. Don't let admins set a weaker password
   // for a user than the user could set for themselves.
@@ -493,6 +531,10 @@ app.delete('/api/members/:id', wrap(async (req, res) => {
   if (req.params.id === req.user.id) return res.status(400).json({ error: 'cannot delete yourself' });
   // Capture snapshot ก่อนลบ ลง audit log
   const victim = await db.getMember(req.params.id);
+  // ต้องเหลือผู้ดูแล (admin/boss) อย่างน้อย 1 คน — ห้ามลบคนสุดท้าย
+  if (victim && (victim.role === 'admin' || victim.role === 'boss') && (await db.countAdmins()) <= 1) {
+    return res.status(400).json({ error: 'ต้องมีผู้ดูแล (admin/boss) อย่างน้อย 1 คนในระบบ' });
+  }
   if (!(await db.deleteMember(req.params.id))) return res.status(404).json({ error: 'not found' });
   await db.logAudit({
     actor_id: req.user.id, actor_name: req.user.name,
@@ -1332,8 +1374,11 @@ app.post('/api/polls/:id/vote', wrap(async (req, res) => {
   if (!p) return res.status(404).json({ error: 'not found' });
   if (p.closed) return res.status(400).json({ error: 'poll is closed' });
   if (p.expires_at && new Date(p.expires_at) < new Date()) return res.status(400).json({ error: 'poll expired' });
-  const idx = Array.isArray(req.body?.option_indices) ? req.body.option_indices :
+  let idx = Array.isArray(req.body?.option_indices) ? req.body.option_indices :
               Number.isFinite(+req.body?.option_index) ? [+req.body.option_index] : [];
+  // กรอง index ให้อยู่ในช่วงตัวเลือกจริงเท่านั้น (กันค่าเกิน/ติดลบ ที่ทำให้ผลโหวตเพี้ยน)
+  const _optCount = Array.isArray(p.options) ? p.options.length : 0;
+  idx = [...new Set(idx.map(Number).filter(i => Number.isInteger(i) && i >= 0 && i < _optCount))];
   if (!p.multi_choice && idx.length > 1) return res.status(400).json({ error: 'single choice only' });
   const updated = await db.votePoll(req.params.id, req.user.id, idx);
   if (updated.anonymous) updated.votes_by_member = {};
