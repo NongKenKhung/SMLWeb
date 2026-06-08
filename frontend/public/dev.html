@@ -7,7 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" crossorigin="anonymous"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
       --sidebar-w: 210px;
@@ -17,7 +17,7 @@
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; overflow: hidden; }
-    body { font-family: 'Prompt', sans-serif; background: #0f172a; color: #e2e8f0; display: flex; flex-direction: column; }
+    body { font-family: 'Sarabun', sans-serif; background: #0f172a; color: #e2e8f0; display: flex; flex-direction: column; }
 
     /* ── Auth overlay ── */
     #auth-overlay {
@@ -36,7 +36,7 @@
     .auth-back {
       display: block; width: 100%; padding: .5rem; border-radius: .4rem;
       border: 1px solid #334155; background: transparent; color: #94a3b8;
-      font-family: 'Prompt', sans-serif; font-size: .82rem; cursor: pointer; text-decoration: none;
+      font-family: 'Sarabun', sans-serif; font-size: .82rem; cursor: pointer; text-decoration: none;
     }
     .auth-back:hover { color: #e2e8f0; border-color: #475569; }
 
@@ -121,7 +121,7 @@
     .nav-btn {
       display: flex; align-items: center; gap: .55rem;
       padding: .5rem 1rem; background: none; border: none; border-left: 3px solid transparent;
-      font-family: 'Prompt', sans-serif; font-size: .82rem; color: #94a3b8;
+      font-family: 'Sarabun', sans-serif; font-size: .82rem; color: #94a3b8;
       cursor: pointer; width: 100%; text-align: left; transition: all .12s;
     }
     .nav-btn:hover { background: #0f172a; color: #e2e8f0; }
@@ -159,7 +159,7 @@
     .sel option { background: #1e293b; }
 
     /* ── Buttons ── */
-    .btn { display: inline-flex; align-items: center; gap: .35rem; padding: .4rem .9rem; border-radius: .38rem; font-family: 'Prompt', sans-serif; font-size: .78rem; font-weight: 500; border: none; cursor: pointer; transition: all .12s; white-space: nowrap; }
+    .btn { display: inline-flex; align-items: center; gap: .35rem; padding: .4rem .9rem; border-radius: .38rem; font-family: 'Sarabun', sans-serif; font-size: .78rem; font-weight: 500; border: none; cursor: pointer; transition: all .12s; white-space: nowrap; }
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-primary:hover { background: var(--accent-dark); }
     .btn-ghost { background: transparent; border: 1px solid #334155; color: #94a3b8; }
@@ -193,7 +193,7 @@
 
     /* ── Tab bar ── */
     .tab-bar { display: flex; border-bottom: 1px solid #334155; margin-bottom: .85rem; }
-    .tab-btn { padding: .48rem .9rem; font-size: .78rem; color: #64748b; background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; font-family: 'Prompt', sans-serif; transition: all .12s; }
+    .tab-btn { padding: .48rem .9rem; font-size: .78rem; color: #64748b; background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; font-family: 'Sarabun', sans-serif; transition: all .12s; }
     .tab-btn:hover { color: #e2e8f0; }
     .tab-btn.on { color: var(--accent); border-bottom-color: var(--accent); }
     .tab-pane { display: none; }
@@ -401,13 +401,13 @@
     .wb-inject-modal.hidden { display: none; }
     .wb-inject-panel { background: #fff; width: 100%; max-width: 520px; border-radius: 1.1rem 1.1rem 0 0; padding: 1rem; max-height: 75vh; display: flex; flex-direction: column; overflow: hidden; }
     .wb-inj-tabs { display: flex; gap: .2rem; overflow-x: auto; border-bottom: 1px solid #e2e8f0; margin-bottom: .55rem; flex-shrink: 0; }
-    .wb-inj-tab { padding: .4rem .7rem; font-size: .76rem; font-weight: 500; color: #64748b; background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; transition: all .12s; font-family: 'Prompt', sans-serif; }
+    .wb-inj-tab { padding: .4rem .7rem; font-size: .76rem; font-weight: 500; color: #64748b; background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; transition: all .12s; font-family: 'Sarabun', sans-serif; }
     .wb-inj-tab:hover { background: #f8fafc; color: #1e293b; }
     .wb-inj-tab.active { color: #4f46e5; border-bottom-color: #4f46e5; font-weight: 600; }
-    .wb-inj-search { width: 100%; padding: .45rem .65rem; border: 1px solid #e2e8f0; border-radius: .55rem; font-size: .82rem; background: #f8fafc; margin-bottom: .55rem; flex-shrink: 0; font-family: 'Prompt', sans-serif; }
+    .wb-inj-search { width: 100%; padding: .45rem .65rem; border: 1px solid #e2e8f0; border-radius: .55rem; font-size: .82rem; background: #f8fafc; margin-bottom: .55rem; flex-shrink: 0; font-family: 'Sarabun', sans-serif; }
     .wb-inj-search:focus { outline: none; border-color: #6366f1; background: #fff; }
     .wb-inj-list { flex: 1; overflow-y: auto; min-height: 0; }
-    .wb-inj-row { width: 100%; text-align: left; display: flex; align-items: center; gap: .55rem; background: #f8fafc; border: 1px solid #e2e8f0; border-left: 3px solid var(--row-color, #cbd5e1); border-radius: .6rem; padding: .5rem .7rem; font-size: .82rem; font-family: 'Prompt', sans-serif; cursor: pointer; transition: background .1s, border-color .1s; }
+    .wb-inj-row { width: 100%; text-align: left; display: flex; align-items: center; gap: .55rem; background: #f8fafc; border: 1px solid #e2e8f0; border-left: 3px solid var(--row-color, #cbd5e1); border-radius: .6rem; padding: .5rem .7rem; font-size: .82rem; font-family: 'Sarabun', sans-serif; cursor: pointer; transition: background .1s, border-color .1s; }
     .wb-inj-row:hover { background: #eef2ff; border-color: #6366f1; }
     .wb-inj-row .ic { font-size: 1.05rem; flex-shrink: 0; }
     .wb-inj-row .bd { flex: 1; min-width: 0; }
@@ -419,17 +419,17 @@
     .wb-inj-row .ac button.no:hover { background: #fee2e2; }
     /* Recorder mini */
     .wb-rec-panel { display: flex; flex-direction: column; align-items: center; gap: .6rem; padding: 1.4rem 1rem; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: .8rem; }
-    .wb-rec-state { font-size: .92rem; font-weight: 600; color: #64748b; font-family: 'Prompt', sans-serif; }
+    .wb-rec-state { font-size: .92rem; font-weight: 600; color: #64748b; font-family: 'Sarabun', sans-serif; }
     .wb-rec-state.recording { color: #ef4444; animation: wb-rec-pulse 1.2s ease-in-out infinite; }
     @keyframes wb-rec-pulse { 50% { opacity: .5; } }
     .wb-rec-timer { font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; color: #1e293b; }
     .wb-rec-btns { display: flex; gap: .4rem; }
-    .wb-rec-btns button { padding: .5rem 1.1rem; border-radius: .6rem; border: none; font-weight: 500; font-size: .82rem; cursor: pointer; font-family: 'Prompt', sans-serif; }
+    .wb-rec-btns button { padding: .5rem 1.1rem; border-radius: .6rem; border: none; font-weight: 500; font-size: .82rem; cursor: pointer; font-family: 'Sarabun', sans-serif; }
     .wb-rec-start { background: #ef4444; color: #fff; }
     .wb-rec-start:hover:not([disabled]) { background: #dc2626; }
     .wb-rec-stop { background: #1e293b; color: #fff; }
     .wb-rec-start[disabled], .wb-rec-stop[disabled] { opacity: .4; cursor: not-allowed; }
-    .wb-rec-hint { text-align: center; font-size: .68rem; color: #94a3b8; max-width: 320px; line-height: 1.4; font-family: 'Prompt', sans-serif; }
+    .wb-rec-hint { text-align: center; font-size: .68rem; color: #94a3b8; max-width: 320px; line-height: 1.4; font-family: 'Sarabun', sans-serif; }
     /* Floating recorder widget — sits in the canvas corner so the user can keep drawing while audio records. */
     .wb-float-rec { position: absolute; top: .7rem; right: .7rem; z-index: 40; display: inline-flex; align-items: center; gap: .5rem; padding: .35rem .55rem .35rem .7rem; background: #1e293b; color: #fff; border-radius: 999px; box-shadow: 0 4px 12px rgba(15,23,42,.25); font-family: 'JetBrains Mono', monospace; font-size: .82rem; }
     .wb-float-rec.hidden { display: none; }
@@ -450,7 +450,7 @@
     .wb-edit-frame-modal { position: fixed; inset: 0; background: rgba(15,23,42,.6); display: flex; align-items: center; justify-content: center; z-index: 60; padding: 2vh 2vw; }
     .wb-edit-frame-modal.hidden { display: none; }
     .wb-edit-frame-panel { background: #fff; border-radius: 1rem; box-shadow: 0 12px 40px rgba(15,23,42,.35); width: 100%; max-width: 720px; height: 96vh; display: flex; flex-direction: column; overflow: hidden; }
-    .wb-edit-frame-head { display: flex; align-items: center; justify-content: space-between; padding: .55rem .75rem; border-bottom: 1px solid #e2e8f0; background: #f8fafc; flex-shrink: 0; font-family: 'Prompt', sans-serif; }
+    .wb-edit-frame-head { display: flex; align-items: center; justify-content: space-between; padding: .55rem .75rem; border-bottom: 1px solid #e2e8f0; background: #f8fafc; flex-shrink: 0; font-family: 'Sarabun', sans-serif; }
     .wb-edit-frame { flex: 1; border: none; width: 100%; background: #fff; }
     /* Dev fullscreen: hides sidebar+header */
     body.wb-fs #hdr, body.wb-fs #sidebar { display: none !important; }
@@ -472,7 +472,7 @@
     .wb-subtab {
       background:transparent; color:#94a3b8; border:none;
       padding:.45rem .9rem; border-radius:.35rem; cursor:pointer;
-      font-size:.78rem; font-family:'Prompt', sans-serif;
+      font-size:.78rem; font-family:'Sarabun', sans-serif;
       transition: background .12s, color .12s;
     }
     .wb-subtab:hover { background:#1e293b; color:#e2e8f0; }
@@ -661,7 +661,7 @@
       padding: .5rem 0;
       background:#020617; border:1px solid #1e293b; border-radius:.5rem;
     }
-    .pl-gantt-svg { display:block; font-family: 'Prompt', sans-serif; }
+    .pl-gantt-svg { display:block; font-family: 'Sarabun', sans-serif; }
     .pl-gantt-axis-tick { stroke: #1e293b; stroke-width: 1; stroke-dasharray: 2 4; }
     .pl-gantt-axis-label { fill: #64748b; font-size: 10px; }
     .pl-gantt-month-label { fill: #cbd5e1; font-size: 11px; font-weight: 600; }
@@ -841,7 +841,7 @@
     .ab-block textarea, .ab-block input {
       width:100%; background:#0b1220; color:#e2e8f0;
       border:1px solid #1e293b; border-radius:.3rem;
-      padding:.45rem .55rem; font-family:'Prompt', sans-serif; font-size:.85rem;
+      padding:.45rem .55rem; font-family:'Sarabun', sans-serif; font-size:.85rem;
       resize:vertical;
     }
     .ab-block textarea { min-height:3rem; line-height:1.55; }
@@ -858,7 +858,7 @@
       padding:2rem 2.25rem;
       border-radius:.5rem;
       max-width: 56rem; margin: 0 auto;
-      font-family:'Prompt', sans-serif;
+      font-family:'Sarabun', sans-serif;
       line-height: 1.7;
     }
     .ab-preview h1 { font-size:2rem; font-weight:700; margin: 1.5rem 0 .8rem; color:#0f172a; }
@@ -913,7 +913,7 @@
     .rm-input {
       background:#020617; color:#e2e8f0; border:1px solid #1e293b;
       border-radius:.3rem; padding:.25rem .45rem; font-size:.78rem;
-      font-family:'Prompt', sans-serif;
+      font-family:'Sarabun', sans-serif;
     }
     .rm-input:focus { outline:none; border-color:var(--accent); }
     .rm-tiny { width: 4.5rem; }
@@ -1618,11 +1618,11 @@
         </div>
         <div class="tab-pane" id="ctab-css">
           <textarea id="comp-css" class="txa" style="min-height:200px">/* CSS here */
-body { font-family:'Prompt',sans-serif; padding:2rem; background:#f8fafc; }
+body { font-family:'Sarabun',sans-serif; padding:2rem; background:#f8fafc; }
 .demo { background:#fff; border-radius:1rem; padding:1.5rem; box-shadow:0 2px 12px rgba(0,0,0,.08); max-width:380px; }
 .demo h3 { font-size:1.1rem; font-weight:600; margin-bottom:.5rem; color:#1e293b; }
 .demo p  { font-size:.875rem; color:#64748b; margin-bottom:1rem; }
-.demo button { background:#6366f1; color:#fff; border:none; border-radius:.5rem; padding:.5rem 1rem; cursor:pointer; font-family:'Prompt',sans-serif; }
+.demo button { background:#6366f1; color:#fff; border:none; border-radius:.5rem; padding:.5rem 1rem; cursor:pointer; font-family:'Sarabun',sans-serif; }
 .demo button:hover { background:#4f46e5; }</textarea>
         </div>
         <div class="tab-pane" id="ctab-js">
@@ -5174,7 +5174,7 @@ function buildCompDoc() {
   const h = document.getElementById('comp-html')?.value || '';
   const c = document.getElementById('comp-css')?.value  || '';
   const j = document.getElementById('comp-js')?.value   || '';
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600&display=swap" rel="stylesheet"><style>${c}</style></head><body>${h}<script>(function(){try{${j}}catch(e){document.body.insertAdjacentHTML('beforeend','<pre style="color:red;font-size:.75rem">'+e+'</pre>')}})()<\/script></body></html>`;
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet"><style>${c}</style></head><body>${h}<script>(function(){try{${j}}catch(e){document.body.insertAdjacentHTML('beforeend','<pre style="color:red;font-size:.75rem">'+e+'</pre>')}})()<\/script></body></html>`;
 }
 
 function runComp() {
