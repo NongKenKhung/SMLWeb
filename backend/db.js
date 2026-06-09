@@ -139,28 +139,11 @@ async function initSchema() {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_reminders_member ON reminders(member_id);
-    -- Per-meeting iCalendar SEQUENCE (RFC 5545) — bumps each time we send a REQUEST/CANCEL
-    ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS ics_sequence INTEGER NOT NULL DEFAULT 0;
-    -- Meeting end time (ISO datetime). Optional — falls back to deadline+60min
-    -- in the ICS mailer when null. Only meaningful for kind='meeting'.
-    ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS end_time     TEXT;
-    -- Budget — optional งบประมาณของ task (บาท) ใช้ search/sort ได้
-    ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS budget       NUMERIC;
-    -- แท็กพิเศษ (priority): '' ปกติ | 'urgent' งานด่วน | 'before_morning' ไม่รีบแต่เอาก่อนเช้า
-    ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS priority     TEXT NOT NULL DEFAULT '';
 
-    -- Connection categories:
-    --   'personal' (default, existing behavior) — สมาชิก ↔ บริษัทที่ปรึกษา / บุคคลภายนอกส่วนตัว
-    --   'agency'   — หน่วยงาน (อบจ./เทศบาล/กระทรวง) ที่ทีมส่งใครไปประสานงาน
-    -- For agency rows, member_id is the LIAISON (ทีม member ที่ไปคุย), not the owner.
-    -- topics = comma-separated list of subjects ("งบประมาณ, TOR, ติดตาม") relevant to agency rows.
-    ALTER TABLE connections ADD COLUMN IF NOT EXISTS kind   TEXT NOT NULL DEFAULT 'personal';
-    ALTER TABLE connections ADD COLUMN IF NOT EXISTS topics TEXT NOT NULL DEFAULT '';
-    -- liaison_name: free-text name of the EXTERNAL person handling the agency relationship
-    -- (not a lab member). Required for kind='agency' rows. member_id still records the
-    -- creator for permission tracking (creator/admin can edit), but the displayed
-    -- "person → agency" mapping uses liaison_name.
-    ALTER TABLE connections ADD COLUMN IF NOT EXISTS liaison_name TEXT NOT NULL DEFAULT '';
+    -- NOTE: ALTER migrations for tasks / connections were moved to AFTER those
+    -- CREATE TABLE statements (below). Running them here breaks a FRESH DB with
+    -- 'relation "tasks" does not exist' because the whole multi-statement query
+    -- runs top-to-bottom in one implicit transaction and the CREATEs come later.
 
     -- Admin-managed runtime flags (e.g. "email_invitations_enabled"). Read at boot
     -- and on settings change so changes take effect without restarting.
@@ -222,6 +205,23 @@ async function initSchema() {
       notes        TEXT NOT NULL DEFAULT '',
       created_at   TEXT NOT NULL
     );
+    -- ── Migrations for tasks / connections — MUST run after their CREATE TABLEs
+    --    above (idempotent ADD COLUMN IF NOT EXISTS; also upgrades older DBs) ──
+    -- Per-meeting iCalendar SEQUENCE (RFC 5545) — bumps each time we send a REQUEST/CANCEL
+    ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS ics_sequence INTEGER NOT NULL DEFAULT 0;
+    -- Meeting end time (ISO datetime). Optional — falls back to deadline+60min
+    -- in the ICS mailer when null. Only meaningful for kind='meeting'.
+    ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS end_time     TEXT;
+    -- Budget — optional งบประมาณของ task (บาท) ใช้ search/sort ได้
+    ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS budget       NUMERIC;
+    -- แท็กพิเศษ (priority): '' ปกติ | 'urgent' งานด่วน | 'before_morning' ไม่รีบแต่เอาก่อนเช้า
+    ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS priority     TEXT NOT NULL DEFAULT '';
+    -- Connection categories: 'personal' (default) | 'agency' (หน่วยงาน) | 'lobbyist'.
+    -- agency rows: member_id = LIAISON creator (permission), liaison_name = external person;
+    -- topics = comma-separated subjects ("งบประมาณ, TOR, ติดตาม") relevant to agency rows.
+    ALTER TABLE connections ADD COLUMN IF NOT EXISTS kind   TEXT NOT NULL DEFAULT 'personal';
+    ALTER TABLE connections ADD COLUMN IF NOT EXISTS topics TEXT NOT NULL DEFAULT '';
+    ALTER TABLE connections ADD COLUMN IF NOT EXISTS liaison_name TEXT NOT NULL DEFAULT '';
     CREATE TABLE IF NOT EXISTS task_files (
       id            TEXT PRIMARY KEY,
       task_id       TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
