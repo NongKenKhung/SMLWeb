@@ -36,8 +36,10 @@ docker compose logs -f app              # tail the main app
 | pgadmin | http://localhost:5050 | DB admin UI (`admin@example.com` / `admin`) |
 | asr     | (internal only)       | Thai speech-to-text microservice     |
 
-> First boot: postgres seeds itself, app initialises the schema. ASR builds a
-> ~9 GB image on first build (PyTorch + ffmpeg) — be patient.
+> First boot: postgres initialises, the app creates the schema, then the entrypoint
+> **auto-seeds members** (idempotent — skips if any exist; default PIN `1234`) so you can
+> log in immediately. The container runs cross-OS as the non-root `app` user via `gosu`.
+> ASR (if re-enabled) builds a ~9 GB image on first build (PyTorch + ffmpeg) — be patient.
 
 ### Default logins (PIN: `1234`)
 
@@ -384,8 +386,12 @@ storage for an S3 SDK; that's a code change, not a config change.)
 ### Backup tip
 
 The two paths to back up are:
-- Postgres: `docker exec sml_postgres pg_dump -U smluser smartcitylab | gzip > backup.sql.gz`
-- Files: rsync `./uploads/` (or your NAS path) — already lives on the NAS in this setup, so the NAS's own snapshot/replication handles it.
+- Postgres — gzip **inside** the container so the binary stream isn't mangled (matters on Windows):
+  `docker exec sml_postgres sh -c "pg_dump -U smluser smartcitylab | gzip -c > /tmp/db.sql.gz"` → `docker cp sml_postgres:/tmp/db.sql.gz .`
+- Files: rsync `./uploads/` (or your NAS path) — already on the NAS here, so its snapshot/replication handles it.
+
+> Full backup of **every** volume (pg_data + app_state + pgadmin_data) and moving the whole
+> stack to another machine (e.g. a Raspberry Pi): see **`docs/runbook.md` §5**.
 
 ---
 
