@@ -4535,7 +4535,7 @@ function taskFormFields(t = {}) {
     <div class="form-section" data-task-target-section ${t.group_id ? 'hidden' : ''}>
       <div class="form-section-title">📤 ส่งให้ใคร (Target)</div>
       <input class="ios-input" name="target" value="${escapeHtml(t.target||'')}"
-             placeholder="เช่น อบจ.ฉะเชิงเทรา / กระทรวงคมนาคม / แล็บภายใน"
+             placeholder="เช่น หน่วยงาน / กลุ่มเป้าหมาย"
              list="task-target-list">
       <datalist id="task-target-list">${
         Array.from(new Set([
@@ -4705,7 +4705,7 @@ function memberFormFields(m = {}) {
   return `
     <div>
       <label class="ios-label">ชื่อ *</label>
-      <input class="ios-input" name="name" value="${escapeHtml(m.name||'')}" required placeholder="เช่น วิว, เคน">
+      <input class="ios-input" name="name" value="${escapeHtml(m.name||'')}" required placeholder="เช่น ชื่อเล่น">
     </div>
     <div><label class="ios-label">บทบาท</label><select class="ios-select" name="role">${role}</select></div>
     <div><label class="ios-label">Email</label><input class="ios-input" name="email" type="email" value="${escapeHtml(m.email||'')}"></div>
@@ -4929,10 +4929,10 @@ function connectionFormFields(c = {}) {
       <div class="conn-section-header conn-liaison-header">${isLobbyist ? '🎯 Lobbyist' : '👤 ผู้ประสานงาน'}</div>
       <div>
         <label class="ios-label conn-liaison-label">${isLobbyist ? 'ชื่อ lobbyist *' : 'ชื่อผู้ประสานงาน *'}</label>
-        <input class="ios-input" name="liaison_name" value="${escapeHtml(c.liaison_name||'')}" placeholder="${isLobbyist ? 'เช่น พี่นัท' : 'เช่น พี่ตู่'}">
+        <input class="ios-input" name="liaison_name" value="${escapeHtml(c.liaison_name||'')}" placeholder="${isLobbyist ? 'เช่น ชื่อ lobbyist' : 'เช่น ชื่อผู้ประสานงาน'}">
       </div>
       <div class="grid grid-cols-2 gap-2">
-        <div><label class="ios-label">ตำแหน่ง</label><input class="ios-input" name="contact_role" value="${escapeHtml(c.contact_role||'')}" placeholder="${isLobbyist ? 'เช่น ที่ปรึกษา' : 'เช่น กองช่าง / ปลัด'}"></div>
+        <div><label class="ios-label">ตำแหน่ง</label><input class="ios-input" name="contact_role" value="${escapeHtml(c.contact_role||'')}" placeholder="${isLobbyist ? 'เช่น ตำแหน่ง' : 'เช่น ตำแหน่ง / หน้าที่'}"></div>
         <div><label class="ios-label">เบอร์โทร</label><input class="ios-input" name="phone" type="tel" value="${escapeHtml(c.phone||'')}"></div>
       </div>
       <div>
@@ -4946,7 +4946,7 @@ function connectionFormFields(c = {}) {
       <div class="conn-section-header">🏛️ หน่วยงาน</div>
       <div>
         <label class="ios-label">ชื่อหน่วยงาน *</label>
-        <input class="ios-input conn-org-input" name="company" value="${escapeHtml(c.company||'')}" ${isAgency?'required':''} placeholder="เช่น อบจ.ฉะเชิงเทรา / อบต.บางพระ">
+        <input class="ios-input conn-org-input" name="company" value="${escapeHtml(c.company||'')}" ${isAgency?'required':''} placeholder="เช่น ชื่อหน่วยงานราชการ">
       </div>
     </div>
 
@@ -4954,7 +4954,7 @@ function connectionFormFields(c = {}) {
     <div class="conn-personal-org-row space-y-2" ${isPersonal ? '' : 'style="display:none"'}>
       <div>
         <label class="ios-label">บริษัท / องค์กร *</label>
-        <input class="ios-input conn-org-input" name="company" value="${escapeHtml(c.company||'')}" ${isPersonal?'required':''} placeholder="เช่น บริษัทที่ปรึกษา ABC จำกัด">
+        <input class="ios-input conn-org-input" name="company" value="${escapeHtml(c.company||'')}" ${isPersonal?'required':''} placeholder="เช่น ชื่อบริษัท / องค์กร">
       </div>
       <div class="conn-section-header">👤 ผู้ติดต่อ</div>
       <div class="grid grid-cols-2 gap-2">
@@ -5874,7 +5874,7 @@ function openRequestExtensionModal(t) {
   openModal('ขอเลื่อน Deadline', `
     <div class="text-xs text-slate-600">Deadline ปัจจุบัน: <b>${fmtDate(t.deadline)}</b></div>
     <div><label class="ios-label">Deadline ใหม่ที่ต้องการ *</label><input type="date" name="requested_deadline" class="ios-input" required value="${t.deadline ? t.deadline.slice(0,10) : ''}"></div>
-    <div><label class="ios-label">เหตุผล</label><textarea class="ios-textarea" name="reason" placeholder="เช่น รอข้อมูลจากภาคสนาม"></textarea></div>
+    <div><label class="ios-label">เหตุผล</label><textarea class="ios-textarea" name="reason" placeholder="เช่น เหตุผลที่ขอเลื่อน"></textarea></div>
     <div class="text-[11px] text-slate-500">Admin จะเป็นผู้พิจารณาอนุมัติ</div>
   `, async data => {
     await api.post(`/api/tasks/${t.id}/deadline-request`, data);
@@ -7078,7 +7078,7 @@ document.body.addEventListener('click', e => {
     const defDate = selectedDate || `${_t.getFullYear()}-${String(_t.getMonth() + 1).padStart(2, '0')}-${String(_t.getDate()).padStart(2, '0')}`;
     openModal('🔔 เตือนความจำ', `
       <div><label class="ios-label">วันที่ *</label><input class="ios-input" type="date" name="date" value="${defDate}" required></div>
-      <div><label class="ios-label">ข้อความ *</label><input class="ios-input" name="text" placeholder="เช่น ไป ทอ." required></div>
+      <div><label class="ios-label">ข้อความ *</label><input class="ios-input" name="text" placeholder="เช่น สิ่งที่ต้องทำ / นัดหมาย" required></div>
     `, async data => {
       if (!data.date) { toast('ต้องระบุวันที่', 'error'); return; }
       await api.post('/api/reminders', { date: data.date, text: data.text });
