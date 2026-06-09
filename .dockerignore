@@ -28,8 +28,9 @@ logs
 Thumbs.db
 
 # Dev-only / unused-in-prod files (paths reflect the backend/ split)
+# NOTE: backend/seed.js is intentionally NOT ignored — docker-entrypoint.sh runs
+# it on boot to seed members on a fresh DB (idempotent). Keep it in the image.
 backend/test_api.js
-backend/seed.js
 backend/mock_files.js
 backend/ecosystem.config.js
 docker-compose.yml
