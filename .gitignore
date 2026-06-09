@@ -23,3 +23,6 @@ _dev_served.html
 .claude/
 .vscode/
 .idea/
+
+# Volume backups (pg_dump / tar exports) — keep out of git
+backups/
