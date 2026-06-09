@@ -2,6 +2,11 @@
 
 Operational recipes for common scenarios. Each section is self-contained — copy the commands as-is.
 
+> **Current state:** the AI services (`asr` / `ollama`) are **disabled** — their blocks are
+> commented out in `docker-compose.yml` and `ASR_URL` is empty, so sections 3, 7, 8 apply only
+> after you re-enable them. The app image runs cross-OS as the non-root `app` user via `gosu`
+> (the entrypoint fixes bind-mount ownership first — see §1).
+
 ---
 
 ## 1. First-time setup
@@ -29,6 +34,14 @@ docker compose logs -f app
 ```
 
 App → `http://localhost:3000` · /dev → `http://localhost:3000/dev.html`
+
+> **First boot auto-seeds members.** On a fresh DB, `docker-entrypoint.sh` runs
+> `backend/seed.js` (idempotent — skips when members already exist), creating the seed
+> members with default PIN `1234`. Log in as a seeded admin, then change PINs. The
+> container starts as **root**, `chown`s the mounts (`/app/uploads`, `/data`) to the `app`
+> user, then drops privileges via `gosu` before starting the server — identical behaviour
+> on Linux, macOS and Windows. (If you restore a backup instead, see §5 — restore BEFORE the
+> app first touches the DB so the seed/schema don't collide.)
 
 ---
 
@@ -75,20 +88,85 @@ docker compose restart postgres      # DB (don't do this lightly — drops all l
 
 ---
 
-## 5. Database backup + restore
+## 5. Backup / export / restore (database + volumes)
 
+Named volumes are prefixed with the Compose **project name** (defaults to the lower-cased
+project folder: `SMLWeb` → `smlweb_…`, `SML` → `sml_…`). **Always confirm with `docker volume ls`**
+before using a volume name below.
+
+| Volume             | Holds                                   | Export method |
+|--------------------|-----------------------------------------|---------------|
+| `…_pg_data`        | PostgreSQL data (the real data)         | `pg_dump`     |
+| `…_app_state`      | `/data` → `.tokens.json` (auth tokens)  | `tar`         |
+| `…_pgadmin_data`   | pgAdmin's own config (disposable)       | `tar`         |
+| `./uploads` (bind) | user-uploaded files — already on host   | copy folder   |
+
+### 5.1 Database — backup (logical, portable)
 ```bash
-# Backup (dump to host)
-docker exec sml_postgres pg_dump -U smluser smartcitylab > backup-$(date +%F).sql
-
-# Restore (DANGEROUS — wipes current DB!)
-docker exec -i sml_postgres psql -U smluser smartcitylab < backup-2026-05-16.sql
+# gzip INSIDE the container so the binary stream isn't mangled, then copy out
+docker exec -e PGPASSWORD='<POSTGRES_PASSWORD>' sml_postgres \
+  sh -c "pg_dump -U smluser -d smartcitylab | gzip -c > /tmp/db.sql.gz"
+docker cp sml_postgres:/tmp/db.sql.gz ./smartcitylab-$(date +%F).sql.gz
 ```
 
-For binary dump (faster + smaller for large DBs):
+### 5.2 Database — restore  ⚠️ overwrites data
+Restore into an **EMPTY** `smartcitylab`. The app's `initSchema` + first-boot auto-seed
+create the schema + members, so restoring over a live DB throws `relation already exists` /
+duplicate-key errors. Restore *before* the app first touches the DB:
 ```bash
-docker exec sml_postgres pg_dump -U smluser -Fc smartcitylab > backup-$(date +%F).dump
-docker exec -i sml_postgres pg_restore -U smluser -d smartcitylab --clean < backup-2026-05-16.dump
+docker cp smartcitylab-2026-06-09.sql.gz sml_postgres:/tmp/r.sql.gz
+docker exec sml_postgres sh -c "gunzip -c /tmp/r.sql.gz | psql -U smluser -d smartcitylab"
+```
+If the DB already has data, drop + recreate it first (stop the app so there are no connections):
+```bash
+docker compose stop app
+docker exec sml_postgres psql -U smluser -d postgres \
+  -c "DROP DATABASE smartcitylab;" -c "CREATE DATABASE smartcitylab OWNER smluser;"
+# …then run the restore above, then:  docker compose up -d app
+```
+
+### 5.3 Export ALL volumes (full backup)
+```bash
+mkdir -p backups; TS=$(date +%Y%m%d-%H%M%S)
+# DB → pg_dump
+docker exec -e PGPASSWORD='<POSTGRES_PASSWORD>' sml_postgres \
+  sh -c "pg_dump -U smluser -d smartcitylab | gzip -c > /tmp/db.sql.gz"
+docker cp sml_postgres:/tmp/db.sql.gz "backups/smartcitylab-$TS.sql.gz"
+# app_state + pgadmin_data → tar (one throwaway container; use YOUR volume names from `docker volume ls`)
+docker run --rm -v smlweb_app_state:/a:ro -v smlweb_pgadmin_data:/p:ro -v "$(pwd)/backups:/b" alpine \
+  sh -c "tar czf /b/app_state-$TS.tar.gz -C /a . && tar czf /b/pgadmin_data-$TS.tar.gz -C /p ."
+# uploads is a host bind-mount → just copy the folder:  cp -r ./uploads backups/uploads-$TS
+```
+
+### 5.4 Move the whole stack to another machine (e.g. a Raspberry Pi)
+```bash
+# ── On the SOURCE host ──  run §5.3 to produce backups/*.sql.gz + *.tar.gz
+
+# ── On the TARGET host ──
+# 1) Put the repo + .env + the backups/ files there (git clone, then scp / NAS copy).
+#    .env MUST keep the SAME POSTGRES_PASSWORD as the source (or the app can't connect).
+# 2) Start postgres ONLY → an empty `smartcitylab` is created from POSTGRES_DB:
+docker compose up -d postgres
+docker volume ls                         # ← confirm the REAL volume names on this host!
+# 3) Restore the DB into the empty database:
+docker cp backups/smartcitylab-<TS>.sql.gz sml_postgres:/tmp/r.sql.gz
+docker exec sml_postgres sh -c "gunzip -c /tmp/r.sql.gz | psql -U smluser -d smartcitylab"
+# 4) (optional) restore app_state so existing login tokens keep working — replace <project>:
+docker run --rm -v <project>_app_state:/v -v "$(pwd)/backups:/b" alpine \
+  tar xzf /b/app_state-<TS>.tar.gz -C /v
+# 5) Bring up the rest — init is idempotent and auto-seed skips (members already restored):
+docker compose up -d
+```
+> **Gotcha:** container/volume names are derived from the project-folder name, so they can
+> differ between hosts (`smlweb_…` vs `sml_…`). `No such container: sml_postgres` almost always
+> means the stack isn't up yet on that host — run `docker compose up -d postgres` first, and
+> check `docker ps -a` / `docker volume ls` for the actual names.
+
+### 5.5 Binary dump alternative (faster/smaller for large DBs; supports `--clean`)
+```bash
+docker exec -e PGPASSWORD='<POSTGRES_PASSWORD>' sml_postgres \
+  pg_dump -U smluser -Fc smartcitylab > backup-$(date +%F).dump
+docker exec -i sml_postgres pg_restore -U smluser -d smartcitylab --clean < backup-2026-06-09.dump
 ```
 
 ---
