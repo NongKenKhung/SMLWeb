@@ -72,7 +72,7 @@ app.get('/healthz', (req, res) => res.json({ ok: true, ts: Date.now() }));
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
-    if (req.path === '/healthz' || req.path === '/api/events') return;
+    if (req.path === '/healthz' || req.path === '/api/events' || req.path === '/api/dashboard/events') return;
     const ms = Date.now() - start;
     const ip = req.ip || req.connection?.remoteAddress || '-';
     // Redact bearer token / signature in query string so session tokens don't land in logs
@@ -140,6 +140,12 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'frontend', 'public');
 app.get('/dev', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(PUBLIC_DIR, 'dev.html'));
+});
+
+// Public read-only dashboard — passcode-gated, no account. See /api/dashboard/*.
+app.get('/dashboard', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(PUBLIC_DIR, 'dashboard.html'));
 });
 
 
@@ -356,10 +362,13 @@ function requireAuth(req, res) {
   if (!req.user) { res.status(401).json({ error: 'login required' }); return false; }
   return true;
 }
-// "Admin-or-above" — boss inherits all admin permissions. ใช้แทน `user.role === 'admin'`
-// เพื่อให้ role ใหม่ (boss/owner/etc.) เพิ่มได้ที่จุดเดียว ไม่ต้องไล่แก้ทั้งระบบ
+// 4-tier role: S < M < L < XL.  "Admin-or-above" = L หรือ XL (XL = สูงสุด, เดิม boss).
+// S,M = สิทธิ์สมาชิกทั่วไป. แก้นิยามสิทธิ์ที่จุดเดียว ไม่ต้องไล่ทั้งระบบ.
+function isAdminRole(role) {
+  return role === 'L' || role === 'XL';
+}
 function hasAdminPerms(user) {
-  return !!user && (user.role === 'admin' || user.role === 'boss');
+  return !!user && isAdminRole(user.role);
 }
 function requireAdmin(req, res) {
   if (!requireAuth(req, res)) return false;
@@ -506,13 +515,13 @@ app.post('/api/members', wrap(async (req, res) => {
 }));
 app.put('/api/members/:id', wrap(async (req, res) => {
   if (!requireAdmin(req, res)) return;
-  // เฉพาะ boss เท่านั้นที่ตั้ง/เลื่อนคนเป็น 'boss' ได้ — admin ทั่วไปทำไม่ได้ (กัน privilege escalation)
-  if (req.body && req.body.role === 'boss' && req.user.role !== 'boss') delete req.body.role;
-  // ต้องเหลือผู้ดูแล (admin/boss) อย่างน้อย 1 คน — ห้ามลดบทบาทคนสุดท้ายเป็น member
-  if (req.body && req.body.role && req.body.role !== 'admin' && req.body.role !== 'boss') {
+  // เฉพาะ XL (สูงสุด) เท่านั้นที่ตั้ง/เลื่อนคนเป็น 'XL' ได้ — L ทั่วไปทำไม่ได้ (กัน privilege escalation)
+  if (req.body && req.body.role === 'XL' && req.user.role !== 'XL') delete req.body.role;
+  // ต้องเหลือผู้ดูแล (L/XL) อย่างน้อย 1 คน — ห้ามลดบทบาทคนสุดท้ายเป็น S/M
+  if (req.body && req.body.role && !isAdminRole(req.body.role)) {
     const _cur = await db.getMember(req.params.id);
-    if (_cur && (_cur.role === 'admin' || _cur.role === 'boss') && (await db.countAdmins()) <= 1) {
-      return res.status(400).json({ error: 'ต้องมีผู้ดูแล (admin/boss) อย่างน้อย 1 คน — เปลี่ยนบทบาทคนสุดท้ายไม่ได้' });
+    if (_cur && hasAdminPerms(_cur) && (await db.countAdmins()) <= 1) {
+      return res.status(400).json({ error: 'ต้องมีผู้ดูแล (L/XL) อย่างน้อย 1 คน — เปลี่ยนบทบาทคนสุดท้ายไม่ได้' });
     }
   }
   // Same min-length policy as the self-service /api/me/password — applies
@@ -532,8 +541,8 @@ app.delete('/api/members/:id', wrap(async (req, res) => {
   // Capture snapshot ก่อนลบ ลง audit log
   const victim = await db.getMember(req.params.id);
   // ต้องเหลือผู้ดูแล (admin/boss) อย่างน้อย 1 คน — ห้ามลบคนสุดท้าย
-  if (victim && (victim.role === 'admin' || victim.role === 'boss') && (await db.countAdmins()) <= 1) {
-    return res.status(400).json({ error: 'ต้องมีผู้ดูแล (admin/boss) อย่างน้อย 1 คนในระบบ' });
+  if (victim && hasAdminPerms(victim) && (await db.countAdmins()) <= 1) {
+    return res.status(400).json({ error: 'ต้องมีผู้ดูแล (L/XL) อย่างน้อย 1 คนในระบบ' });
   }
   if (!(await db.deleteMember(req.params.id))) return res.status(404).json({ error: 'not found' });
   await db.logAudit({
@@ -1661,6 +1670,68 @@ function verifySignature(scope, id, sig, exp) {
   try { return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)); } catch { return false; }
 }
 
+// ─── Public Dashboard (passcode-gated, read-only, no member account) ─────────
+// Admin sets a shared passcode (stored hashed in app_settings). A visitor enters
+// it at /dashboard → exchanges it for a short-lived signed token → fetches a
+// SAFE read-only data subset. No login, no member session, no sensitive fields.
+const dashLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,                                   // 30 passcode attempts / 15 min / IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'พยายามใส่รหัสบ่อยเกินไป — ลองใหม่ภายหลัง' },
+});
+function verifyDashToken(req) {
+  const t = String(req.headers['x-dash-token'] || req.query.dt || '');
+  const dot = t.indexOf('.');
+  if (dot < 0) return false;
+  return verifySignature('dash', 'v1', t.slice(dot + 1), t.slice(0, dot));
+}
+// Admin — is a dashboard passcode currently set?
+app.get('/api/dashboard/status', wrap(async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  res.json({ enabled: !!(await db.getSetting('dashboard_passcode_hash', '')) });
+}));
+// Admin — set the passcode (blank string clears/disables it)
+app.put('/api/dashboard/passcode', wrap(async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const code = String(req.body?.passcode ?? '');
+  if (code === '') { await db.setSetting('dashboard_passcode_hash', '', req.user.id); return res.json({ enabled: false }); }
+  if (code.length < 4) return res.status(400).json({ error: 'รหัสต้องยาวอย่างน้อย 4 ตัวอักษร' });
+  await db.setSetting('dashboard_passcode_hash', auth.hashPassword(code), req.user.id);
+  res.json({ enabled: true });
+}));
+// Public — exchange passcode → short-lived (12h) read-only token
+app.post('/api/dashboard/login', dashLimiter, wrap(async (req, res) => {
+  const h = await db.getSetting('dashboard_passcode_hash', '');
+  if (!h) return res.status(403).json({ error: 'ยังไม่เปิดใช้งาน dashboard' });
+  if (!auth.verifyPassword(String(req.body?.passcode ?? ''), h)) {
+    return res.status(401).json({ error: 'รหัสไม่ถูกต้อง' });
+  }
+  const { sig, exp } = signUrl('dash', 'v1', 12 * 3600);
+  res.json({ token: `${exp}.${sig}` });
+}));
+// Public — read-only dashboard data (token-gated)
+app.get('/api/dashboard/data', wrap(async (req, res) => {
+  if (!verifyDashToken(req)) return res.status(401).json({ error: 'unauthorized' });
+  res.json(await db.dashboardData());
+}));
+// Public — SSE push for realtime updates. Dash-token gated; joins the shared
+// broadcast set so it receives the safe {kind:'change', path, method} pings on
+// every mutation. The dashboard refetches /api/dashboard/data when one arrives.
+app.get('/api/dashboard/events', (req, res) => {
+  if (!verifyDashToken(req)) return res.status(401).end();
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+  res.write('retry: 5000\n\n: connected\n\n');
+  sseClients.add(res);
+  const hb = setInterval(() => { try { res.write(': hb\n\n'); } catch {} }, 25000);
+  req.on('close', () => { clearInterval(hb); sseClients.delete(res); });
+});
+
 // Endpoint ที่ frontend ขอ signed URL — ปกป้องด้วย auth header ตามปกติ
 app.get('/api/recordings/:id/sign', wrap(async (req, res) => {
   if (!requireAuth(req, res)) return;
@@ -1680,7 +1751,7 @@ app.get('/api/recordings/:id/stream', wrap(async (req, res) => {
     if (verifySignature('rec', req.params.id, req.query.sig, req.query.exp)) {
       // signature OK → no need to look up user (signed URL = authenticated)
       // We still need to check existence below — record may have been deleted
-      user = { id: '_signed', role: 'admin' };  // bypass owner check below
+      user = { id: '_signed', role: 'XL' };  // bypass owner check below (XL = admin-or-above)
     }
   }
   // 2) Token via header (Authorization: Bearer ...) — preferred for SPA fetch
