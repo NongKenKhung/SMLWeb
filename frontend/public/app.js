@@ -373,8 +373,8 @@ function pointsPillHtml(t) {
 function memberById(id)  { return state.members.find(m => m.id === id); }
 function groupById(id)   { return state.groups.find(g => g.id === id); }
 // boss inherits admin permissions — รวมทั้ง isAdmin() ใน UI (เมนู/ปุ่ม/etc)
-function isAdmin()       { return state.user && (state.user.role === 'admin' || state.user.role === 'boss'); }
-function isBoss()        { return state.user && state.user.role === 'boss'; }
+function isAdmin()       { return state.user && (state.user.role === 'L' || state.user.role === 'XL'); }   // L,XL = ผู้ดูแล
+function isBoss()        { return state.user && state.user.role === 'XL'; }   // XL = สูงสุด
 function isMyTask(t)     { return state.user && t.assignees.some(a => a.id === state.user.id); }
 function isMyLeader(t)   { return state.user && t.assignees.some(a => a.id === state.user.id && a.task_role === 'leader'); }
 function isMySupreme(t)  { return state.user && t.assignees.some(a => a.id === state.user.id && a.is_supreme === 1); }
@@ -2740,7 +2740,7 @@ async function openTaskSheet(id) {
                 ${avatarHtml(a, 32)}
                 <div class="min-w-0 flex-1">
                   <div class="text-sm font-medium truncate">${escapeHtml(a.name)}${a.id===state.user.id?' <span class="text-[10px] text-indigo-600">(คุณ)</span>':''}</div>
-                  <div class="text-[11px] text-slate-500 truncate">${escapeHtml(a.role==='boss'?'Boss':(a.role==='admin'?'Admin':'Member'))}${a.points_share?' · '+a.points_share+' pts':''}</div>
+                  <div class="text-[11px] text-slate-500 truncate">${escapeHtml(a.role)}${a.points_share?' · '+a.points_share+' pts':''}</div>
                 </div>
               </div>
             `).join('')}
@@ -3193,7 +3193,7 @@ function attachMentionAutocomplete(textarea) {
             ? `<img class="mention-avatar" src="${escapeHtml(m.avatar_url)}" alt="">`
             : `<span class="mention-avatar" style="background:${escapeHtml(m.color || '#6366f1')}">${escapeHtml(ini)}</span>`;
           return `<button type="button" class="mention-item ${i === activeIdx ? 'active' : ''}" data-mention-id="${escapeHtml(m.id)}" data-mention-name="${escapeHtml(m.name)}">
-            ${avatar}<span class="mention-name">${escapeHtml(m.name)}</span>${m.role === 'boss' ? '<span class="mention-role mention-role-boss">boss</span>' : (m.role === 'admin' ? '<span class="mention-role">admin</span>' : '')}
+            ${avatar}<span class="mention-name">${escapeHtml(m.name)}</span>${m.role === 'XL' ? '<span class="mention-role mention-role-boss">XL</span>' : (m.role === 'L' ? '<span class="mention-role">L</span>' : '')}
           </button>`;
         }).join('')
       : `<div class="mention-empty">— ไม่พบสมาชิก —</div>`;
@@ -4700,8 +4700,7 @@ function meetingFormFields(t = {}) {
 }
 
 function memberFormFields(m = {}) {
-  const roleLabels = { member: 'Member', admin: 'Admin', boss: 'Boss' };
-  const role = ['member','admin','boss'].map(r => `<option value="${r}" ${r===m.role?'selected':''}>${roleLabels[r]}</option>`).join('');
+  const role = ['S','M','L','XL'].map(r => `<option value="${r}" ${r===m.role?'selected':''}>${r}</option>`).join('');
   return `
     <div>
       <label class="ios-label">ชื่อ *</label>
@@ -4731,7 +4730,7 @@ function groupFormFields(g = {}) {
   const leaderOpts = canPickLeader
     ? `<select class="ios-select" name="leader_id">
          <option value="">— ไม่มีหัวหน้า —</option>
-         ${state.members.map(m => `<option value="${m.id}" ${m.id===g.leader_id?'selected':''}>${escapeHtml(m.name)} (${m.role==='boss'?'Boss':(m.role==='admin'?'Admin':'Member')})</option>`).join('')}
+         ${state.members.map(m => `<option value="${m.id}" ${m.id===g.leader_id?'selected':''}>${escapeHtml(m.name)} (${escapeHtml(m.role)})</option>`).join('')}
        </select>`
     : `<div class="text-sm text-slate-700">${state.user.name} <span class="text-[11px] text-slate-500">(คุณจะเป็นหัวหน้า Group โดยอัตโนมัติ)</span></div>`;
 
@@ -5305,7 +5304,7 @@ function openMeetingModal(t) {
 
 function openMemberModal(m) {
   const editing = !!m && !!m.id;
-  openModal(editing ? 'แก้ไขสมาชิก' : 'เพิ่มสมาชิก', memberFormFields(m || { role:'member' }), async data => {
+  openModal(editing ? 'แก้ไขสมาชิก' : 'เพิ่มสมาชิก', memberFormFields(m || { role:'S' }), async data => {
     if (editing) await api.put('/api/members/' + m.id, data);
     else await api.post('/api/members', data);
     toast(editing ? 'บันทึกแล้ว' : 'เพิ่มสมาชิกแล้ว', 'success');
@@ -5785,7 +5784,7 @@ function openAllocateModal(t) {
         ${avatarHtml(a, 32)}
         <div class="flex-1 min-w-0 truncate">
           <div class="text-sm truncate font-medium">${escapeHtml(a.name)}${isMine ? ' <span class="text-[10px] text-indigo-600">(คุณ)</span>' : ''}</div>
-          <div class="text-[10px] text-slate-500 flex items-center gap-1.5">${escapeHtml(a.role==='boss'?'Boss':(a.role==='admin'?'Admin':'Member'))} ${status}</div>
+          <div class="text-[10px] text-slate-500 flex items-center gap-1.5">${escapeHtml(a.role)} ${status}</div>
         </div>
         ${editable
           ? `<input type="number" min="0" name="alloc_${a.id}" value="${value}" class="ios-input alloc-input" style="width:84px">`
@@ -5979,7 +5978,7 @@ function renderPeople() {
           <div class="flex-1 min-w-0">
             <div class="font-semibold truncate">${escapeHtml(m.name)} ${isMe?'<span class="text-[10px] text-indigo-600">(คุณ)</span>':''}${onLeaveNow ? ' <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold align-middle">🏖️ ลา</span>' : ''}</div>
             <div class="flex items-center gap-2 mt-0.5 flex-wrap">
-              <span class="role-badge ${m.role} text-[10px] px-1.5 py-0.5 rounded-full font-semibold uppercase">${m.role}</span>
+              <span class="role-badge ${m.role} text-[10px] px-2.5 py-0.5 rounded-full font-semibold uppercase min-w-[2.2rem] inline-block text-center">${m.role}</span>
               ${m.email ? `<span class="text-[11px] text-slate-500 truncate">${escapeHtml(m.email)}</span>` : ''}
               ${m.phone ? `<a href="tel:${escapeHtml(m.phone)}" class="text-[11px] text-slate-500 hover:underline" onclick="event.stopPropagation()">📞 ${escapeHtml(m.phone)}</a>` : ''}
             </div>
@@ -6412,7 +6411,7 @@ function openMemberDetail(memberId) {
         <div class="flex-1 min-w-0">
           <h2 class="text-xl font-semibold leading-tight truncate">${escapeHtml(m.name)}${isMe?' <span class="text-[11px] text-indigo-600">(คุณ)</span>':''}</h2>
           <div class="flex items-center gap-2 mt-1 flex-wrap">
-            <span class="role-badge ${m.role} text-[10px] px-1.5 py-0.5 rounded-full font-semibold uppercase">${m.role}</span>
+            <span class="role-badge ${m.role} text-[10px] px-2.5 py-0.5 rounded-full font-semibold uppercase min-w-[2.2rem] inline-block text-center">${m.role}</span>
             ${m.email ? `<a href="mailto:${escapeHtml(m.email)}" class="text-[11px] text-slate-500 hover:underline truncate">✉️ ${escapeHtml(m.email)}</a>` : ''}
             ${m.phone ? `<a href="tel:${escapeHtml(m.phone)}" class="text-[11px] text-slate-500 hover:underline">📞 ${escapeHtml(m.phone)}</a>` : ''}
           </div>
@@ -6519,9 +6518,9 @@ function renderProfile() {
   document.getElementById('me-name').textContent = state.user.name;
   document.getElementById('me-email').textContent = state.user.email || '';
   const rb = document.getElementById('me-role-badge');
-  rb.textContent = state.user.role === 'boss' ? 'Boss' : (state.user.role === 'admin' ? 'Admin' : 'Member');
+  rb.textContent = state.user.role;   // S / M / L / XL
   // Boss badge ใช้สีต่างจาก admin (ทอง = สิทธิ์สูงสุด)
-  rb.classList.toggle('role-badge-boss', state.user.role === 'boss');
+  rb.classList.toggle('role-badge-boss', state.user.role === 'XL');
   rb.className = `inline-block mt-1 text-xs px-2 py-0.5 rounded-full role-badge ${state.user.role}`;
   const me = state.stats?.scoreboard.find(r => r.member.id === state.user.id) || {};
   document.getElementById('me-pts').textContent = `${me.points || 0}`;
@@ -6530,6 +6529,7 @@ function renderProfile() {
   document.getElementById('me-all').textContent = me.total_tasks || 0;
   const _emEl = document.getElementById('me-email-optin');
   if (_emEl) _emEl.checked = state.user.email_opt_in !== 0;   // default (undefined/1) = เปิด
+  _syncDashCard();   // dashboard passcode card (admin only)
   document.getElementById('btn-manage-groups').classList.toggle('hidden', !(isAdmin() || leadsAnyGroup()));
   // System settings — admin only
   const sysBtn = document.getElementById('btn-system-settings');
@@ -6660,6 +6660,28 @@ document.getElementById('me-email-optin')?.addEventListener('change', async (e) 
     if (state.user) state.user.email_opt_in = enabled ? 1 : 0;
     toast(enabled ? 'เปิดรับอีเมลแล้ว' : 'ปิดรับอีเมลแล้ว', 'success');
   } catch (err) { toast(err.message, 'error'); e.target.checked = !enabled; }
+});
+// Dashboard passcode (admin only) — shared read-only dashboard at /dashboard
+async function _syncDashCard() {
+  const card = document.getElementById('me-dash-card');
+  if (!card) return;
+  card.classList.toggle('hidden', !isAdmin());
+  if (!isAdmin()) return;
+  try {
+    const s = await api.get('/api/dashboard/status');
+    const el = document.getElementById('me-dash-status');
+    if (el) el.textContent = s.enabled ? '· เปิดอยู่' : '· ปิดอยู่';
+  } catch {}
+}
+document.getElementById('me-dash-save')?.addEventListener('click', async () => {
+  const inp = document.getElementById('me-dash-pass');
+  const code = (inp?.value || '').trim();
+  try {
+    const r = await api.put('/api/dashboard/passcode', { passcode: code });
+    if (inp) inp.value = '';
+    toast(r.enabled ? 'ตั้งรหัส Dashboard แล้ว' : 'ปิด Dashboard แล้ว', 'success');
+    _syncDashCard();
+  } catch (err) { toast(err.message, 'error'); }
 });
 document.getElementById('btn-manage-groups').onclick = () => openGroupListModal();
 document.getElementById('btn-extensions').onclick = () => openExtensionsModal();
@@ -7526,8 +7548,8 @@ function _memberHaystack(m) {
   return [
     m.prefix || '', m.name, m.email || '', m.phone || '',
     m.role,
-    m.role === 'boss' ? 'หัวหน้า boss ผู้บริหารสูงสุด'
-      : (m.role === 'admin' ? 'แอดมิน ผู้ดูแล admin' : 'สมาชิก member'),
+    m.role === 'XL' ? 'XL ผู้บริหารสูงสุด'
+      : (m.role === 'L' ? 'L ผู้ดูแล' : (m.role === 'M' ? 'M ระดับกลาง' : 'S สมาชิก')),
     m.color || '',
     myConns,
   ].filter(Boolean).join(' ');
@@ -7794,7 +7816,7 @@ function _renderOverviewMembers(q) {
           <span class="font-medium text-sm truncate">${escapeHtml(m.name)}${isMe ? ' <span class="text-[10px] text-indigo-600">(คุณ)</span>' : ''}</span>
         </div>
         <div class="ov-cell ov-status">
-          <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${m.role==='boss'?'bg-yellow-100 text-yellow-800 ring-1 ring-yellow-400':(m.role==='admin'?'bg-amber-100 text-amber-700':'bg-slate-100 text-slate-600')}">${m.role}</span>
+          <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${m.role==='XL'?'bg-yellow-100 text-yellow-800 ring-1 ring-yellow-400':(m.role==='L'?'bg-amber-100 text-amber-700':'bg-slate-100 text-slate-600')}">${escapeHtml(m.role)}</span>
         </div>
         <div class="ov-cell text-xs text-slate-600 truncate">${escapeHtml(m.email || '')}</div>
         <div class="ov-cell text-xs">📋 ${myTasks.length}</div>
@@ -7820,14 +7842,15 @@ function _renderOverviewMembers(q) {
     .map(g => [g.id, g.name]);
   const controls = [
     _ovSelect('memberSort', _overviewState.memberSort, [
-      ['role',        'Sort: บทบาท (Boss/Admin/Member)'],
+      ['role',        'Sort: บทบาท (XL/L/M/S)'],
       ['points_desc', 'Sort: Points มาก→น้อย'],
       ['name',        'Sort: ชื่อ'],
     ]),
     _ovMultiFilter('memberFilter', _overviewState.memberFilter, [
-      ['boss',   'Boss'],
-      ['admin',  'Admin'],
-      ['member', 'Member'],
+      ['XL', 'XL'],
+      ['L',  'L'],
+      ['M',  'M'],
+      ['S',  'S'],
     ], 'Role'),
     _ovMultiFilter('memberGroupFilter', _overviewState.memberGroupFilter, groupOpts, 'Group'),
   ].join('');
