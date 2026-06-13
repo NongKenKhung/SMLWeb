@@ -9,7 +9,7 @@
 //
 // Bump CACHE_VERSION whenever you ship a breaking change so old SW gets evicted.
 
-const CACHE_VERSION = 'sml-v214-2026-06-02';
+const CACHE_VERSION = 'sml-v221-2026-06-02';
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const AUDIO_CACHE   = `${CACHE_VERSION}-audio`;
@@ -56,8 +56,10 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  // SSE stream — never cache (long-running, push-only)
-  if (url.pathname === '/api/events') return;
+  // SSE streams — never cache/intercept (long-running, push-only). Letting the
+  // SW's networkFirst try to cache.put() an endless stream holds the connection
+  // open forever → exhausts the per-origin connection pool → the whole app hangs.
+  if (url.pathname === '/api/events' || url.pathname === '/api/dashboard/events') return;
 
   // Embed-mode iframe URLs — bypass SW entirely. We always want a fresh HTML
   // shell so any change to the inline embed CSS / script applies immediately.
@@ -100,11 +102,16 @@ async function cacheFirst(req, cacheName) {
   }
 }
 
+// Never cache streaming responses (SSE). Caching an endless text/event-stream
+// keeps the connection open forever → exhausts the per-origin connection pool →
+// the whole site stops loading. Belt-and-suspenders on top of the path bypass above.
+function isStream(res){ return (res.headers.get('content-type') || '').includes('text/event-stream'); }
+
 async function networkFirst(req, cacheName) {
   const cache = await caches.open(cacheName);
   try {
     const res = await fetch(req);
-    if (res.ok) cache.put(req, res.clone());
+    if (res.ok && !isStream(res)) cache.put(req, res.clone());
     return res;
   } catch (e) {
     const cached = await cache.match(req);
@@ -120,7 +127,7 @@ async function staleWhileRevalidate(req, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(req);
   const fetchPromise = fetch(req).then(res => {
-    if (res.ok) cache.put(req, res.clone());
+    if (res.ok && !isStream(res)) cache.put(req, res.clone());
     return res;
   }).catch(() => cached);
   return cached || fetchPromise;
