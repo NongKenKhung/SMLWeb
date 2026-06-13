@@ -43,10 +43,14 @@ docker compose logs -f app              # tail the main app
 
 ### Default logins (PIN: `1234`)
 
-The seed script (`seed.js`) creates a mix of **admin / group-leader / member**
-accounts for local development — open `seed.js` or `SELECT name, role FROM members`
-in pgAdmin to see the full list. The login screen no longer advertises specific
-demo names; type any seeded username plus PIN `1234` to sign in.
+The seed script (`seed.js`) creates the lab members for local development — open
+`seed.js` or `SELECT name, role FROM members` in pgAdmin to see the full list. The
+login screen no longer advertises specific demo names; type any seeded username
+plus PIN `1234` to sign in.
+
+**Roles are a 4-tier ladder: `S` < `M` < `L` < `XL`.** `L` and `XL` carry admin
+permissions (`XL` is the top tier, ≈ the former "boss"); `S`/`M` are regular
+members. Older databases migrate automatically on boot (`member→S, admin→L, boss→XL`).
 
 ### Quick Start — without Docker
 
@@ -151,6 +155,28 @@ logged in as admin (`🛠️ Dev & Test Tools`).
 | 🎛️ **Site Layout** | Edit the live UI: drag widgets, resize columns + rows, toggle visibility per widget — for every page. **✏️ Edit on Preview** mode embeds the real app in an iframe with on-widget handles; changes round-trip via `postMessage` and apply instantly without saving. |
 | 🔧 **Settings** | System settings (admin toggles, SMTP enable, etc). |
 | 👥 **Members** | Member CRUD UI (CRUD + role change). |
+
+---
+
+## Public dashboard (`/dashboard`)
+
+A read-only, **passcode-gated** wall/kiosk dashboard — share it with stakeholders who
+need to glance at what's happening **without a member account**.
+
+- **Access**: an admin sets a shared passcode in **Profile → 📊 Dashboard สาธารณะ**
+  (stored hashed in `app_settings`; blank = disabled). A visitor opens `/dashboard`,
+  enters the passcode, and gets a short-lived signed read-only token (12 h, rate-limited).
+- **Shows "this period" (≈ next 14 days)** — what to deliver / know *now*, not progress:
+  alert counts (overdue · due in 7 days · meetings · on-leave today), 📤 tasks due,
+  📆 meetings, 👥 team (leaves + reminders). No points / budget / PINs.
+- **Realtime**: pushes over SSE (`/api/dashboard/events`) — updates the instant any data
+  changes; a live clock + "🟢 เชื่อมต่อสด" indicator show it is live.
+- **Kiosk-friendly**: fits one viewport (no page scroll — panels scroll internally),
+  light/dark theme toggle (follows the OS, remembers the choice).
+
+> The service worker deliberately bypasses `/api/dashboard/events` (and `/api/events`) and
+> never caches `text/event-stream` — caching an endless stream exhausts the browser's
+> per-origin connection pool and hangs the whole site.
 
 ---
 
