@@ -858,6 +858,14 @@ body { color: var(--text, #0f172a); -webkit-font-smoothing: antialiased; overscr
 .role-badge.member { background:#e0f2fe; color:#0369a1; }
 /* profile role badge — when state.user.role === 'boss', JS toggles .role-badge-boss */
 .role-badge-boss   { background: linear-gradient(135deg,#fde047,#f59e0b) !important; color:#78350f !important; box-shadow: 0 0 0 1px rgba(245,158,11,0.4); }
+/* 4-tier role badge colours (S<M<L<XL): XL=gold(boss), L=blue(admin), M=indigo, S=slate */
+.role-badge.XL, .tp-hero-role.role-XL { background: linear-gradient(135deg,#fde047,#f59e0b); color:#78350f; }
+.role-badge.L,  .tp-hero-role.role-L  { background:#dbeafe; color:#1d4ed8; }
+.role-badge.M,  .tp-hero-role.role-M  { background:#e0e7ff; color:#4338ca; }
+.role-badge.S,  .tp-hero-role.role-S  { background:#f1f5f9; color:#475569; }
+.theme-dark .role-badge.L { background:rgba(59,130,246,.25); color:#bfdbfe; }
+.theme-dark .role-badge.M { background:rgba(99,102,241,.25); color:#c7d2fe; }
+.theme-dark .role-badge.S { background:var(--bg-elevated); color:var(--text); }
 
 /* leader/supreme badges */
 .task-role-badge {
