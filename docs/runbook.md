@@ -331,3 +331,29 @@ docker compose logs --tail 500 app | grep "invalid credentials"
 # Audit log (file-based copy)
 docker exec sml_app cat /data/.tokens.json | jq 'keys | length'
 ```
+
+---
+
+## 15. Public dashboard (`/dashboard`) + stuck Service Worker
+
+Passcode-gated **read-only** dashboard for stakeholders (no member account). An admin
+sets the passcode in the app: **Profile → 📊 Dashboard สาธารณะ** (stored hashed in
+`app_settings`; blank = disabled), then shares `<host>/dashboard`. It shows "this
+period" (≈ 14 days): tasks due, meetings, leaves/reminders — no points/budget/PINs.
+
+```bash
+# Is a dashboard passcode set? (read-only check)
+docker exec sml_app node -e "require('/app/backend/db').getSetting('dashboard_passcode_hash','').then(h=>console.log('enabled:',!!h)).then(()=>process.exit(0))"
+```
+
+**Realtime** uses SSE at `/api/dashboard/events`. `sw.js` **must** bypass this path and
+never cache `text/event-stream` — otherwise it caches the endless stream, holds the
+connection open, and exhausts the browser's per-origin pool until the whole site stops
+loading ("เข้าเว็บไม่ได้ทุกครั้งที่ deploy"). Fixed in SW `v221`+.
+
+**Recover a browser stuck on an old/bad SW:**
+1. Close **all** tabs of the origin → reopen. The new `sw.js` activates
+   (`skipWaiting` + `clients.claim`) and evicts old caches.
+2. Still stuck → DevTools → **Application → Service Workers → Unregister**, then
+   **Storage → Clear site data**, reload.
+3. Confirm the server itself is healthy from an **Incognito** window (no SW).
