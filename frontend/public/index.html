@@ -64,7 +64,7 @@
       height: 100vh !important;
     }
   </style>
-  <link rel="stylesheet" href="style.css?v=214" />
+  <link rel="stylesheet" href="style.css?v=215" />
   <!-- flatpickr — replaces native date / datetime inputs so the picker shows
        dd/mm/yyyy + 24-hour time on every browser (native pickers follow OS
        locale and would otherwise display mm/dd/yyyy or AM/PM on English OS). -->
@@ -474,6 +474,15 @@
             </label>
             <div class="text-[11px] text-slate-500 mt-1">ปิด = ไม่รับอีเมลเชิญประชุม / แจ้งเตือนจากระบบ</div>
           </div>
+          <!-- Dashboard สาธารณะ (admin only) -->
+          <div class="bg-white rounded-2xl ios-card overflow-hidden p-3 mb-2 hidden" id="me-dash-card">
+            <div class="text-sm font-medium mb-1">📊 Dashboard สาธารณะ <span class="text-[11px] font-normal text-slate-400" id="me-dash-status"></span></div>
+            <div class="text-[11px] text-slate-500 mb-2">ตั้งรหัสให้คนนอกดูภาพรวมงาน (อ่านอย่างเดียว) ที่ <a href="/dashboard" target="_blank" class="text-indigo-600 underline">/dashboard</a> — เว้นว่างแล้วบันทึก = ปิด</div>
+            <div class="flex items-center gap-2">
+              <input type="password" id="me-dash-pass" class="ios-input flex-1" placeholder="ตั้ง/เปลี่ยนรหัส (≥4 ตัว)" autocomplete="new-password">
+              <button class="ios-btn-secondary text-sm whitespace-nowrap" id="me-dash-save">บันทึก</button>
+            </div>
+          </div>
           <div class="bg-white rounded-2xl ios-card overflow-hidden">
             <button class="ios-list-row w-full text-left" id="btn-change-pw"><span>🔑 เปลี่ยน PIN</span><span class="text-slate-400">›</span></button>
             <button class="ios-list-row w-full text-left" id="btn-manage-leaves"><span>🏖️ จัดการวันลาของฉัน</span><span class="text-slate-400">›</span></button>
@@ -749,7 +758,7 @@
 
   <div id="toast" class="fixed bottom-24 md:bottom-6 left-0 right-0 flex flex-col items-center gap-2 pointer-events-none px-4" style="z-index: 70"></div>
 
-  <script src="app.js?v=213"></script>
+  <script src="app.js?v=218"></script>
 
   <!-- PWA: register service worker. Production-only so dev iterations aren't
        fighting a stale cache. Bump CACHE_VERSION in sw.js to force update.
