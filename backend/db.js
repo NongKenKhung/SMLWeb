@@ -44,9 +44,10 @@ const VALID_STATUS = [
   'in_progress', 'delivery', 'maintenance',
   'completed', 'on_hold', 'cancelled', 'archived',
 ];
-// 'boss' = role สูงสุด (เหนือ admin). มีสิทธิ์เท่า admin ทุกประการใน permission check
-// (ดู hasAdminPerms() ใน server.js) — แตกต่างกันแค่ label/badge ใน UI
-const VALID_ROLE = ['boss', 'admin', 'member'];
+// 4-tier role: S < M < L < XL.  L,XL = "admin-or-above" (สิทธิ์ผู้ดูแล); XL = สูงสุด (เดิม boss).
+// M = ระดับกลาง (ปัจจุบันสิทธิ์เท่า member/S). ดู hasAdminPerms()/isAdminRole() ใน server.js
+// Migration จาก scheme เดิม (boss/admin/member → XL/L/S) อยู่ใน seedDefaults()
+const VALID_ROLE = ['XL', 'L', 'M', 'S'];
 const VALID_TASK_ROLE = ['leader', 'member'];
 const VALID_KIND = ['task', 'meeting'];
 const VALID_LOCATION_TYPE = ['', 'online', 'onsite_internal', 'onsite_external'];
@@ -116,7 +117,7 @@ async function initSchema() {
     CREATE TABLE IF NOT EXISTS members (
       id            TEXT PRIMARY KEY,
       name          TEXT NOT NULL,
-      role          TEXT NOT NULL DEFAULT 'member',
+      role          TEXT NOT NULL DEFAULT 'S',
       password_hash TEXT NOT NULL DEFAULT '',
       email         TEXT NOT NULL DEFAULT '',
       phone         TEXT NOT NULL DEFAULT '',
@@ -486,6 +487,10 @@ async function initSchema() {
   // Retired status migration (kept for parity with SQLite version)
   await exec(`UPDATE tasks       SET status = 'on_hold' WHERE status = 'pending'`);
   await exec(`UPDATE task_groups SET status = 'on_hold' WHERE status = 'pending'`);
+  // Role rename → 4-tier S/M/L/XL (idempotent): boss→XL, admin→L, member→S
+  await exec(`UPDATE members SET role = 'XL' WHERE role = 'boss'`);
+  await exec(`UPDATE members SET role = 'L'  WHERE role = 'admin'`);
+  await exec(`UPDATE members SET role = 'S'  WHERE role = 'member'`);
 }
 
 // First-run-only data seeding. Skipped when migrating from SQLite (otherwise
@@ -524,10 +529,10 @@ async function init() {
 }
 
 // ===== Members =====
-// Sort: boss first (0), admins (1), then members (2); within each role, oldest first.
+// Sort: XL first (0), L (1), M (2), then S (3); within each role, oldest first.
 async function listMembers() {
   return q(`SELECT id, prefix, name, role, email, phone, color, avatar_url, created_at FROM members
-            ORDER BY (CASE role WHEN 'boss' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END), created_at ASC`);
+            ORDER BY (CASE role WHEN 'XL' THEN 0 WHEN 'L' THEN 1 WHEN 'M' THEN 2 ELSE 3 END), created_at ASC`);
 }
 async function getMember(id) {
   return q1('SELECT id, prefix, name, role, email, phone, color, avatar_url, email_opt_in, created_at FROM members WHERE id = $1', [id]);
@@ -536,7 +541,7 @@ async function getMemberFull(id) {
   return q1('SELECT * FROM members WHERE id = $1', [id]);
 }
 async function countAdmins() {
-  const r = await q1("SELECT COUNT(*)::int AS n FROM members WHERE role IN ('admin','boss')");
+  const r = await q1("SELECT COUNT(*)::int AS n FROM members WHERE role IN ('L','XL')");
   return r ? r.n : 0;
 }
 async function findMemberByName(name) {
@@ -547,7 +552,7 @@ async function createMember({ name, prefix, role, password_hash, email, phone, c
     id: uid(),
     name: String(name || '').trim(),
     prefix: String(prefix || '').trim(),
-    role: VALID_ROLE.includes(role) ? role : 'member',
+    role: VALID_ROLE.includes(role) ? role : 'S',
     password_hash: password_hash || '',
     email: String(email || '').trim(),
     phone: String(phone || '').trim(),
@@ -2371,7 +2376,7 @@ async function createWhiteboard(name, created_by, opts = {}) {
 // ACL helpers for whiteboard
 async function whiteboardCanAccess(boardId, memberId, memberRole) {
   if (!boardId || !memberId) return false;
-  if (memberRole === 'admin') return true;
+  if (memberRole === 'L' || memberRole === 'XL') return true;   // admin-or-above
   const board = await q1('SELECT visibility, created_by FROM whiteboards WHERE id = $1', [boardId]);
   if (!board) return false;
   if (board.visibility === 'public') return true;       // public = ทุก member เข้าได้
@@ -2667,6 +2672,61 @@ async function reset() {
     RESTART IDENTITY CASCADE`);
 }
 
+// ── Public dashboard (read-only, passcode-gated) — SAFE SUBSET ONLY ──────────
+// Returns project/group progress + task list + upcoming deadlines. Deliberately
+// excludes points/budget/PINs and any per-member private data. Used by
+// GET /api/dashboard/data (no member auth — gated by a shared passcode token).
+async function dashboardData() {
+  // Focus: what must be delivered / known THIS period (≈ next 2 weeks). No progress.
+  const d0 = nowIso().slice(0, 10);                            // today YYYY-MM-DD
+  const addDays = n => { const dt = new Date(d0 + 'T00:00:00Z'); dt.setUTCDate(dt.getUTCDate() + n); return dt.toISOString().slice(0, 10); };
+  const d7 = addDays(7), d14 = addDays(14);
+  const dd = v => (v ? String(v).slice(0, 10) : '');          // date part of a TEXT date/datetime
+
+  const rows = await q(`
+    SELECT t.title, t.status, t.deadline, t.priority, t.kind,
+           COALESCE(t.deadline, t.start_date) AS when_at, g.name AS group_name
+    FROM tasks t LEFT JOIN task_groups g ON g.id = t.group_id
+    WHERE t.deleted_at IS NULL AND t.status NOT IN ('completed','cancelled')`);
+
+  // 📤 งานที่ต้องส่งช่วงนี้ — open tasks with a deadline within the window (incl. overdue)
+  const due = rows
+    .filter(t => t.kind === 'task' && t.deadline && dd(t.deadline) <= d14)
+    .sort((a, b) => String(a.deadline).localeCompare(String(b.deadline)))
+    .map(t => ({ title: t.title, sub: t.group_name, status: t.status, priority: t.priority, date: t.deadline }));
+
+  // 📆 ประชุม/นัดหมาย — meetings from today to +14d
+  const meetings = rows
+    .filter(t => t.kind === 'meeting' && t.when_at && dd(t.when_at) >= d0 && dd(t.when_at) <= d14)
+    .sort((a, b) => String(a.when_at).localeCompare(String(b.when_at)))
+    .map(t => ({ title: t.title, sub: t.group_name, date: t.when_at }));
+
+  // 👥 ทีม — leaves overlapping the window + reminders within it
+  const remRows = await q(`
+    SELECT r.text, r.date, m.name AS member_name FROM reminders r JOIN members m ON m.id = r.member_id
+    WHERE r.date >= $1 AND r.date <= $2 ORDER BY r.date ASC`, [d0, d14]);
+  const lvRows = await q(`
+    SELECT l.start_at, l.end_at, l.reason, m.name AS member_name FROM leaves l JOIN members m ON m.id = l.member_id
+    WHERE l.end_at >= $1 AND l.start_at <= $2 ORDER BY l.start_at ASC`, [d0, d14]);
+  const team = [
+    ...lvRows.map(r => ({ type: 'leave', date: r.start_at, end: r.end_at, title: r.member_name, sub: r.reason || 'ลา' })),
+    ...remRows.map(r => ({ type: 'reminder', date: r.date, title: r.text || '(เตือนความจำ)', sub: r.member_name })),
+  ].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+  return {
+    generated_at: nowIso(),
+    counts: {
+      overdue:  due.filter(t => dd(t.date) < d0).length,
+      due7:     due.filter(t => dd(t.date) >= d0 && dd(t.date) <= d7).length,
+      meetings: meetings.length,
+      onleave:  lvRows.filter(l => dd(l.start_at) <= d0 && dd(l.end_at) >= d0).length,
+    },
+    due,
+    meetings,
+    team,
+  };
+}
+
 async function close() {
   try { await pool.end(); } catch {}
 }
@@ -2677,6 +2737,7 @@ module.exports = {
   listMembers, getMember, getMemberFull, findMemberByName,
   createMember, updateMember, setMemberPassword, setMemberAvatar, setMemberEmailPref, deleteMember, countAdmins,
   listReminders, createReminder, deleteReminder,
+  dashboardData,
   listGroups, getGroup, createGroup, updateGroup, deleteGroup, isGroupLeader,
   softDeleteGroup, restoreGroup, purgeGroup, listTrashedGroups,
   listTasks, getTask, createTask, updateTask, deleteTask, bumpIcsSequence,
