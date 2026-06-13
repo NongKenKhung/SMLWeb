@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#4f46e5">
+  <title>งานช่วงนี้ — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script>/* set theme before paint */(function(){try{var t=localStorage.getItem('dashTheme')||((window.matchMedia&&matchMedia('(prefers-color-scheme:dark)').matches)?'dark':'light');document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <style>
+    :root{
+      --bg:#eaeef4; --card:#ffffff; --card2:#f8fafc; --ink:#0f172a; --ink2:#334155;
+      --muted:#64748b; --line:#e6eaf1; --line2:#eef2f7;
+      --accent:#4f46e5; --accent2:#6366f1; --accent-ink:#4338ca;
+      --ok:#10b981; --warn:#f59e0b; --danger:#ef4444;
+      --shadow:0 1px 2px rgba(15,23,42,.04), 0 10px 30px -14px rgba(15,23,42,.18);
+      --shadow-sm:0 1px 2px rgba(15,23,42,.05);
+    }
+    html[data-theme="dark"]{
+      --bg:#0b1220; --card:#161f2e; --card2:#1c2838; --ink:#e8eef7; --ink2:#cbd5e1;
+      --muted:#8595ad; --line:#26344a; --line2:#1e2a3d;
+      --accent:#818cf8; --accent2:#a5b4fc; --accent-ink:#c7d2fe;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 14px 40px -16px rgba(0,0,0,.7);
+      --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%}
+    body{font-family:'Sarabun',sans-serif;background:
+        radial-gradient(900px 500px at 100% -10%, color-mix(in srgb,var(--accent) 14%, transparent), transparent),
+        var(--bg);
+      color:var(--ink);-webkit-font-smoothing:antialiased;transition:background-color .25s,color .25s}
+    h1,h2,h3{font-family:'Kanit',sans-serif;letter-spacing:-.01em}
+    .muted{color:var(--muted)}
+    .pill{display:inline-flex;align-items:center;font-size:.7rem;font-weight:600;padding:.18rem .6rem;border-radius:999px;white-space:nowrap;line-height:1.3}
+    .iconbtn{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:.7rem;
+      border:1px solid var(--line);background:var(--card);color:var(--ink2);cursor:pointer;font-size:1.05rem;transition:.15s}
+    .iconbtn:hover{border-color:var(--accent);color:var(--accent)}
+    .clock{font-family:'Kanit';font-weight:600;font-size:1.1rem;font-variant-numeric:tabular-nums;color:var(--accent-ink);
+      background:var(--card);border:1px solid var(--line);border-radius:.7rem;padding:.38rem .75rem;letter-spacing:.04em;min-width:96px;text-align:center}
+
+    /* ── Gate ── */
+    #gate{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.2rem}
+    .gate-card{background:var(--card);border:1px solid var(--line);border-radius:1.4rem;padding:2.2rem 1.7rem;
+      width:100%;max-width:390px;text-align:center;box-shadow:var(--shadow);animation:rise .4s ease both}
+    @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+    .gate-card .logo{width:60px;height:60px;border-radius:1.1rem;background:linear-gradient(135deg,var(--accent),var(--accent2));
+      color:#fff;font-family:'Kanit';font-weight:700;font-size:1.35rem;display:flex;align-items:center;justify-content:center;
+      margin:0 auto 1rem;box-shadow:0 8px 20px -6px color-mix(in srgb,var(--accent) 60%, transparent)}
+    .gate-card h1{font-size:1.45rem;margin-bottom:.25rem}
+    .gate-card .gp{font-size:.86rem;color:var(--muted);margin-bottom:1.4rem}
+    .gate-card input{width:100%;padding:.85rem 1rem;border:1.5px solid var(--line);border-radius:.8rem;background:var(--card2);
+      color:var(--ink);font-size:1.05rem;text-align:center;letter-spacing:.16em;font-family:'Sarabun';outline:none;transition:.14s}
+    .gate-card input::placeholder{letter-spacing:normal;color:var(--muted)}
+    .gate-card input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%, transparent)}
+    .gate-card button{width:100%;margin-top:1rem;padding:.85rem;border:none;border-radius:.8rem;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-family:'Kanit';font-weight:600;font-size:1rem;cursor:pointer;transition:.15s;box-shadow:0 8px 20px -8px color-mix(in srgb,var(--accent) 70%, transparent)}
+    .gate-card button:hover{filter:brightness(1.06)}
+    .gate-card button:disabled{opacity:.65;cursor:default;filter:none}
+    .gate-err{color:var(--danger);font-size:.83rem;margin-top:.85rem;min-height:1.1rem;font-weight:500}
+    .gate-theme{position:fixed;top:1rem;right:1rem}
+
+    /* ── Dashboard (kiosk: fills exactly one viewport, no page scroll) ── */
+    #dash{display:none;height:100dvh;overflow:hidden;flex-direction:column;gap:.85rem;
+      padding:clamp(.7rem,1.6vw,1.1rem) clamp(.8rem,3vw,1.5rem);max-width:1700px;margin:0 auto}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;flex-shrink:0}
+    .topbar h1{font-size:clamp(1.4rem,4vw,1.85rem);display:flex;align-items:center;gap:.6rem}
+    .topbar h1 .dot{width:10px;height:10px;border-radius:50%;background:var(--ok);animation:pulse 2s infinite}
+    .topbar h1 .dot.flash{animation:flash .9s ease}
+    @keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 55%,transparent)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+    @keyframes flash{0%{transform:scale(1)}40%{transform:scale(1.7)}100%{transform:scale(1)}}
+    .sub{font-size:.78rem;color:var(--muted)}
+    .right{display:flex;align-items:center;gap:.55rem}
+
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.7rem;flex-shrink:0}
+    @media(max-width:620px){.stats{grid-template-columns:repeat(2,1fr)}}
+    .stat{background:var(--card);border:1px solid var(--line);border-radius:1.1rem;padding:.9rem 1.1rem;box-shadow:var(--shadow-sm);position:relative;overflow:hidden}
+    .stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--sc,var(--accent))}
+    .stat .si{font-size:1.05rem}
+    .stat .n{font-family:'Kanit';font-weight:700;font-size:2rem;line-height:1.05;margin-top:.15rem;color:var(--sc,var(--ink))}
+    .stat .l{font-size:.74rem;color:var(--muted);margin-top:.1rem}
+
+    .board{flex:1;min-height:0;display:grid;gap:.85rem;grid-template-columns:1.55fr 1fr;grid-template-rows:1fr 1fr}
+    .panel-due{grid-row:1 / span 2}
+    .panel{display:flex;flex-direction:column;min-height:0;margin:0;overflow:hidden;background:var(--card);
+      border:1px solid var(--line);border-radius:1.1rem;box-shadow:var(--shadow-sm);padding:.85rem 1rem}
+    .panel>.sec-h{flex-shrink:0;margin-bottom:.6rem;font-size:1.08rem;font-weight:600;display:flex;align-items:center;gap:.5rem}
+    .sec-h .c{font-size:.72rem;font-weight:700;color:var(--muted);background:var(--card2);border:1px solid var(--line);padding:.1rem .5rem;border-radius:999px;margin-left:auto}
+    .panel-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding-right:.25rem}
+    .panel-body::-webkit-scrollbar{width:6px}.panel-body::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+    @media(max-width:820px){
+      #dash{height:auto;min-height:100dvh;overflow:visible}
+      .board{grid-template-columns:1fr;grid-template-rows:auto}
+      .panel-due{grid-row:auto}.panel{max-height:60vh}
+    }
+
+    .list{display:flex;flex-direction:column;gap:.5rem}
+    .row{display:flex;align-items:center;gap:.8rem;background:var(--card2);border:1px solid var(--line);border-radius:.85rem;padding:.65rem .85rem}
+    .row .d{flex-shrink:0;width:56px;text-align:center;font-family:'Kanit';font-weight:700;font-size:.92rem;line-height:1.1}
+    .row .d small{display:block;font-size:.62rem;font-weight:500;color:var(--muted);font-family:'Sarabun'}
+    .row .d.late{color:var(--danger)} .row .d.soon{color:var(--warn)}
+    .row .body{flex:1;min-width:0}
+    .row .t{font-weight:600;font-size:.92rem;line-height:1.3;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+    .row .g{font-size:.74rem;color:var(--muted);margin-top:.1rem}
+    .panel-due .row{padding:.75rem .9rem}
+    .panel-due .row .t{font-size:1rem}
+    .empty{color:var(--muted);font-size:.9rem;padding:1.6rem 1rem;text-align:center;background:var(--card2);border:1px dashed var(--line);border-radius:.9rem}
+    .spin{display:inline-block;width:16px;height:16px;border:2px solid color-mix(in srgb,var(--accent) 35%,transparent);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-3px}
+    @keyframes sp{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <!-- ── Passcode gate ── -->
+  <div id="gate">
+    <button class="iconbtn gate-theme" id="theme-gate" title="สลับธีม">🌙</button>
+    <form class="gate-card" id="gate-form" autocomplete="off">
+      <div class="logo">SML</div>
+      <h1>งานช่วงนี้</h1>
+      <div class="gp">ใส่รหัสเพื่อดูสิ่งที่ต้องโฟกัส</div>
+      <input id="code" type="password" inputmode="text" placeholder="รหัสผ่าน" autocomplete="off" autofocus>
+      <button type="submit" id="go">เข้าดู</button>
+      <div class="gate-err" id="err"></div>
+    </form>
+  </div>
+
+  <!-- ── Dashboard ── -->
+  <div id="dash">
+    <div class="topbar">
+      <h1><span class="dot" id="livedot"></span> งานช่วงนี้ <span class="sub" id="updated" style="margin-left:.4rem"></span></h1>
+      <div class="right">
+        <div class="clock" id="clock">--:--:--</div>
+        <button class="iconbtn" id="theme" title="สลับธีม">🌙</button>
+      </div>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="board">
+      <section class="panel panel-due">
+        <div class="sec-h">📤 งานที่ต้องส่งช่วงนี้ <span class="c" id="c-due"></span></div>
+        <div class="panel-body" id="duebox"></div>
+      </section>
+      <section class="panel">
+        <div class="sec-h">📆 ประชุม/นัดหมาย <span class="c" id="c-mt"></span></div>
+        <div class="panel-body" id="meetings"></div>
+      </section>
+      <section class="panel">
+        <div class="sec-h">👥 ทีม · ลา · เตือน <span class="c" id="c-team"></span></div>
+        <div class="panel-body" id="team"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    let token = sessionStorage.getItem('dashToken') || '';
+    let es=null, pollTimer=null, refetchT=null, clockTimer=null, lastUpdate=0, sseLive=false;
+
+    function curTheme(){ return document.documentElement.getAttribute('data-theme')||'light'; }
+    function applyTheme(t){ document.documentElement.setAttribute('data-theme',t); try{localStorage.setItem('dashTheme',t);}catch(e){}
+      document.querySelectorAll('#theme,#theme-gate').forEach(b=>b.textContent=t==='dark'?'☀️':'🌙'); }
+    function toggleTheme(){ applyTheme(curTheme()==='dark'?'light':'dark'); }
+    applyTheme(curTheme());
+
+    const STATUS = { idea:['แนวคิด','#a855f7'], proposal:['ข้อเสนอ','#8b5cf6'], pending_approval:['รออนุมัติ','#f59e0b'],
+      in_progress:['กำลังทำ','#3b82f6'], delivery:['ส่งมอบ','#06b6d4'], maintenance:['ดูแล','#14b8a6'],
+      completed:['เสร็จ','#10b981'], on_hold:['พัก','#94a3b8'], cancelled:['ยกเลิก','#ef4444'], archived:['เก็บ','#64748b'] };
+    const stPill = s => { const [t,c]=STATUS[s]||[s,'#94a3b8']; return `<span class="pill" style="background:${c}1f;color:${c}">${esc(t)}</span>`; };
+    const PRIO = { urgent:['ด่วน','#ef4444'], before_morning:['ก่อนเช้า','#f59e0b'] };
+    const prioPill = p => { const x=PRIO[p]; return x?`<span class="pill" style="background:${x[1]}22;color:${x[1]}">${x[0]}</span>`:''; };
+    const UTYPE = { meeting:['👥','ประชุม','#8b5cf6'], reminder:['🔔','เตือน','#f59e0b'], leave:['🏖️','ลา','#14b8a6'] };
+    const typePill = ty => { const x=UTYPE[ty]; return x?`<span class="pill" style="background:${x[2]}1f;color:${x[2]}">${x[0]} ${x[1]}</span>`:''; };
+    const today = () => new Date().toISOString().slice(0,10);
+    const dParts = d => { if(!d) return null; const s=String(d).slice(0,10); const [y,m,dd]=s.split('-'); return dd?{d:dd,mo:m}:null; };
+    const fmtDate = d => { const p=dParts(d); return p?`${p.d}/${p.mo}`:'—'; };
+    const dayDiff = d => { if(!d) return null; return Math.round((new Date(String(d).slice(0,10)) - new Date(today()))/86400000); };
+    const ago = ms => { const s=Math.max(0,Math.round((Date.now()-ms)/1000)); if(s<5)return'เมื่อสักครู่'; if(s<60)return s+' วินาทีที่แล้ว'; const m=Math.floor(s/60); if(m<60)return m+' นาทีที่แล้ว'; return Math.floor(m/60)+' ชม.ที่แล้ว'; };
+
+    function diffLabel(d){ const x=dayDiff(d); if(x==null)return''; return x<0?'เลย '+(-x)+'d':(x===0?'วันนี้':(x===1?'พรุ่งนี้':'อีก '+x+'d')); }
+    function urgCls(d){ const x=dayDiff(d); return x!=null&&x<0?'late':(x!=null&&x<=3?'soon':''); }
+    function dateCell(d, cls){ const p=dParts(d); return `<div class="d ${cls||''}">${p?p.d+'/'+p.mo:'—'}<small>${diffLabel(d)}</small></div>`; }
+
+    async function doLogin(code){
+      const r = await fetch('/api/dashboard/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({passcode:code})});
+      const j = await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.error || 'เข้าไม่ได้');
+      token = j.token; sessionStorage.setItem('dashToken', token);
+    }
+    async function loadData(silent){
+      try{
+        const r = await fetch('/api/dashboard/data',{headers:{'x-dash-token':token}});
+        if(r.status===401){ stopPoll(); token=''; sessionStorage.removeItem('dashToken'); showGate(); return false; }
+        if(!r.ok) throw new Error('โหลดข้อมูลไม่ได้');
+        render(await r.json()); showDash();
+        lastUpdate=Date.now(); tickClock();
+        const dot=$('#livedot'); if(dot){ dot.classList.remove('flash'); void dot.offsetWidth; dot.classList.add('flash'); }
+        return true;
+      }catch(e){ if(!silent) throw e; return false; }
+    }
+    function scheduleRefetch(){ clearTimeout(refetchT); refetchT=setTimeout(()=>loadData(true),400); }
+    function tickClock(){
+      const clk=$('#clock'); if(clk) clk.textContent=new Date().toLocaleTimeString('th-TH',{hour12:false});
+      if(!lastUpdate)return; const dot=$('#livedot');
+      $('#updated').textContent='อัปเดต '+ago(lastUpdate)+' · '+(sseLive?'🟢 เชื่อมต่อสด':'🟡 กำลังเชื่อมต่อ…');
+      if(dot) dot.style.background = sseLive ? 'var(--ok)' : 'var(--warn)';
+    }
+    function startPoll(){            // realtime: SSE push + live clock + slow safety poll
+      stopPoll();
+      try{ es=new EventSource('/api/dashboard/events?dt='+encodeURIComponent(token));
+        es.onopen=()=>{ sseLive=true; tickClock(); };
+        es.onmessage=scheduleRefetch;
+        es.onerror=()=>{ sseLive=false; tickClock(); };
+      }catch(e){}
+      pollTimer=setInterval(()=>loadData(true),60000);
+      clockTimer=setInterval(tickClock,1000); tickClock();
+    }
+    function stopPoll(){ if(es){try{es.close();}catch(e){} es=null;} sseLive=false;
+      if(pollTimer)clearInterval(pollTimer); pollTimer=null;
+      if(clockTimer)clearInterval(clockTimer); clockTimer=null; clearTimeout(refetchT); }
+    function showGate(){ stopPoll(); $('#dash').style.display='none'; $('#gate').style.display='flex'; setTimeout(()=>$('#code')?.focus(),60); }
+    function showDash(){ $('#gate').style.display='none'; $('#dash').style.display='flex'; startPoll(); }
+
+    function render(d){
+      const c=d.counts||{};
+      const stats=[['เลยกำหนด',c.overdue,'⚠️','#ef4444'],['ครบใน 7 วัน',c.due7,'🔥','#f59e0b'],
+        ['ประชุมช่วงนี้',c.meetings,'📆','#3b82f6'],['ลาวันนี้',c.onleave,'🏖️','#14b8a6']];
+      $('#stats').innerHTML = stats.map(([l,n,i,col])=>`<div class="stat" style="--sc:${col}"><div class="si">${i}</div><div class="n">${n??0}</div><div class="l">${l}</div></div>`).join('');
+
+      // 📤 งานที่ต้องส่งช่วงนี้
+      const due=d.due||[]; $('#c-due').textContent=due.length;
+      $('#duebox').innerHTML = due.length ? `<div class="list">${due.map(t=>`
+        <div class="row">${dateCell(t.date, urgCls(t.date))}
+          <div class="body"><div class="t">${esc(t.title)} ${prioPill(t.priority)}</div><div class="g">${esc(t.sub)||'—'}</div></div>
+          ${stPill(t.status)}</div>`).join('')}</div>` : '<div class="empty">🎉 ไม่มีงานที่ต้องส่งช่วงนี้</div>';
+
+      // 📆 ประชุม/นัดหมาย
+      const mt=d.meetings||[]; $('#c-mt').textContent=mt.length;
+      $('#meetings').innerHTML = mt.length ? `<div class="list">${mt.map(m=>`
+        <div class="row">${dateCell(m.date, urgCls(m.date))}
+          <div class="body"><div class="t">${esc(m.title)}</div><div class="g">${esc(m.sub)||'—'}</div></div>
+          ${typePill('meeting')}</div>`).join('')}</div>` : '<div class="empty">ไม่มีประชุมช่วงนี้</div>';
+
+      // 👥 ทีม · ลา · เตือน
+      const tm=d.team||[]; $('#c-team').textContent=tm.length;
+      $('#team').innerHTML = tm.length ? `<div class="list">${tm.map(u=>{
+        const sub = u.type==='leave' && u.end ? `${esc(u.sub)} · ถึง ${fmtDate(u.end)}` : esc(u.sub);
+        return `<div class="row">${dateCell(u.date, u.type==='leave'?'':urgCls(u.date))}
+          <div class="body"><div class="t">${esc(u.title)}</div><div class="g">${sub||'—'}</div></div>
+          ${typePill(u.type)}</div>`; }).join('')}</div>` : '<div class="empty">ไม่มีลา/เตือนช่วงนี้</div>';
+    }
+
+    $('#gate-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const code=$('#code').value.trim(), btn=$('#go'), err=$('#err');
+      if(!code) return; err.textContent=''; btn.disabled=true; btn.innerHTML='<span class="spin"></span>';
+      try{ await doLogin(code); await loadData(false); }
+      catch(ex){ err.textContent=ex.message||'เกิดข้อผิดพลาด'; $('#code').value=''; $('#code').focus(); }
+      finally{ btn.disabled=false; btn.textContent='เข้าดู'; }
+    });
+    $('#theme').addEventListener('click', toggleTheme);
+    $('#theme-gate').addEventListener('click', toggleTheme);
+    document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && token && $('#dash').style.display!=='none') loadData(true); });
+
+    (async()=>{ if(token){ try{ if(await loadData(true)) return; }catch{} } showGate(); })();
+  </script>
+</body>
+</html>
