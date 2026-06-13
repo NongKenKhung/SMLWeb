@@ -41,13 +41,13 @@ const DEFAULT_PIN = '1234';
   // เบอร์โทร = dummy รูปแบบไทย (08x-xxx-xxxx) สำหรับ dev/test เท่านั้น
   // ผู้ใช้จริงควรแก้ผ่านหน้า Profile หรือ admin แก้ผ่านหน้า People
   const memberSeeds = [
-    { name: 'AJ', role: 'boss',   email: '',   phone: '', color: '#4f46e5' },
-    { name: 'วิว',     role: 'admin',  email: '',   phone: '', color: '#0ea5e9' },
-    { name: 'เคน',     role: 'admin', email: '',    phone: '', color: '#10b981' },
-    { name: 'นะนิ้ง',  role: 'admin', email: '', phone: '', color: '#f59e0b' },
-    { name: 'ตี้',     role: 'admin', email: '',    phone: '', color: '#ec4899' },
-    { name: 'สอง',     role: 'admin', email: '',   phone: '', color: '#a855f7' },
-    { name: 'โอ๊ต',    role: 'admin', email: '',    phone: '', color: '#14b8a6' },
+    { name: 'AJ',     role: 'XL', email: '', phone: '', color: '#4f46e5' },
+    { name: 'วิว',     role: 'L',  email: '', phone: '', color: '#0ea5e9' },
+    { name: 'เคน',     role: 'L',  email: '', phone: '', color: '#10b981' },
+    { name: 'นะนิ้ง',  role: 'L',  email: '', phone: '', color: '#f59e0b' },
+    { name: 'ตี้',     role: 'L',  email: '', phone: '', color: '#ec4899' },
+    { name: 'สอง',     role: 'L',  email: '', phone: '', color: '#a855f7' },
+    { name: 'โอ๊ต',    role: 'L',  email: '', phone: '', color: '#14b8a6' },
   ];
   for (const m of memberSeeds) {
     await db.createMember({ ...m, password_hash: auth.hashPassword(DEFAULT_PIN) });
